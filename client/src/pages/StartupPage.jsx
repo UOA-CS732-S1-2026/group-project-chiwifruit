@@ -137,8 +137,8 @@ export default function StartupPage({ onStartGame }) {
           animation: fadeIn 0.8s ease-out 0.6s both;
         }
 
-        .delay-1000 {
-          animation-delay: 1000ms;
+        .delay-300 {
+          animation-delay: 300ms;
         }
       `}</style>
     </div>
