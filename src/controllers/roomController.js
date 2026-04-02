@@ -1,0 +1,164 @@
+const Room = require('../models/Room');
+const { generateRoomCode } = require('../utils/roomCode');
+const { emitRoomUpdate } = require('../socket');
+
+async function generateUniqueRoomCode() {
+  for (let i = 0; i < 5; i += 1) {
+    const code = generateRoomCode();
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await Room.exists({ roomCode: code });
+    if (!exists) {
+      return code;
+    }
+  }
+
+  throw new Error('Unable to generate unique room code. Try again.');
+}
+
+async function createRoom(req, res) {
+  const userId = req.user.sub;
+  const { joinRoomCode } = req.body;
+
+  if (joinRoomCode) {
+    const room = await Room.findOne({ roomCode: joinRoomCode.toUpperCase() });
+
+    if (!room) {
+      return res.status(404).json({ message: 'Room not found' });
+    }
+
+    const alreadyJoined = room.participants.some(
+      (participant) => String(participant.user) === String(userId)
+    );
+
+    if (!alreadyJoined) {
+      room.participants.push({ user: userId, isReady: false });
+      await room.save();
+    }
+
+    const roomState = await getRoomState(room.roomCode);
+    if (roomState) {
+      emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+    }
+
+    return res.json({ message: 'Joined room', roomCode: room.roomCode, roomId: room._id });
+  }
+
+  const roomCode = await generateUniqueRoomCode();
+  const room = await Room.create({
+    roomCode,
+    host: userId,
+    participants: [{ user: userId, isReady: false }]
+  });
+
+  const roomState = await getRoomState(room.roomCode);
+  if (roomState) {
+    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+  }
+
+  return res.status(201).json({ message: 'Room created', roomCode: room.roomCode, roomId: room._id });
+}
+
+async function setCandidateReady(req, res) {
+  const { roomCode } = req.params;
+  const { isReady = true } = req.body;
+  const userId = req.user.sub;
+
+  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });
+  if (!room) {
+    return res.status(404).json({ message: 'Room not found' });
+  }
+
+  const participant = room.participants.find(
+    (candidate) => String(candidate.user) === String(userId)
+  );
+
+  if (!participant) {
+    return res.status(403).json({ message: 'Join the room first before setting readiness' });
+  }
+
+  participant.isReady = Boolean(isReady);
+  await room.save();
+
+  const roomState = await getRoomState(room.roomCode);
+  if (roomState) {
+    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+  }
+
+  return res.json({ message: 'Readiness updated', roomCode: room.roomCode, isReady: participant.isReady });
+}
+
+async function getRoomState(roomCode) {
+  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() }).populate(
+    'participants.user',
+    'username'
+  );
+  if (!room) {
+    return null;
+  }
+
+  const everyoneReady = room.participants.length > 0 && room.participants.every((p) => p.isReady);
+
+  return {
+    roomCode: room.roomCode,
+    mode: room.mode,
+    participantCount: room.participants.length,
+    everyoneReady,
+    participants: room.participants.map((participant) => ({
+      userId: participant.user?._id,
+      username: participant.user?.username,
+      isReady: participant.isReady
+    }))
+  };
+}
+
+async function checkIfCandidateIsReady(req, res) {
+  const { roomCode } = req.params;
+
+  const room = await Room.exists({ roomCode: roomCode.toUpperCase() });
+  if (!room) {
+    return res.status(404).json({ message: 'Room not found' });
+  }
+
+  const roomState = await getRoomState(roomCode);
+  if (!roomState) {
+    return res.status(404).json({ message: 'Room not found' });
+  }
+
+  return res.json(roomState);
+}
+
+async function selectMode(req, res) {
+  const { roomCode } = req.params;
+  const { mode } = req.body;
+  const userId = req.user.sub;
+
+  if (!['animals', 'music'].includes(mode)) {
+    return res.status(400).json({ message: 'mode must be animals or music' });
+  }
+
+  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });
+  if (!room) {
+    return res.status(404).json({ message: 'Room not found' });
+  }
+
+  if (String(room.host) !== String(userId)) {
+    return res.status(403).json({ message: 'Only the host can select a mode' });
+  }
+
+  room.mode = mode;
+  await room.save();
+
+  const roomState = await getRoomState(room.roomCode);
+  if (roomState) {
+    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+  }
+
+  return res.json({ message: 'Mode selected', roomCode: room.roomCode, mode: room.mode });
+}
+
+module.exports = {
+  createRoom,
+  setCandidateReady,
+  checkIfCandidateIsReady,
+  selectMode
+};
