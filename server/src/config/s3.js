@@ -1,12 +1,12 @@
-const AWS = require('aws-sdk');
+const { S3Client } = require('@aws-sdk/client-s3');
 const env = require('./env');
 
-AWS.config.update({
+const s3 = new S3Client({
   region: env.awsRegion,
-  accessKeyId: env.awsAccessKeyId,
-  secretAccessKey: env.awsSecretAccessKey
+  credentials: {
+    accessKeyId: env.awsAccessKeyId,
+    secretAccessKey: env.awsSecretAccessKey
+  }
 });
-
-const s3 = new AWS.S3({ signatureVersion: 'v4' });
 
 module.exports = s3;

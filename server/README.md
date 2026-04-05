@@ -6,6 +6,7 @@ This repository now contains an initialized backend project for a **sound chain 
 - **Node.js + Express.js** API server
 - **MongoDB + Mongoose** for persistent data
 - **AWS S3** for storing audio files (supports AWS Free Tier usage)
+- **AWS SDK for JavaScript v3** for S3 client and signed URLs
 - **JWT** for authentication
 
 ## Implemented APIs

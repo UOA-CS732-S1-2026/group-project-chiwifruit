@@ -24,7 +24,7 @@ async function getAudioByIndex(req, res) {
     return res.status(404).json({ message: 'Audio not found for provided index/mode' });
   }
 
-  const signedUrl = getAudioSignedUrl(audio.s3Key);
+  const signedUrl = await getAudioSignedUrl(audio.s3Key);
 
   return res.json({
     index: audio.index,
