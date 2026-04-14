@@ -1,31 +1,20 @@
-import { useState } from 'react'
-import StartupPage from './pages/StartupPage'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import FamiliarPage from './pages/FamiliarPage'
+import GamePage from './pages/GamePage'
+import LandingPage from './pages/LandingPage'
+import ResultsPage from './pages/ResultsPage'
+import RoomPage from './pages/RoomPage'
 
 function App() {
-  const [gameStarted, setGameStarted] = useState(false)
-
-  const handleStartGame = () => {
-    setGameStarted(true)
-    // Add your main game/app logic here
-  }
-
-  if (!gameStarted) {
-    return <StartupPage onStartGame={handleStartGame} />
-  }
-
   return (
-    <div className="w-full h-screen bg-slate-900 flex items-center justify-center">
-      {/* Replace this with your main game/app content */}
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-white mb-4">Game Started!</h1>
-        <button
-          onClick={() => setGameStarted(false)}
-          className="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-blue-500/50 transition-all duration-300 hover:scale-105"
-        >
-          Back to Home
-        </button>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/room" element={<RoomPage />} />
+      <Route path="/game" element={<GamePage />} />
+      <Route path="/results" element={<ResultsPage />} />
+      <Route path="/familiar" element={<FamiliarPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
 
