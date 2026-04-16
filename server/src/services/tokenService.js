@@ -1,10 +1,18 @@
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 
-function createToken(user) {
-  return jwt.sign({ sub: user._id, username: user.username }, env.jwtSecret, {
-    expiresIn: env.jwtExpiresIn
-  });
+function createToken(identity) {
+  return jwt.sign(
+    {
+      sub: identity.sub || identity._id,
+      username: identity.username,
+      isGuest: Boolean(identity.isGuest)
+    },
+    env.jwtSecret,
+    {
+      expiresIn: env.jwtExpiresIn
+    }
+  );
 }
 
 module.exports = { createToken };

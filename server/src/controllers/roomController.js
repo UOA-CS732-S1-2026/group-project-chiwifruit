@@ -2,6 +2,29 @@ const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
 
+function getParticipantSelector(identity) {
+  if (identity.isGuest) {
+    return (participant) => participant.guestId === identity.sub;
+  }
+
+  return (participant) => String(participant.user) === String(identity.sub);
+}
+
+function createParticipant(identity) {
+  if (identity.isGuest) {
+    return {
+      guestId: identity.sub,
+      guestName: identity.username,
+      isReady: false
+    };
+  }
+
+  return {
+    user: identity.sub,
+    isReady: false
+  };
+}
+
 async function generateUniqueRoomCode() {
   for (let i = 0; i < 5; i += 1) {
     const code = generateRoomCode();
@@ -16,8 +39,12 @@ async function generateUniqueRoomCode() {
 }
 
 async function createRoom(req, res) {
-  const userId = req.user.sub;
+  const identity = req.user;
   const { joinRoomCode } = req.body;
+
+  if (!joinRoomCode && identity.isGuest) {
+    return res.status(403).json({ message: 'Guest users can only join existing rooms' });
+  }
 
   if (joinRoomCode) {
     const room = await Room.findOne({ roomCode: joinRoomCode.toUpperCase() });
@@ -26,12 +53,10 @@ async function createRoom(req, res) {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    const alreadyJoined = room.participants.some(
-      (participant) => String(participant.user) === String(userId)
-    );
+    const alreadyJoined = room.participants.some(getParticipantSelector(identity));
 
     if (!alreadyJoined) {
-      room.participants.push({ user: userId, isReady: false });
+      room.participants.push(createParticipant(identity));
       await room.save();
     }
 
@@ -46,8 +71,8 @@ async function createRoom(req, res) {
   const roomCode = await generateUniqueRoomCode();
   const room = await Room.create({
     roomCode,
-    host: userId,
-    participants: [{ user: userId, isReady: false }]
+    host: identity.sub,
+    participants: [createParticipant(identity)]
   });
 
   const roomState = await getRoomState(room.roomCode);
@@ -55,22 +80,20 @@ async function createRoom(req, res) {
     emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
   }
 
-  return res.status(201).json({ message: 'Room created', roomCode: room.roomCode, roomId: room._id });
+  return res.status(201).json({ message: 'Room created', roomCode: roomCode, roomId: room._id });
 }
 
 async function setCandidateReady(req, res) {
   const { roomCode } = req.params;
   const { isReady = true } = req.body;
-  const userId = req.user.sub;
+  const identity = req.user;
 
   const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });
   if (!room) {
     return res.status(404).json({ message: 'Room not found' });
   }
 
-  const participant = room.participants.find(
-    (candidate) => String(candidate.user) === String(userId)
-  );
+  const participant = room.participants.find(getParticipantSelector(identity));
 
   if (!participant) {
     return res.status(403).json({ message: 'Join the room first before setting readiness' });
@@ -104,8 +127,9 @@ async function getRoomState(roomCode) {
     participantCount: room.participants.length,
     everyoneReady,
     participants: room.participants.map((participant) => ({
-      userId: participant.user?._id,
-      username: participant.user?.username,
+      userId: participant.user?._id || participant.guestId,
+      username: participant.user?.username || participant.guestName,
+      isGuest: Boolean(participant.guestId),
       isReady: participant.isReady
     }))
   };

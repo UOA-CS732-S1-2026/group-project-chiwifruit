@@ -10,12 +10,14 @@ This repository now contains an initialized backend project for a **sound chain 
 - **JWT** for authentication
 
 ## Implemented APIs
-1. `login()`
-2. `getAudios(num)`
-3. `createRoom()` (also supports joining with room ID/code param)
-4. `CheckIfCandidateIsReady`
-5. `SelectMode()` (`animals` or `music`)
-6. **WebSocket `room_update` events** for live room state sync
+1. `register()`
+2. `login()`
+3. `continueAsGuest()`
+4. `getAudios(num)`
+5. `createRoom()` (also supports joining with room ID/code param)
+6. `CheckIfCandidateIsReady`
+7. `SelectMode()` (`animals` or `music`)
+8. **WebSocket `room_update` events** for live room state sync
 
 ---
 
@@ -101,8 +103,32 @@ GET /health
 
 ### Auth
 
+#### `POST /api/auth/register`
+Creates a new user account and returns JWT.
+
+Request:
+```json
+{
+  "username": "alice",
+  "password": "secret123"
+}
+```
+
+Response:
+```json
+{
+  "message": "Register success",
+  "token": "<jwt>",
+  "user": {
+    "id": "...",
+    "username": "alice",
+    "isGuest": false
+  }
+}
+```
+
 #### `POST /api/auth/login`
-Creates user on first login, then returns JWT.
+Logs in an existing user and returns JWT.
 
 Request:
 ```json
@@ -119,7 +145,24 @@ Response:
   "token": "<jwt>",
   "user": {
     "id": "...",
-    "username": "alice"
+    "username": "alice",
+    "isGuest": false
+  }
+}
+```
+
+#### `POST /api/auth/guest`
+Creates a guest session without registration and returns JWT with a random guest name.
+
+Response:
+```json
+{
+  "message": "Guest session created",
+  "token": "<jwt>",
+  "user": {
+    "id": "guest_...",
+    "username": "SwiftFox1234",
+    "isGuest": true
   }
 }
 ```
@@ -148,6 +191,8 @@ Equivalent to `createRoom()`.
 ```json
 { "joinRoomCode": "ABC123" }
 ```
+
+> Note: guest users can join existing rooms with `joinRoomCode`, but cannot create new rooms.
 
 #### `PATCH /api/rooms/:roomCode/ready`
 Set current player's readiness.
