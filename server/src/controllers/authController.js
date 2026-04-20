@@ -13,7 +13,9 @@ function generateGuestName() {
 }
 
 async function register(req, res) {
-  const { username, password } = req.body;
+  let { username, password } = req.body;
+
+  username = username.trim();
 
   if (!username || !password) {
     return res.status(400).json({ message: 'username and password are required' });
@@ -37,7 +39,9 @@ async function register(req, res) {
 }
 
 async function login(req, res) {
-  const { username, password } = req.body;
+  let { username, password } = req.body;
+
+  username = username.trim();
 
   if (!username || !password) {
     return res.status(400).json({ message: 'username and password are required' });
