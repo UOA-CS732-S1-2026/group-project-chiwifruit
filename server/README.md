@@ -223,7 +223,7 @@ The backend accumulates this value into the player's total and returns a sorted 
 
 Request:
 ```json
-{ "correctCount": 3 }
+{ "roundCorrectCount": 3 }
 ```
 
 #### `GET /api/rooms/:roomCode/ranking`

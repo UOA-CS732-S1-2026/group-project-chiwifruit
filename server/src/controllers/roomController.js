@@ -206,18 +206,18 @@ async function selectMode(req, res) {
 
 async function submitRoundResult(req, res) {
   const { roomCode } = req.params;
-  const { correctCount } = req.body;
+  const { roundCorrectCount } = req.body;
   const identity = req.user;
 
-  if (!Number.isInteger(correctCount) || correctCount < 0) {
-    return res.status(400).json({ message: 'correctCount must be a non-negative integer' });
+  if (!Number.isInteger(roundCorrectCount) || roundCorrectCount < 0) {
+    return res.status(400).json({ message: 'roundCorrectCount must be a non-negative integer' });
   }
 
   const participantSelector = identity.isGuest ? { 'participants.guestId': identity.sub } : { 'participants.user': identity.sub };
 
   const updateResult = await Room.updateOne(
     { roomCode: roomCode.toUpperCase(), ...participantSelector },
-    { $inc: { 'participants.$.correctCount': correctCount } }
+    { $inc: { 'participants.$.correctCount': roundCorrectCount } }
   );
 
   if (updateResult.matchedCount === 0) {
