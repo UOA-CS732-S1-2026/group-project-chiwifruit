@@ -4,7 +4,9 @@ const {
   createRoom,
   setCandidateReady,
   checkIfCandidateIsReady,
-  selectMode
+  selectMode,
+  submitRoundResult,
+  getRanking
 } = require('../controllers/roomController');
 
 const router = express.Router();
@@ -13,5 +15,7 @@ router.post('/', authMiddleware, createRoom);
 router.patch('/:roomCode/ready', authMiddleware, setCandidateReady);
 router.get('/:roomCode/ready', authMiddleware, checkIfCandidateIsReady);
 router.patch('/:roomCode/mode', authMiddleware, selectMode);
+router.patch('/:roomCode/ranking', authMiddleware, submitRoundResult);
+router.get('/:roomCode/ranking', authMiddleware, getRanking);
 
 module.exports = router;

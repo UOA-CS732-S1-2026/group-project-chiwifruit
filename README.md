@@ -68,7 +68,7 @@ See [server/.env.example](server/.env.example).
 Important defaults:
 - `PORT=3000`
 - `FRONTEND_ORIGIN=http://localhost:5173`
-- `MONGODB_URI=mongodb://localhost:27017/sound-chain`
+- `MONGODB_URI=mongodb://localhost:27017/kichain-db`
 
 ### Frontend
 

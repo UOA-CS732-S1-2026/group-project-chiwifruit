@@ -17,7 +17,8 @@ This repository now contains an initialized backend project for a **sound chain 
 5. `createRoom()` (also supports joining with room ID/code param)
 6. `CheckIfCandidateIsReady`
 7. `SelectMode()` (`animals` or `music`)
-8. **WebSocket `room_update` events** for live room state sync
+8. `Ranking` (submit each round result + fetch current ranking)
+9. **WebSocket `room_update` events** for live room state sync
 
 ---
 
@@ -215,6 +216,18 @@ Request:
 ```json
 { "mode": "animals" }
 ```
+
+#### `PATCH /api/rooms/:roomCode/ranking`
+Submit current player's correct-chain count for a finished round.
+The backend accumulates this value into the player's total and returns a sorted ranking.
+
+Request:
+```json
+{ "roundCorrectCount": 3 }
+```
+
+#### `GET /api/rooms/:roomCode/ranking`
+Get current ranking in descending order by total `correctCount`.
 
 ---
 
