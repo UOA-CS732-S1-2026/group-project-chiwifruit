@@ -9,10 +9,10 @@ export default function GuideCard({
 	className,
 }) {
 	return (
-		<div className={cn("rounded-3xl border border-[#E8ECFA] bg-white/70 p-6 backdrop-blur-sm", className)}>
+		<div className={cn("rounded-3xl border border-border bg-card/70 p-6 backdrop-blur-sm", className)}>
 			<div
 				className={cn(
-					"mb-4 inline-flex size-11 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#5B6DE8]",
+					"mb-4 inline-flex size-11 items-center justify-center rounded-xl bg-muted text-accent-foreground",
 					iconWrapClassName,
 				)}
 			>
