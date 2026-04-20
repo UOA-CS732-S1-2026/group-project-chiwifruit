@@ -213,18 +213,24 @@ async function submitRoundResult(req, res) {
     return res.status(400).json({ message: 'correctCount must be a non-negative integer' });
   }
 
+  const participantSelector = identity.isGuest ? { 'participants.guestId': identity.sub } : { 'participants.user': identity.sub };
+
+  const updateResult = await Room.updateOne(
+    { roomCode: roomCode.toUpperCase(), ...participantSelector },
+    { $inc: { 'participants.$.correctCount': correctCount } }
+  );
+
+  if (updateResult.matchedCount === 0) {
+    return res.status(403).json({ message: 'Join the room first before submitting round results' });
+  }
+
   const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });
   if (!room) {
     return res.status(404).json({ message: 'Room not found' });
   }
 
   const participant = room.participants.find(getParticipantSelector(identity));
-  if (!participant) {
-    return res.status(403).json({ message: 'Join the room first before submitting round results' });
-  }
-
-  participant.correctCount = (participant.correctCount || 0) + correctCount;
-  await room.save();
+  // participant should exist now
 
   const roomState = await getRoomState(room.roomCode);
   if (roomState) {
