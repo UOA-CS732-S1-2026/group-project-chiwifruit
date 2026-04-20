@@ -19,7 +19,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: `http://localhost:${env.port}/api`,
+        url: `http://localhost:${env.port}`,
       },
     ],
     components: {
