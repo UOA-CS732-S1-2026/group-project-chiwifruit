@@ -69,15 +69,12 @@ export default function ResultsPage() {
 				{/* Winner Section */}
 				<div className="bg-gradient-to-b from-blue-50 to-yellow-50 border-4 border-yellow-400 rounded-2xl p-8 mb-8 shadow-lg">
 					<div className="flex flex-col items-center">
-						<div className="relative mb-4">
+						<div className="mb-4">
 							<img
 								src={trophy}
 								alt="Trophy"
 								className="w-20 h-20"
 							/>
-							<div className="absolute -top-2 -right-2 bg-yellow-400 text-black text-xs font-bold px-2 py-1 rounded">
-								80 × 80
-							</div>
 						</div>
 						<h1 className="text-4xl font-bold text-center mb-2">
 							🎉 Winner! 🎉
@@ -102,7 +99,7 @@ export default function ResultsPage() {
 				</div>
 
 				{/* Top Performers and Full Rankings */}
-				<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+			<div className="grid grid-cols-2 gap-6 mb-8">
 					{/* Top Performers */}
 					<div className="bg-white rounded-xl p-6 shadow-md">
 						<div className="flex items-center gap-2 mb-4">
@@ -121,7 +118,7 @@ export default function ResultsPage() {
 							{gameResults.topPerformers.map((player, index) => (
 								<div
 									key={index}
-									className={`p-4 rounded-lg border-2 flex items-center justify-between ${
+									className={`p-4 rounded-lg border-2 flex items-center gap-3 ${
 										index === 0
 											? 'border-yellow-400 bg-yellow-50'
 											: index === 1
@@ -129,6 +126,32 @@ export default function ResultsPage() {
 												: 'border-yellow-300 bg-yellow-50'
 									}`}
 								>
+									{/* Medal Icon on the left */}
+									<div className="flex-shrink-0">
+										{index === 0 && (
+											<img
+												src={firstplace}
+												alt="1st"
+												className="w-6 h-6"
+											/>
+										)}
+										{index === 1 && (
+											<img
+												src={orangemedal}
+												alt="2nd"
+												className="w-6 h-6"
+											/>
+										)}
+										{index === 2 && (
+											<img
+												src={orangemedal}
+												alt="3rd"
+												className="w-6 h-6"
+											/>
+										)}
+									</div>
+
+									{/* Avatar and Info */}
 									<div className="flex items-center gap-3 flex-1">
 										<div className="text-3xl">{player.avatar}</div>
 										<div className="flex-1">
@@ -140,34 +163,13 @@ export default function ResultsPage() {
 											</p>
 										</div>
 									</div>
-									<div className="flex items-center gap-2">
-										{index === 0 && (
-											<img
-												src={firstplace}
-												alt="1st"
-												className="w-6 h-6"
-											/>
-										)}
-										{index === 1 && (
-											<img
-												src={orangemedal}
-												alt="Medal"
-												className="w-6 h-6"
-											/>
-										)}
-										{index === 2 && (
-											<img
-												src={orangemedal}
-												alt="Medal"
-												className="w-6 h-6"
-											/>
-										)}
-										{player.isHost && (
-											<span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-semibold">
-												Host
-											</span>
-										)}
-									</div>
+
+									{/* Host badge */}
+									{player.isHost && (
+										<span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-semibold flex-shrink-0">
+											Host
+										</span>
+									)}
 								</div>
 							))}
 						</div>
@@ -176,7 +178,11 @@ export default function ResultsPage() {
 					{/* Full Rankings */}
 					<div className="bg-white rounded-xl p-6 shadow-md">
 						<div className="flex items-center gap-2 mb-4">
-							<span className="text-2xl">📊</span>
+							<img
+								src={people}
+								alt="Rankings"
+								className="w-6 h-6"
+							/>
 							<div>
 								<h3 className="font-bold text-lg text-gray-900">
 									Full Rankings
