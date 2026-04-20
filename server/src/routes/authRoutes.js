@@ -67,15 +67,6 @@ router.post('/login', login);
  *     tags: [Auth]
  *     requestBody:
  *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *             properties:
- *               username:
- *                 type: string
  *     responses:
  *       200:
  *         description: Guest session created
