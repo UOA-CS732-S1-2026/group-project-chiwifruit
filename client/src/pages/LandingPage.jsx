@@ -1,8 +1,7 @@
 import Background from "../components/Common/Background"
 import bigLogo from "../assets/branding/biglogo.png"
-import BrandLockup from "../components/Common/BrandLockup"
-import LoginButton from "../components/AuthComponent/LoginButton"
-import GuideCard from "../components/Common/GuideCard"
+import LandingTopBar from "../components/Landing/LandingTopBar"
+import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
 
@@ -30,11 +29,7 @@ export default function LandingPage() {
 
 	return (
 		<Background>
-			<BrandLockup className="absolute left-3 top-3 z-20 md:left-4 md:top-4 lg:left-6 lg:top-6" />
-
-			<div className="absolute right-3 top-3 z-20 md:right-4 md:top-4 lg:right-6 lg:top-6">
-				<LoginButton />
-			</div>
+			<LandingTopBar />
 
 			<section className="relative mx-auto w-full max-w-[90rem] px-4 pb-14 pt-24 md:px-6 md:pt-28 lg:px-8">
 				<div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
