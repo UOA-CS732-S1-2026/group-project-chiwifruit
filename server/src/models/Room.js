@@ -5,7 +5,16 @@ const participantSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true
+      default: null
+    },
+    guestId: {
+      type: String,
+      default: null
+    },
+    guestName: {
+      type: String,
+      default: null,
+      trim: true
     },
     isReady: {
       type: Boolean,
