@@ -3,6 +3,8 @@ import trophy from '../assets/trophy.svg'
 import firstplace from '../assets/firstplace.svg'
 import orangemedal from '../assets/orangemedal.svg'
 import people from '../assets/people.svg'
+import refresh from '../assets/refresh.svg'
+import home from '../assets/home.svg'
 
 export default function ResultsPage() {
 	const navigate = useNavigate()
@@ -263,13 +265,15 @@ export default function ResultsPage() {
 						onClick={() => navigate('/room')}
 						className="bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 px-6 rounded-lg transition flex items-center justify-center gap-2 shadow-md"
 					>
-						<span>↩️</span> Return to Lobby
+						<img src={refresh} alt="Refresh" className="w-5 h-5" />
+						Return to Lobby
 					</button>
 					<button
 						onClick={() => navigate('/')}
 						className="bg-white hover:bg-gray-50 text-gray-900 font-bold py-3 px-6 rounded-lg border-2 border-gray-200 transition flex items-center justify-center gap-2 shadow-md"
 					>
-						<span>🏠</span> Return Home
+						<img src={home} alt="Home" className="w-5 h-5" />
+						Return Home
 					</button>
 				</div>
 			</div>
