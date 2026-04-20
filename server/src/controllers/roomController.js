@@ -15,14 +15,37 @@ function createParticipant(identity) {
     return {
       guestId: identity.sub,
       guestName: identity.username,
-      isReady: false
+      isReady: false,
+      correctCount: 0
     };
   }
 
   return {
     user: identity.sub,
-    isReady: false
+    isReady: false,
+    correctCount: 0
   };
+}
+
+function buildRanking(room) {
+  return room.participants
+    .map((participant) => ({
+      userId: participant.user?._id || participant.guestId,
+      username: participant.user?.username || participant.guestName,
+      isGuest: Boolean(participant.guestId),
+      correctCount: participant.correctCount || 0
+    }))
+    .sort((a, b) => {
+      if (b.correctCount !== a.correctCount) {
+        return b.correctCount - a.correctCount;
+      }
+
+      return String(a.username || '').localeCompare(String(b.username || ''));
+    })
+    .map((entry, index) => ({
+      rank: index + 1,
+      ...entry
+    }));
 }
 
 async function generateUniqueRoomCode() {
@@ -130,6 +153,7 @@ async function getRoomState(roomCode) {
       userId: participant.user?._id || participant.guestId,
       username: participant.user?.username || participant.guestName,
       isGuest: Boolean(participant.guestId),
+      correctCount: participant.correctCount || 0,
       isReady: participant.isReady
     }))
   };
@@ -180,9 +204,63 @@ async function selectMode(req, res) {
   return res.json({ message: 'Mode selected', roomCode: room.roomCode, mode: room.mode });
 }
 
+async function submitRoundResult(req, res) {
+  const { roomCode } = req.params;
+  const { correctCount } = req.body;
+  const identity = req.user;
+
+  if (!Number.isInteger(correctCount) || correctCount < 0) {
+    return res.status(400).json({ message: 'correctCount must be a non-negative integer' });
+  }
+
+  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });
+  if (!room) {
+    return res.status(404).json({ message: 'Room not found' });
+  }
+
+  const participant = room.participants.find(getParticipantSelector(identity));
+  if (!participant) {
+    return res.status(403).json({ message: 'Join the room first before submitting round results' });
+  }
+
+  participant.correctCount = (participant.correctCount || 0) + correctCount;
+  await room.save();
+
+  const roomState = await getRoomState(room.roomCode);
+  if (roomState) {
+    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+  }
+
+  const populatedRoom = await Room.findById(room._id).populate('participants.user', 'username');
+  const ranking = buildRanking(populatedRoom);
+
+  return res.json({
+    message: 'Round result submitted',
+    roomCode: room.roomCode,
+    totalCorrectCount: participant.correctCount,
+    ranking
+  });
+}
+
+async function getRanking(req, res) {
+  const { roomCode } = req.params;
+
+  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() }).populate('participants.user', 'username');
+  if (!room) {
+    return res.status(404).json({ message: 'Room not found' });
+  }
+
+  return res.json({
+    roomCode: room.roomCode,
+    ranking: buildRanking(room)
+  });
+}
+
 module.exports = {
   createRoom,
   setCandidateReady,
   checkIfCandidateIsReady,
-  selectMode
+  selectMode,
+  submitRoundResult,
+  getRanking
 };

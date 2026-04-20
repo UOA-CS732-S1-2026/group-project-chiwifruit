@@ -19,6 +19,11 @@ const participantSchema = new mongoose.Schema(
     isReady: {
       type: Boolean,
       default: false
+    },
+    correctCount: {
+      type: Number,
+      default: 0,
+      min: 0
     }
   },
   { _id: false }
