@@ -237,8 +237,8 @@ async function submitRoundResult(req, res) {
     emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
   }
 
-  const populatedRoom = await Room.findById(room._id).populate('participants.user', 'username');
-  const ranking = buildRanking(populatedRoom);
+  await room.populate('participants.user', 'username');
+  const ranking = buildRanking(room);
 
   return res.json({
     message: 'Round result submitted',
