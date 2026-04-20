@@ -1,8 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users } from 'lucide-react'
-import logoname from '../assets/branding/logoname.png'
-import logo from '../assets/branding/logo.png'
+import Background from '../components/Common/Background'
+import BrandLockup from '../components/Common/BrandLockup'
+import kiwi from '../assets/kiwi.svg'
+import music from '../assets/music.svg'
+import human from '../assets/human.svg'
+import fire from '../assets/fire.svg'
+import circle from '../assets/circle.svg'
+import normal from '../assets/normal.svg'
+import people from '../assets/people.svg'
+import golden from '../assets/golden.svg'
 
 export default function RoomPage() {
 	const navigate = useNavigate()
@@ -11,22 +18,25 @@ export default function RoomPage() {
 	const [isHost, setIsHost] = useState(true)
 	const [currentUserReady, setCurrentUserReady] = useState(false)
 	const [soundMode, setSoundMode] = useState('kiwi')
-	const [players, setPlayers] = useState([
+	const [difficulty, setDifficulty] = useState('easy')
+
+	const roomCode = '1234'
+	const basePlayers = [
 		{
 			id: 1,
-			username: 'Alex (You)',
+			username: isHost ? 'Alex (You)' : 'Alex',
 			avatar: '👨‍🎨',
 			isHost: true,
 			isReady: false,
-			status: 'Not Ready',
+			status: 'Room Owner',
 		},
 		{
 			id: 2,
-			username: 'WildKiwi',
-			avatar: '🦜',
+			username: isHost ? 'Jordan' : 'Jordan (You)',
+			avatar: '🧍‍♀️',
 			isHost: false,
-			isReady: false,
-			status: 'Not Ready',
+			isReady: !isHost && currentUserReady,
+			status: !isHost && currentUserReady ? 'Ready' : 'Not Ready',
 		},
 		{
 			id: 3,
@@ -64,11 +74,10 @@ export default function RoomPage() {
 			status: 'Waiting...',
 			isEmpty: true,
 		},
-	])
+	]
 
-	const roomCode = '123'
-	const totalPlayers = players.length
-	const readyPlayers = players.filter(p => p.isReady).length
+	const totalPlayers = basePlayers.length
+	const readyPlayers = basePlayers.filter(p => p.isReady).length
 
 	const handleToggleHost = () => {
 		setIsHost(!isHost)
@@ -88,174 +97,326 @@ export default function RoomPage() {
 	const canStartGame = isHost && readyPlayers === totalPlayers
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-			{/* Header */}
-			<div className="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center">
-				<div className="flex items-center gap-3">
-					<img src={logo} alt="Logo" className="h-8" />
-					<img src={logoname} alt="Kchain" className="h-8" />
-				</div>
-				<div className="flex gap-4">
-					{isHost ? (
+		<Background>
+			<div className="min-h-screen">
+				{/* Header */}
+				<header className="flex items-center justify-between px-8 py-5">
+					<BrandLockup />
+					<div className="flex items-center gap-3">
 						<button
 							onClick={handleToggleHost}
-							className="px-4 py-2 text-blue-600 font-semibold hover:bg-blue-50 rounded-lg transition"
+							className="flex items-center justify-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-600 shadow-sm transition hover:bg-blue-100"
 						>
-							👁️ View as Guest
+							<svg
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M2 12C4.5 7.5 8 5.5 12 5.5C16 5.5 19.5 7.5 22 12C19.5 16.5 16 18.5 12 18.5C8 18.5 4.5 16.5 2 12Z"
+									stroke="#4A5EED"
+									strokeWidth="1.8"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+								/>
+								<circle cx="12" cy="12" r="3" stroke="#4A5EED" strokeWidth="1.8" />
+							</svg>
+							{isHost ? 'View as Guest' : 'View as Host'}
 						</button>
-					) : (
 						<button
-							onClick={handleToggleHost}
-							className="px-4 py-2 text-blue-600 font-semibold hover:bg-blue-50 rounded-lg transition"
+							onClick={() => navigate('/')}
+							className="flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50"
 						>
-							👁️ View as Host
+							<svg
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M14 7L19 12L14 17"
+									stroke="#62748E"
+									strokeWidth="1.8"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+								/>
+								<path
+									d="M19 12H5"
+									stroke="#62748E"
+									strokeWidth="1.8"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+								/>
+							</svg>
+							Leave Room
 						</button>
-					)}
-					<button
-						onClick={() => navigate('/')}
-						className="px-4 py-2 text-blue-600 font-semibold hover:bg-blue-50 rounded-lg transition"
-					>
-						→ Leave Room
-					</button>
-				</div>
-			</div>
-
-			{/* Main Content */}
-			<div className="p-8 max-w-6xl mx-auto">
-				{/* Title */}
-				<h1 className="text-5xl font-bold text-center text-gray-900 mb-8">
-					Waiting Room
-				</h1>
-
-				{/* Room Info */}
-				<div className="flex justify-center gap-6 mb-8">
-					<div className="bg-white px-6 py-3 rounded-lg border border-gray-200 flex items-center gap-3">
-						<span className="text-gray-600">Room Code:</span>
-						<span className="text-2xl font-bold text-blue-600">{roomCode}</span>
-						<button className="text-gray-400 hover:text-gray-600">📋</button>
 					</div>
-					<div className="bg-blue-50 px-6 py-3 rounded-lg border border-blue-300 flex items-center gap-3 font-semibold text-blue-600">
-						<Users size={20} />
-						{readyPlayers} / {totalPlayers} Players
-					</div>
-				</div>
+				</header>
 
-				{/* Sound Mode Selection - Only for Host */}
-				{isHost && (
-					<div className="flex flex-col items-center gap-3 mb-8">
-						<p className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
-							🎵 OWNER SETTINGS: SOUND MODE
-						</p>
-						<div className="flex gap-3">
-							<button
-								onClick={() => setSoundMode('kiwi')}
-								className={`px-6 py-3 rounded-full font-semibold transition ${
-									soundMode === 'kiwi'
-										? 'bg-blue-600 text-white'
-										: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-								}`}
-							>
-								🦜 Kiwi
-							</button>
-							<button
-								onClick={() => setSoundMode('piano')}
-								className={`px-6 py-3 rounded-full font-semibold transition ${
-									soundMode === 'piano'
-										? 'bg-blue-600 text-white'
-										: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-								}`}
-							>
-								🎹 Piano
+				<main className="mx-auto max-w-6xl px-6 pb-12">
+					<h1 className="text-center text-4xl font-bold text-slate-900 md:text-5xl">
+						Waiting Room
+					</h1>
+
+					<div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+						<div className="flex items-center gap-3 rounded-full border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm">
+							<span className="text-slate-500">Room Code:</span>
+							<span className="text-lg font-bold text-indigo-600">
+								{roomCode}
+							</span>
+							<button className="text-slate-400 hover:text-slate-600">
+								<svg
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									xmlns="http://www.w3.org/2000/svg"
+								>
+									<rect
+										x="9"
+										y="9"
+										width="11"
+										height="11"
+										rx="2"
+										stroke="currentColor"
+										strokeWidth="1.6"
+									/>
+									<rect
+										x="4"
+										y="4"
+										width="11"
+										height="11"
+										rx="2"
+										stroke="currentColor"
+										strokeWidth="1.6"
+									/>
+								</svg>
 							</button>
 						</div>
+						<div className="flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-5 py-2.5 text-sm font-semibold text-blue-600 shadow-sm">
+							<img src={people} alt="Players" className="h-4 w-4" />
+							{readyPlayers} / {totalPlayers} Players
+						</div>
 					</div>
-				)}
 
-				{/* Players Grid */}
-				<div className="grid grid-cols-3 gap-6 mb-12">
-					{players.map((player) => (
-						<div
-							key={player.id}
-							className={`relative p-6 rounded-2xl flex flex-col items-center justify-center min-h-40 transition ${
-								player.isEmpty
-									? 'bg-gray-100 border-2 border-dashed border-gray-300'
-									: player.isReady
-										? 'bg-white border-2 border-green-400'
-										: 'bg-white border-2 border-blue-400'
-							}`}
-						>
-							{/* Host Crown */}
-							{player.isHost && (
-								<div className="absolute -top-3 -left-3 text-2xl">👑</div>
-							)}
+					<div className="mt-8 flex flex-col items-center gap-6">
+						<div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-indigo-500">
+							<span className="text-base">👑</span>
+							{isHost ? 'OWNER SETTINGS:' : 'ROOM SETTINGS:'}
+						</div>
 
-							{player.isEmpty ? (
-								<div className="text-center">
-									<div className="text-4xl mb-2">👤</div>
-									<p className="text-sm text-gray-400">{player.status}</p>
-								</div>
-							) : (
-								<>
-									<div className="text-5xl mb-2">{player.avatar}</div>
-									<h3 className="text-sm font-bold text-gray-900 text-center">
-										{player.username}
-									</h3>
-									{player.isHost && (
-										<p className="text-xs text-blue-600 font-semibold uppercase mt-1">
-											Room Owner
-										</p>
-									)}
-									<p
-										className={`text-xs mt-2 font-semibold ${
-											player.isReady ? 'text-green-600' : 'text-gray-500'
+						<div className="flex flex-wrap items-center justify-center gap-8">
+							<div className="space-y-3 text-center">
+								<p className="text-xs font-semibold uppercase text-slate-400">
+									Sound Mode
+								</p>
+								<div className="flex items-center gap-3 rounded-full border border-gray-200 bg-white p-1 shadow-sm">
+									<button
+										onClick={() => isHost && setSoundMode('kiwi')}
+										disabled={!isHost}
+										className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${
+											soundMode === 'kiwi'
+												? 'bg-indigo-600 text-white'
+												: 'text-slate-400'
 										}`}
 									>
-										{player.isReady ? '✓ Ready' : player.status}
-									</p>
-								</>
-							)}
-						</div>
-					))}
-				</div>
+										<img src={kiwi} alt="Kiwi" className="h-4 w-4" />
+										Kiwi
+									</button>
+									<button
+										onClick={() => isHost && setSoundMode('piano')}
+										disabled={!isHost}
+										className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${
+											soundMode === 'piano'
+												? 'bg-indigo-600 text-white'
+												: 'text-slate-400'
+										}`}
+									>
+										<img src={music} alt="Music" className="h-4 w-4" />
+										Piano
+									</button>
+								</div>
+							</div>
 
-				{/* Action Button */}
-				<div className="flex justify-center">
-					{isHost ? (
-						<button
-							onClick={handleStartGame}
-							disabled={!canStartGame}
-							className={`px-12 py-4 rounded-full font-bold text-lg transition flex items-center justify-center gap-2 ${
-								canStartGame
-									? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-									: 'bg-gray-300 text-gray-500 cursor-not-allowed'
-							}`}
-						>
-							<span>▶</span>
-							<span>Start Game</span>
-						</button>
-					) : (
-						<button
-							onClick={handleReady}
-							className={`px-12 py-4 rounded-full font-bold text-lg transition flex items-center justify-center ${
-								currentUserReady ? 'gap-2' : ''
-							} ${
-								currentUserReady
-									? 'bg-green-500 text-white hover:bg-green-600'
-									: 'bg-white text-gray-900 border-2 border-gray-300 hover:bg-gray-50'
-							}`}
-						>
-							{currentUserReady ? (
-								<>
-									<span>✓</span>
-									<span>Ready!</span>
-								</>
-							) : (
-								<span>Click to Ready</span>
-							)}
-						</button>
-					)}
-				</div>
+							<div className="space-y-3 text-center">
+								<p className="text-xs font-semibold uppercase text-slate-400">
+									Difficulty
+								</p>
+								<div className="flex items-center gap-3 rounded-full border border-gray-200 bg-white p-1 shadow-sm">
+									<button
+										onClick={() => isHost && setDifficulty('easy')}
+										disabled={!isHost}
+										className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${
+											difficulty === 'easy'
+												? 'bg-indigo-600 text-white'
+												: 'text-slate-400'
+										}`}
+									>
+										<span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500">
+											<img src={circle} alt="Easy" className="h-3 w-3" />
+										</span>
+										Easy
+									</button>
+									<button
+										onClick={() => isHost && setDifficulty('normal')}
+										disabled={!isHost}
+										className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${
+											difficulty === 'normal'
+												? 'bg-indigo-600 text-white'
+												: 'text-slate-400'
+										}`}
+									>
+										<span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200">
+											<img src={normal} alt="Normal" className="h-3 w-3" />
+										</span>
+										Normal
+									</button>
+									<button
+										onClick={() => isHost && setDifficulty('hard')}
+										disabled={!isHost}
+										className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${
+											difficulty === 'hard'
+												? 'bg-indigo-600 text-white'
+												: 'text-slate-400'
+										}`}
+									>
+										<img src={fire} alt="Hard" className="h-4 w-4" />
+										Hard
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div className="mt-10 grid grid-cols-3 gap-6">
+						{basePlayers.map((player) => (
+							<div
+								key={player.id}
+								className={`relative min-h-40 rounded-2xl border-2 bg-white p-6 text-center shadow-sm transition ${
+									player.isEmpty
+										? 'border-slate-200 bg-white'
+										: player.isReady
+											? 'border-emerald-400'
+											: 'border-indigo-400'
+								}`}
+							>
+								{player.isEmpty ? (
+									<div className="flex flex-col items-center justify-center gap-2 text-slate-400">
+										<img src={human} alt="Waiting" className="h-8 w-8 opacity-60" />
+										<span className="text-sm">Waiting...</span>
+									</div>
+								) : (
+									<>
+										<div className="relative -mt-1">
+											<div className="text-5xl">{player.avatar}</div>
+											{player.isHost && (
+												<div className="absolute -top-9 left-1/2 z-10 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full bg-yellow-400 shadow">
+													<img src={golden} alt="Host" className="h-3.5 w-3.5" />
+												</div>
+											)}
+										</div>
+										<p className="mt-2 text-sm font-semibold text-slate-900">
+											{player.username}
+										</p>
+										{player.isHost ? (
+											<span className="mt-1 block text-[11px] font-semibold uppercase text-indigo-500">
+												Room Owner
+											</span>
+										) : null}
+										{player.isReady ? (
+											<div className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-full bg-emerald-500 px-4 py-1 text-xs font-semibold text-white">
+												<svg
+													width="14"
+													height="14"
+													viewBox="0 0 20 20"
+													fill="none"
+													xmlns="http://www.w3.org/2000/svg"
+												>
+													<path
+														d="M5 10.5L8.2 13.5L15 7"
+														stroke="white"
+														strokeWidth="2"
+														strokeLinecap="round"
+														strokeLinejoin="round"
+													/>
+												</svg>
+												Ready
+											</div>
+										) : (
+											<span className="mt-3 inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500">
+												Not Ready
+											</span>
+										)}
+									</>
+								)}
+							</div>
+						))}
+					</div>
+
+					<div className="mt-10 flex justify-center">
+						{isHost ? (
+							<button
+								onClick={handleStartGame}
+								disabled={!canStartGame}
+								className={`flex items-center justify-center gap-2 rounded-full px-12 py-3 text-base font-semibold shadow-lg transition ${
+									canStartGame
+										? 'bg-indigo-600 text-white hover:bg-indigo-700'
+										: 'bg-slate-200 text-slate-400'
+								}`}
+							>
+								<svg
+									width="16"
+									height="16"
+									viewBox="0 0 20 20"
+									fill="none"
+									xmlns="http://www.w3.org/2000/svg"
+								>
+									<path
+										d="M6 4L15 10L6 16V4Z"
+										fill="white"
+									/>
+								</svg>
+								Start Game
+							</button>
+						) : (
+							<button
+								onClick={handleReady}
+								className={`flex items-center justify-center gap-2 rounded-full px-12 py-3 text-base font-semibold shadow-lg transition ${
+									currentUserReady
+										? 'bg-emerald-500 text-white hover:bg-emerald-600'
+										: 'border-2 border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+								}`}
+							>
+								{currentUserReady ? (
+									<>
+										<svg
+											width="16"
+											height="16"
+											viewBox="0 0 20 20"
+											fill="none"
+											xmlns="http://www.w3.org/2000/svg"
+										>
+											<path
+												d="M5 10.5L8.2 13.5L15 7"
+												stroke="white"
+												strokeWidth="2"
+												strokeLinecap="round"
+												strokeLinejoin="round"
+											/>
+										</svg>
+										Ready!
+									</>
+								) : (
+									'Click to Ready'
+								)}
+							</button>
+						)}
+					</div>
+				</main>
 			</div>
-		</div>
+		</Background>
 	)
 }
