@@ -4,7 +4,7 @@ function initSocket(httpServer, frontendOrigin) {
   const io = new Server(httpServer, {
     cors: {
       origin: frontendOrigin || '*',
-      methods: ['GET', 'POST']
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     }
   });
 
