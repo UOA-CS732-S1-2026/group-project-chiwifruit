@@ -17,7 +17,7 @@ export default function LoginButton({
 			size="lg"
 			onClick={onClick}
 			className={cn(
-				"rounded-full border-[#DDE4FF] bg-white/85 px-4 text-[#091149] backdrop-blur-sm hover:border-[#4A5EED] hover:bg-white",
+				"rounded-full border-border bg-card/85 px-4 text-foreground backdrop-blur-sm hover:border-ring hover:bg-card",
 				className,
 			)}
 		>
@@ -26,13 +26,13 @@ export default function LoginButton({
 					<img
 						src={avatarUrl}
 						alt={avatarAlt}
-						className="size-6 rounded-full object-cover ring-1 ring-[#DDE4FF]"
+						className="size-6 rounded-full object-cover ring-1 ring-border"
 					/>
 					<span className="max-w-24 truncate">{label}</span>
 				</>
 			) : (
 				<>
-					<UserRound className="size-4 text-[#94A3B8]" />
+					<UserRound className="size-4 text-muted-foreground" />
 					{label}
 				</>
 			)}
