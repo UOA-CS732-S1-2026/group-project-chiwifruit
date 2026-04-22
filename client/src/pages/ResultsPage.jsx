@@ -5,6 +5,7 @@ import orangemedal from '../assets/orangemedal.svg'
 import people from '../assets/people.svg'
 import refresh from '../assets/refresh.svg'
 import home from '../assets/home.svg'
+import arrow from '../assets/arrow.svg'
 
 export default function ResultsPage() {
 	const navigate = useNavigate()
@@ -92,9 +93,12 @@ export default function ResultsPage() {
 								<h2 className="text-2xl font-bold text-gray-900">
 									{gameResults.winner.username}
 								</h2>
-								<p className="text-gray-600">
-									🎵 {gameResults.winner.correctNotes} correct notes
-								</p>
+								<div className="flex items-center gap-2">
+									<img src={arrow} alt="arrow" className="w-4 h-4" />
+									<p className="text-gray-600">
+										{gameResults.winner.correctNotes} correct notes
+									</p>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -132,14 +136,14 @@ export default function ResultsPage() {
 									<div className="flex-shrink-0">
 										{index === 0 && (
 											<img
-												src={firstplace}
+												src={trophy}
 												alt="1st"
 												className="w-6 h-6"
 											/>
 										)}
 										{index === 1 && (
 											<img
-												src={orangemedal}
+												src={firstplace}
 												alt="2nd"
 												className="w-6 h-6"
 											/>
@@ -218,10 +222,10 @@ export default function ResultsPage() {
 												Host
 											</span>
 										)}
-										<p className="font-bold text-gray-900 w-8 text-right">
-											{player.score}
-										</p>
 									</div>
+									<p className="font-bold text-gray-900 w-12 text-right">
+										{player.score}
+									</p>
 								</div>
 							))}
 						</div>
