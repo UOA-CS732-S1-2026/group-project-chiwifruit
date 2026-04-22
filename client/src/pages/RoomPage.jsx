@@ -60,7 +60,7 @@ export default function RoomPage() {
 	const handleStartGame = () => {
 		if (!isHost) return
 		if (!canStartGame) return
-		navigate("/game")
+		navigate("/game", { state: { difficulty, soundMode } })
 	}
 
 	const canStartGame = isHost && readyPlayers === nonEmptyPlayers.length
