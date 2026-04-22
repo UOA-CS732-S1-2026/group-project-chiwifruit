@@ -16,6 +16,10 @@
 	--button-border-hover: #4a5eed;
 	--text-muted: #64748b;
 
+	--ready-gradient-start: #05df72;
+	--ready-gradient-end: #00bc7d;
+	--ready-shadow-color: rgba(0, 201, 80, 0.25);
+
 	--background: var(--homepage-bg);
 	--foreground: var(--hero-title);
 	--card: #ffffff;
@@ -150,6 +154,17 @@ body,
 
 	.btn-login-theme:hover {
 		border-color: var(--button-border-hover);
+	}
+
+	.ready-gradient-theme {
+		background: linear-gradient(90deg, var(--ready-gradient-start), var(--ready-gradient-end));
+		color: #ffffff;
+	}
+
+	.ready-shadow-theme {
+		box-shadow:
+			0 4px 6px -4px var(--ready-shadow-color),
+			0 10px 15px -3px var(--ready-shadow-color);
 	}
 }
 
