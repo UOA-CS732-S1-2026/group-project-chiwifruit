@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sound-chain-app
+    ports:
+      - "3000:3000"
+      - "5173:5173"
+    depends_on:
+      - mongodb
+    volumes:
+      - ./server/.env:/app/server/.env:ro
+      - ./client/.env:/app/client/.env:ro
+
+  mongodb:
+    image: mongo:latest
+    container_name: kichain-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+
+volumes:
+  mongodb-data:

@@ -59,9 +59,11 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Backend health endpoint: `http://localhost:3000/health`
 
-## Run Both Client + Server in Docker (Local Development)
+## Run Locally with Docker (Client + Server + MongoDB)
 
-To reduce local setup friction, this repo now includes a single Docker image that runs both services in one container for local testing.
+To reduce local setup friction, this repo includes:
+- A single app image that runs both frontend and backend in one container
+- A local MongoDB container managed by Docker Compose
 
 ### Why this base image?
 
@@ -81,13 +83,42 @@ cp client/.env.example client/.env
 
 Then update values in `server/.env` (MongoDB/AWS/JWT) and `client/.env` if needed.
 
-### 2) Build the container image
+### 2) Start everything with Docker Compose (recommended)
+
+```bash
+docker compose -f docker-compose.local.yml up --build
+```
+
+This starts:
+- `sound-chain-app` (frontend + backend)
+- `kichain-db` (MongoDB on port `27017`)
+
+### 3) Verify locally
+
+- Frontend (Vite UI): `http://localhost:5173`
+- Backend root info: `http://localhost:3000`
+- Backend health: `http://localhost:3000/health`
+- Backend API docs: `http://localhost:3000/api-docs`
+
+### 4) Stop services
+
+```bash
+docker compose -f docker-compose.local.yml down
+```
+
+If you want to remove the MongoDB data volume too:
+
+```bash
+docker compose -f docker-compose.local.yml down -v
+```
+
+### Alternative: app container only (without Compose)
 
 ```bash
 docker build -t sound-chain-local .
 ```
 
-### 3) Run the container
+Run only the app container (assumes MongoDB is available separately):
 
 ```bash
 docker run --rm -it \
@@ -98,16 +129,12 @@ docker run --rm -it \
   sound-chain-local
 ```
 
-### 4) Verify locally
-
-- Frontend (Vite): `http://localhost:5173`
-- Backend health: `http://localhost:3000/health`
-
 ### Notes
 
 - This container is optimized for local development only (not production deployment).
-- It starts both processes in one container using `concurrently`.
-- You still need access to MongoDB (local or remote) via `MONGODB_URI` in `server/.env`.
+- The backend is served on `localhost:3000`, but the playable frontend app is on `localhost:5173`.
+- `localhost:3000` now returns a JSON status response, and API docs are available at `/api-docs`.
+- This setup is local-first. For ECS/EC2 later, this can evolve into separate frontend/backend images and environment-specific Compose/task definitions.
 
 ## Environment Variables
 
