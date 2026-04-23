@@ -59,6 +59,56 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Backend health endpoint: `http://localhost:3000/health`
 
+## Run Both Client + Server in Docker (Local Development)
+
+To reduce local setup friction, this repo now includes a single Docker image that runs both services in one container for local testing.
+
+### Why this base image?
+
+The Dockerfile uses `node:20-bookworm-slim` (Debian-based) instead of Alpine:
+- Better compatibility with Node packages that may rely on native binaries
+- Lower technical debt/risk versus musl/glibc edge cases on Alpine
+- Still relatively lightweight (`slim`) for local iteration
+
+### 1) Prepare environment files
+
+From the repo root:
+
+```bash
+cp server/.env.example server/.env
+cp client/.env.example client/.env
+```
+
+Then update values in `server/.env` (MongoDB/AWS/JWT) and `client/.env` if needed.
+
+### 2) Build the container image
+
+```bash
+docker build -t sound-chain-local .
+```
+
+### 3) Run the container
+
+```bash
+docker run --rm -it \
+  -p 3000:3000 \
+  -p 5173:5173 \
+  -v "$(pwd)/server/.env:/app/server/.env:ro" \
+  -v "$(pwd)/client/.env:/app/client/.env:ro" \
+  sound-chain-local
+```
+
+### 4) Verify locally
+
+- Frontend (Vite): `http://localhost:5173`
+- Backend health: `http://localhost:3000/health`
+
+### Notes
+
+- This container is optimized for local development only (not production deployment).
+- It starts both processes in one container using `concurrently`.
+- You still need access to MongoDB (local or remote) via `MONGODB_URI` in `server/.env`.
+
 ## Environment Variables
 
 ### Backend
