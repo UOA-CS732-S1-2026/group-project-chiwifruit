@@ -1,9 +1,9 @@
-const crypto = require("crypto");
-const User = require("../models/User");
-const { createToken } = require("../services/tokenService");
+const crypto = require('crypto');
+const User = require('../models/User');
+const { createToken } = require('../services/tokenService');
 
-const GUEST_PREFIXES = ["Swift", "Sunny", "Echo", "Brave", "Lucky", "Bright"];
-const GUEST_NOUNS = ["Falcon", "Otter", "Fox", "Koala", "Dolphin", "Robin"];
+const GUEST_PREFIXES = ['Swift', 'Sunny', 'Echo', 'Brave', 'Lucky', 'Bright'];
+const GUEST_NOUNS = ['Falcon', 'Otter', 'Fox', 'Koala', 'Dolphin', 'Robin'];
 
 function generateGuestName() {
   const prefix =
@@ -13,7 +13,7 @@ function generateGuestName() {
   return `${prefix}${noun}${suffix}`;
 }
 
-function buildAvatarUrl(seed, style = "lorelei") {
+function buildAvatarUrl(seed, style = 'lorelei') {
   return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}`;
 }
 
@@ -25,12 +25,12 @@ async function register(req, res) {
   if (!username || !password) {
     return res
       .status(400)
-      .json({ message: "username and password are required" });
+      .json({ message: 'username and password are required' });
   }
 
   const existingUser = await User.findOne({ username });
   if (existingUser) {
-    return res.status(409).json({ message: "Username already exists" });
+    return res.status(409).json({ message: 'Username already exists' });
   }
 
   const passwordHash = await User.hashPassword(password);
@@ -39,7 +39,7 @@ async function register(req, res) {
   const token = createToken(user);
 
   return res.status(201).json({
-    message: "Register success",
+    message: 'Register success',
     token,
     user: {
       id: user._id,
@@ -58,24 +58,24 @@ async function login(req, res) {
   if (!username || !password) {
     return res
       .status(400)
-      .json({ message: "username and password are required" });
+      .json({ message: 'username and password are required' });
   }
 
   const user = await User.findOne({ username });
 
   if (!user) {
-    return res.status(401).json({ message: "Invalid credentials" });
+    return res.status(401).json({ message: 'Invalid credentials' });
   }
 
   const isPasswordValid = await user.comparePassword(password);
   if (!isPasswordValid) {
-    return res.status(401).json({ message: "Invalid credentials" });
+    return res.status(401).json({ message: 'Invalid credentials' });
   }
 
   const token = createToken(user);
 
   return res.json({
-    message: "Login success",
+    message: 'Login success',
     token,
     user: {
       id: user._id,
@@ -97,7 +97,7 @@ async function continueAsGuest(_req, res) {
   });
 
   return res.status(201).json({
-    message: "Guest session created",
+    message: 'Guest session created',
     token,
     user: {
       id: guestId,
