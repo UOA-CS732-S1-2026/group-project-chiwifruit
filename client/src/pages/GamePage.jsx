@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom"
 import Background from "../components/Common/Background"
 import ExitGameModal from "../components/Game/ExitGameModal"
 import GamePlayerCard from "../components/Game/GamePlayerCard"
+import GameResultsModal from "../components/Game/GameResultsModal"
 import GameToast from "../components/Game/GameToast"
 import GameWheel from "../components/Game/GameWheel"
 import YoureOutModal from "../components/Game/YoureOutModal"
@@ -50,11 +51,11 @@ export default function GamePage() {
 	const players = React.useMemo(
 		() => [
 			{ id: "1", name: "Alex (You)", score: 0, side: "left" },
-			{ id: "2", name: "Jordan", score: 0, side: "left" },
-			{ id: "3", name: "Casey", score: 0, side: "left" },
-			{ id: "4", name: "Riley", score: 0, side: "right" },
-			{ id: "5", name: "Taylor", score: 0, side: "right" },
-			{ id: "6", name: "Sam", score: 0, side: "right" },
+			{ id: "2", name: "Jordan", score: 16, side: "left" },
+			{ id: "3", name: "Casey", score: 9, side: "left" },
+			{ id: "4", name: "Riley", score: 21, side: "right" },
+			{ id: "5", name: "Taylor", score: 4, side: "right" },
+			{ id: "6", name: "Sam", score: 8, side: "right" },
 		],
 		[],
 	)
@@ -63,6 +64,7 @@ export default function GamePage() {
 	const [turnSeconds, setTurnSeconds] = React.useState(20)
 	const [isExitModalOpen, setIsExitModalOpen] = React.useState(false)
 	const [isOutModalOpen, setIsOutModalOpen] = React.useState(false)
+	const [isResultsModalOpen, setIsResultsModalOpen] = React.useState(false)
 	const [isSpectating, setIsSpectating] = React.useState(false)
 
 	React.useEffect(() => {
@@ -78,6 +80,7 @@ export default function GamePage() {
 		setTurnSeconds(20)
 		setIsExitModalOpen(false)
 		setIsOutModalOpen(false)
+		setIsResultsModalOpen(false)
 		setIsSpectating(false)
 	}, [difficulty])
 
@@ -256,6 +259,19 @@ export default function GamePage() {
 					navigate("/room")
 				}}
 			/>
+			<GameResultsModal
+				open={isResultsModalOpen}
+				players={players}
+				onClose={() => setIsResultsModalOpen(false)}
+				onBackToRoom={() => {
+					setIsResultsModalOpen(false)
+					navigate("/room")
+				}}
+				onBackToHome={() => {
+					setIsResultsModalOpen(false)
+					navigate("/")
+				}}
+			/>
 			<div className="mx-auto w-full max-w-[90rem] px-4 pb-14 pt-6 md:px-6 lg:px-8">
 				<div className="grid items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
 					<div className="justify-self-start">
@@ -399,6 +415,12 @@ export default function GamePage() {
 				</div>
 
 				<GameToast message={toastMessage} className="mt-8" />
+
+				<div className="mt-4 flex justify-center">
+					<Button type="button" variant="outline" onClick={() => setIsResultsModalOpen(true)}>
+						Show Result
+					</Button>
+				</div>
 			</div>
 		</Background>
 	)

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Check, CircleDot, Copy, Eye, Flame, Leaf, LogOut, Music, Play, Users, Zap } from "lucide-react"
+import { Check, CircleDot, Copy, Eye, Flame, LogOut, Music, Play, Users, Zap } from "lucide-react"
 
 import Background from "../components/Common/Background"
 import BrandLockup from "../components/Common/BrandLockup"
@@ -9,6 +9,25 @@ import RoomSectionLabel from "../components/Room/RoomSectionLabel"
 import SegmentedSelection from "../components/Room/SegmentedSelection"
 import PlayerSlotCard from "../components/Room/PlayerSlotCard"
 import { Button } from "../components/ui/button"
+
+import birdIcon from "../assets/icons/bird.svg"
+
+
+function BirdIcon({ className, ...props }) {
+	const isActive = Boolean(props["data-active"])
+
+	return (
+		<img
+			src={birdIcon}
+			alt=""
+			aria-hidden="true"
+			className={"size-4 " + (className ?? "")}
+			style={{
+				filter: isActive ? "brightness(0) invert(1)" : "none",
+			}}
+		/>
+	)
+}
 
 export default function RoomPage() {
 	const navigate = useNavigate()
@@ -134,7 +153,7 @@ export default function RoomPage() {
 									disabled={!isHost}
 									onChange={(next) => setSoundMode(next)}
 									options={[
-										{ value: "kiwi", label: "Kiwi", Icon: Leaf },
+										{ value: "kiwi", label: "Kiwi", Icon: BirdIcon },
 										{ value: "piano", label: "Piano", Icon: Music },
 									]}
 								/>

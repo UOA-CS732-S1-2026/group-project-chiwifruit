@@ -26,7 +26,7 @@ export default function SegmentedSelection({ value, options, onChange, disabled,
 								: "text-muted-foreground",
 						)}
 					>
-						{Icon ? <Icon className="size-4" /> : null}
+							{Icon ? <Icon className="size-4" data-active={isActive} /> : null}
 						{option.label}
 					</button>
 				)
