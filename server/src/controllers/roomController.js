@@ -79,13 +79,12 @@ async function createRoom(req, res) {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    if (room.participants.length >= MAX_PARTICIPANTS) {
-      return res.status(403).json({ message: `Room is full. Maximum ${MAX_PARTICIPANTS} participants allowed` });
-    }
-
     const alreadyJoined = room.participants.some(getParticipantSelector(identity));
 
     if (!alreadyJoined) {
+      if (room.participants.length >= MAX_PARTICIPANTS) {
+      return res.status(403).json({ message: `Room is full. Maximum ${MAX_PARTICIPANTS} participants allowed` });
+    }
       room.participants.push(createParticipant(identity));
       await room.save();
     }
