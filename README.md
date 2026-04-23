@@ -32,6 +32,44 @@ The root [package.json](package.json) is configured as an npm workspace and can 
 - `npm run build` builds frontend
 - `npm run start` starts backend in non-dev mode
 
+
+## GitHub Actions CI (PR Gate for `dev` and `main`)
+
+This repository now includes a workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that runs on:
+- Pull requests targeting `dev` or `main`
+- Direct pushes to `dev` or `main`
+
+The CI pipeline runs in a GitHub-hosted Ubuntu runner (no Docker required for CI) and executes:
+- Frontend integrity checks: `npm run lint` + `npm run build`
+- Backend integrity check: `node --check src/server.js`
+- Backend smoke test: starts the Express app in-process and verifies `GET /health` returns `{ status: "ok" }`
+
+### Why no Docker in CI right now?
+
+Given your current goal (fast failure on obviously broken code), GitHub Actions runners are the simplest and most maintainable default:
+- Faster setup and execution for JS workspace checks
+- Fewer moving parts than building containers during every PR
+- Good signal for code integrity/lint/build/smoke without requiring external services
+
+You can add a Docker image build job later when you want to validate container packaging too.
+
+### Required GitHub repo settings (one-time)
+
+To make CI truly block merges to `dev` and `main`, enable branch protection rules:
+
+1. Go to **GitHub → Settings → Branches**.
+2. Add (or edit) a branch protection rule for `main`.
+3. Enable:
+   - **Require a pull request before merging**
+   - **Require status checks to pass before merging**
+4. In status checks, select the job **`validate`** from this workflow.
+5. Repeat the same rule for `dev`.
+
+Optional hardening:
+- Enable **Require branches to be up to date before merging**
+- Include administrators if you want the rule to apply to admins too
+- Disable direct pushes to protected branches
+
 ## Quick Start
 
 1. Install all dependencies from repository root:
