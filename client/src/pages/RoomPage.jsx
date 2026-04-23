@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { Check, CircleDot, Copy, Eye, Flame, LogOut, Music, Play, Users, Zap } from "lucide-react"
 
 import Background from "../components/Common/Background"
@@ -9,8 +9,10 @@ import RoomSectionLabel from "../components/Room/RoomSectionLabel"
 import SegmentedSelection from "../components/Room/SegmentedSelection"
 import PlayerSlotCard from "../components/Room/PlayerSlotCard"
 import { Button } from "../components/ui/button"
+import SoundToggleButton from "../components/ui/SoundToggleButton"
 
 import birdIcon from "../assets/icons/bird.svg"
+import useBackgroundMusic from "../hooks/useBackgroundMusic"
 
 
 function BirdIcon({ className, ...props }) {
@@ -31,14 +33,19 @@ function BirdIcon({ className, ...props }) {
 
 export default function RoomPage() {
 	const navigate = useNavigate()
+	const location = useLocation()
+	useBackgroundMusic()
+
+	const initialIsHost = location.state?.isHost ?? true
+	const initialRoomCode = location.state?.roomCode ?? "1234"
 	
 	// State management
-	const [isHost, setIsHost] = useState(true)
+	const [isHost, setIsHost] = useState(Boolean(initialIsHost))
 	const [currentUserReady, setCurrentUserReady] = useState(false)
 	const [soundMode, setSoundMode] = useState("kiwi")
 	const [difficulty, setDifficulty] = useState("easy")
 
-	const roomCode = "1234"
+	const roomCode = String(initialRoomCode)
 	const players = useMemo(
 		() => [
 			{
@@ -98,6 +105,7 @@ export default function RoomPage() {
 				<header className="flex items-center justify-between px-8 py-5">
 					<BrandLockup />
 					<div className="flex items-center gap-3">
+						<SoundToggleButton />
 						<Button
 							type="button"
 							onClick={handleToggleHost}

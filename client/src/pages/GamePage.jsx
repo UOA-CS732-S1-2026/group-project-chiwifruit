@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { ArrowLeft, ChevronsRight, Volume2 } from "lucide-react"
+import { ArrowLeft, ChevronsRight } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 
 import Background from "../components/Common/Background"
@@ -11,6 +11,7 @@ import GameToast from "../components/Game/GameToast"
 import GameWheel from "../components/Game/GameWheel"
 import YoureOutModal from "../components/Game/YoureOutModal"
 import { Button } from "../components/ui/button"
+import SoundToggleButton from "../components/ui/SoundToggleButton"
 
 import logo from "../assets/branding/logo.png"
 import { buildPadThemeSet, getPadCountByDifficulty } from "../lib/gamePadPalette"
@@ -292,16 +293,7 @@ export default function GamePage() {
 					</div>
 
 					<div className="justify-self-end">
-						<Button
-							type="button"
-							variant="outline"
-							size="icon-lg"
-							className="cursor-pointer rounded-2xl bg-card shadow-sm transition-colors hover:bg-muted hover:shadow-md active:scale-[0.98]"
-							aria-label="Sound"
-							title="Sound"
-						>
-							<Volume2 className="size-5" />
-						</Button>
+						<SoundToggleButton />
 					</div>
 				</div>
 

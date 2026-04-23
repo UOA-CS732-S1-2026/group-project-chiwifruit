@@ -4,8 +4,17 @@ import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import JoinRoomModal from "../components/Landing/JoinRoomModal"
+import useBackgroundMusic from "../hooks/useBackgroundMusic"
 
 export default function LandingPage() {
+	useBackgroundMusic()
+
+	const navigate = useNavigate()
+	const [joinModalOpen, setJoinModalOpen] = useState(false)
+
 	const guideItems = [
 		{
 			Icon: Headphones,
@@ -31,6 +40,15 @@ export default function LandingPage() {
 		<Background>
 			<LandingTopBar />
 
+			<JoinRoomModal
+				open={joinModalOpen}
+				onOpenChange={setJoinModalOpen}
+				onJoin={(roomCode) => {
+					setJoinModalOpen(false)
+					navigate("/room", { state: { isHost: false, roomCode } })
+				}}
+			/>
+
 			<section className="relative mx-auto w-full max-w-[90rem] px-4 pb-14 pt-24 md:px-6 md:pt-28 lg:px-8">
 				<div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
 					<div className="flex flex-col items-start gap-5 md:gap-6">
@@ -54,13 +72,17 @@ export default function LandingPage() {
 						</p>
 
 						<div className="flex flex-wrap items-center gap-3 pt-1">
-							<Button className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90">
+							<Button
+								className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90"
+								onClick={() => navigate("/room", { state: { isHost: true } })}
+							>
 								<Play className="size-4 fill-current" />
 								Create a Room
 							</Button>
 							<Button
 								variant="outline"
 								className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
+								onClick={() => setJoinModalOpen(true)}
 							>
 								<LogIn className="size-4" />
 								Join with Code
