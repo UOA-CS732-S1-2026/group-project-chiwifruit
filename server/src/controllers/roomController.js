@@ -2,6 +2,9 @@ const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
 
+const MAX_PARTICIPANTS = 6;
+const MIN_PARTICIPANTS = 2;
+
 function getParticipantSelector(identity) {
   if (identity.isGuest) {
     return (participant) => participant.guestId === identity.sub;
@@ -74,6 +77,10 @@ async function createRoom(req, res) {
 
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
+    }
+
+    if (room.participants.length >= MAX_PARTICIPANTS) {
+      return res.status(403).json({ message: `Room is full. Maximum ${MAX_PARTICIPANTS} participants allowed` });
     }
 
     const alreadyJoined = room.participants.some(getParticipantSelector(identity));
@@ -191,6 +198,10 @@ async function selectMode(req, res) {
 
   if (String(room.host) !== String(userId)) {
     return res.status(403).json({ message: 'Only the host can select a mode' });
+  }
+
+  if (room.participants.length < MIN_PARTICIPANTS) {
+    return res.status(400).json({ message: `Minimum ${MIN_PARTICIPANTS} participants required to start the game` });
   }
 
   room.mode = mode;
