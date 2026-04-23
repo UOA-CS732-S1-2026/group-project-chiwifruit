@@ -2,8 +2,8 @@ const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
 
-const MAX_PARTICIPANTS = 6;
-const MIN_PARTICIPANTS = 2;
+const MAX_ROOM_PARTICIPANTS = 6;
+const MIN_PARTICIPANTS_TO_START = 2;
 
 function getParticipantSelector(identity) {
   if (identity.isGuest) {
@@ -82,9 +82,12 @@ async function createRoom(req, res) {
     const alreadyJoined = room.participants.some(getParticipantSelector(identity));
 
     if (!alreadyJoined) {
-      if (room.participants.length >= MAX_PARTICIPANTS) {
-      return res.status(403).json({ message: `Room is full. Maximum ${MAX_PARTICIPANTS} participants allowed` });
-    }
+      if (room.participants.length >= MAX_ROOM_PARTICIPANTS) {
+        return res.status(409).json({
+          message: `Room is full. Maximum ${MAX_ROOM_PARTICIPANTS} participants are allowed`
+        });
+      }
+
       room.participants.push(createParticipant(identity));
       await room.save();
     }
@@ -149,12 +152,16 @@ async function getRoomState(roomCode) {
   }
 
   const everyoneReady = room.participants.length > 0 && room.participants.every((p) => p.isReady);
+  const canStartGame = room.participants.length >= MIN_PARTICIPANTS_TO_START && everyoneReady;
 
   return {
     roomCode: room.roomCode,
     mode: room.mode,
     participantCount: room.participants.length,
+    maxParticipantCount: MAX_ROOM_PARTICIPANTS,
+    minParticipantsToStart: MIN_PARTICIPANTS_TO_START,
     everyoneReady,
+    canStartGame,
     participants: room.participants.map((participant) => ({
       userId: participant.user?._id || participant.guestId,
       username: participant.user?.username || participant.guestName,
@@ -197,10 +204,6 @@ async function selectMode(req, res) {
 
   if (String(room.host) !== String(userId)) {
     return res.status(403).json({ message: 'Only the host can select a mode' });
-  }
-
-  if (room.participants.length < MIN_PARTICIPANTS) {
-    return res.status(400).json({ message: `Minimum ${MIN_PARTICIPANTS} participants required to start the game` });
   }
 
   room.mode = mode;
