@@ -1,5 +1,7 @@
 import { create } from "zustand"
 
+// Global sound settings shared across pages.
+// Persists the mute toggle in localStorage so refreshes keep the user preference.
 const STORAGE_KEY = "kichain:soundMuted"
 
 function readInitialMuted() {
@@ -21,11 +23,14 @@ function persistMuted(nextMuted) {
 }
 
 const useSoundStore = create((set, get) => ({
+	// `true` means: mute background music + click SFX.
 	muted: typeof window === "undefined" ? false : readInitialMuted(),
+	// Sets `muted` and persists to localStorage.
 	setMuted: (nextMuted) => {
 		persistMuted(Boolean(nextMuted))
 		set({ muted: Boolean(nextMuted) })
 	},
+	// Convenience toggle.
 	toggleMuted: () => {
 		const next = !get().muted
 		persistMuted(next)

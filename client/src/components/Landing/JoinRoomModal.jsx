@@ -3,6 +3,8 @@ import { X } from "lucide-react"
 
 import BaseModal from "../ui/BaseModal"
 
+// Normalizes room code input so users can paste with spaces/lowercase.
+// We keep `-` because codes may include it (e.g. ABCD-1234).
 function normalizeRoomCode(raw) {
 	return raw
 		.toUpperCase()
@@ -10,12 +12,17 @@ function normalizeRoomCode(raw) {
 		.replace(/[^A-Z0-9-]/g, "")
 }
 
+// Join room modal (Landing -> Join with Code).
+// - Uses BaseModal for shared overlay/portal behavior.
+// - Auto-focuses the input when opened.
+// - Calls `onJoin(normalizedRoomCode)` on submit.
 export default function JoinRoomModal({ open, onOpenChange, onJoin }) {
 	const [roomCode, setRoomCode] = useState("")
 	const inputRef = useRef(null)
 
 	useEffect(() => {
 		if (!open) return
+		// Reset input each time the modal opens.
 		setRoomCode("")
 	}, [open])
 

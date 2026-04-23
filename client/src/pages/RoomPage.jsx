@@ -34,8 +34,11 @@ function BirdIcon({ className, ...props }) {
 export default function RoomPage() {
 	const navigate = useNavigate()
 	const location = useLocation()
+	// Background music is enabled on Landing + Room pages.
 	useBackgroundMusic()
 
+	// If navigating from LandingPage, we pass these via react-router state.
+	// Defaults keep the page working when opened directly.
 	const initialIsHost = location.state?.isHost ?? true
 	const initialRoomCode = location.state?.roomCode ?? "1234"
 	

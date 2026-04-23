@@ -3,6 +3,11 @@ import { useEffect, useRef } from "react"
 import backgroundMusicUrl from "../assets/audio/common/backgroundmusic.mp3"
 import useSoundStore from "../store/useSoundStore"
 
+// Plays looping background music for a page.
+// Notes:
+// - Most browsers block autoplay until the user interacts; we try immediately and
+//   then retry once on first pointerdown/keydown.
+// - The music respects the global mute toggle via `useSoundStore`.
 export default function useBackgroundMusic({ enabled = true, volume = 0.22 } = {}) {
 	const audioRef = useRef(null)
 	const startedRef = useRef(false)
@@ -21,8 +26,8 @@ export default function useBackgroundMusic({ enabled = true, volume = 0.22 } = {
 			if (startedRef.current) return
 			startedRef.current = true
 			void audio.play().catch(() => {
-				// If autoplay is blocked, keep startedRef true but remain silent.
-				// The click SFX will still work since it's user-gesture driven.
+				// Autoplay can be blocked; if so we remain silent.
+				// (Click SFX will still work because it is user-gesture driven.)
 			})
 		}
 

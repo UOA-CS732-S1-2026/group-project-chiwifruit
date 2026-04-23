@@ -1,6 +1,10 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 
+// Shared modal foundation used across the app.
+// - Renders into a portal at document.body to avoid z-index/stacking issues.
+// - Locks body scroll when open.
+// - Supports optional Escape-to-close and optional backdrop-click-to-close.
 function useLockBodyScroll(locked) {
 	React.useEffect(() => {
 		if (!locked) return
@@ -21,6 +25,7 @@ export default function BaseModal({
 	closeOnBackdropClick = false,
 	overlayClassName = "bg-[#0F172B66]",
 }) {
+	// Prevent background scrolling while a modal is open.
 	useLockBodyScroll(open)
 
 	React.useEffect(() => {
@@ -42,6 +47,7 @@ export default function BaseModal({
 		<div
 			className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${overlayClassName}`}
 			onMouseDown={(event) => {
+				// Only close when the *backdrop itself* is clicked (not inner content).
 				if (!closeOnBackdropClick) return
 				if (!onOpenChange) return
 				if (event.target !== event.currentTarget) return

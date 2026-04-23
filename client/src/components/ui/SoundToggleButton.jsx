@@ -3,6 +3,8 @@ import { Volume2, VolumeX } from "lucide-react"
 import useSoundStore from "../../store/useSoundStore"
 import { Button } from "./button"
 
+// Global sound toggle (mute/unmute) used in page headers.
+// Muting affects both background music and click SFX.
 export default function SoundToggleButton({ className } = {}) {
 	const muted = useSoundStore((state) => state.muted)
 	const toggleMuted = useSoundStore((state) => state.toggleMuted)

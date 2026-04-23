@@ -10,9 +10,11 @@ import JoinRoomModal from "../components/Landing/JoinRoomModal"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 
 export default function LandingPage() {
+	// Background music is enabled on Landing + Room pages.
 	useBackgroundMusic()
 
 	const navigate = useNavigate()
+	// Controls the Join Room modal triggered by "Join with Code".
 	const [joinModalOpen, setJoinModalOpen] = useState(false)
 
 	const guideItems = [
@@ -45,6 +47,7 @@ export default function LandingPage() {
 				onOpenChange={setJoinModalOpen}
 				onJoin={(roomCode) => {
 					setJoinModalOpen(false)
+					// Pass minimal state to initialize RoomPage as guest.
 					navigate("/room", { state: { isHost: false, roomCode } })
 				}}
 			/>

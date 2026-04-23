@@ -2,6 +2,9 @@ import { useEffect } from "react"
 
 import { playClickSfx } from "../lib/sound"
 
+// Plays a click sound whenever the user clicks a button.
+// Uses a capture-phase listener so it works even if components stop propagation.
+// Filters out disabled buttons to avoid misleading feedback.
 export default function useGlobalButtonClickSound() {
 	useEffect(() => {
 		const handler = (event) => {

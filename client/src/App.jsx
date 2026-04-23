@@ -5,6 +5,7 @@ import RoomPage from './pages/RoomPage'
 import useGlobalButtonClickSound from './hooks/useGlobalButtonClickSound'
 
 function App() {
+  // Global click sound for all buttons across the app.
 	useGlobalButtonClickSound()
 
   return (
