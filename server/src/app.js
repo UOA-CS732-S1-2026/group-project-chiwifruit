@@ -48,6 +48,15 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.get('/', (_req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Sound Chain backend is running',
+    docs: '/api-docs',
+    health: '/health'
+  });
+});
+
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

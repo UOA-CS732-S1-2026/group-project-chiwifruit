@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sound-chain-app
+    ports:
+      - "3000:3000"
+      - "5173:5173"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/kichain-db
+    volumes:
+      - ./server/.env:/app/server/.env:ro
+      - ./client/.env:/app/client/.env:ro
+
+  mongodb:
+    image: mongo:latest
+    container_name: kichain-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mongodb-data:
