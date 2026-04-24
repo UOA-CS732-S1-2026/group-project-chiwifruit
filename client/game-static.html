@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Game Static Preview</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;700&display=swap"
+			rel="stylesheet"
+		/>
+		<link rel="stylesheet" href="./src/pages/GameStaticPage.css" />
+	</head>
+	<body>
+		<div class="game-static">
+			<header class="game-static__topbar">
+				<button class="game-static__exit" type="button">
+					Exit Game
+				</button>
+				<div class="game-static__length">
+					<span class="game-static__length-label">SEQUENCE LENGTH</span>
+					<span class="game-static__length-value">0</span>
+				</div>
+				<button class="game-static__sound" type="button" aria-label="Sound">
+					<span class="game-static__sound-icon"></span>
+				</button>
+			</header>
+
+			<main class="game-static__main">
+				<section class="game-static__players game-static__players--left">
+					<div class="player-card player-card--active">
+						<div class="player-card__avatar" aria-hidden="true">
+							<span>A</span>
+						</div>
+						<div class="player-card__body">
+							<p class="player-card__name">Alex (You)</p>
+							<p class="player-card__status player-card__status--active">CURRENT TURN</p>
+							<p class="player-card__score">Score: 0</p>
+						</div>
+						<div class="player-card__badge">18</div>
+					</div>
+
+					<div class="player-card">
+						<div class="player-card__avatar" aria-hidden="true">
+							<span>J</span>
+						</div>
+						<div class="player-card__body">
+							<p class="player-card__name">Jordan</p>
+							<p class="player-card__status">WAITING</p>
+							<p class="player-card__score">Score: 0</p>
+						</div>
+					</div>
+
+					<div class="player-card">
+						<div class="player-card__avatar" aria-hidden="true">
+							<span>C</span>
+						</div>
+						<div class="player-card__body">
+							<p class="player-card__name">Casey</p>
+							<p class="player-card__status">WAITING</p>
+							<p class="player-card__score">Score: 0</p>
+						</div>
+					</div>
+				</section>
+
+				<section class="game-static__center">
+					<div class="progress">
+						<div class="progress__row">
+							<span class="progress__label">INPUT PROGRESS</span>
+							<span class="progress__value">0 / 1</span>
+						</div>
+						<div class="progress__bar">
+							<div class="progress__fill"></div>
+						</div>
+						<div class="progress__hint">ADD A NEW NOTE!</div>
+					</div>
+
+					<div class="note-wheel">
+						<div class="note-wheel__ring">
+							<div class="note note--yellow"></div>
+							<div class="note note--cyan"></div>
+							<div class="note note--pink"></div>
+							<div class="note note--green"></div>
+							<div class="note note--purple"></div>
+							<div class="note note--red"></div>
+							<div class="note-wheel__core">
+								<div class="note-wheel__logo">K</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="game-static__toast">
+						<span class="game-static__toast-icon"></span>
+						<span>Game started! You go first. Press any note.</span>
+					</div>
+				</section>
+
+				<section class="game-static__players game-static__players--right">
+					<div class="player-card">
+						<div class="player-card__avatar" aria-hidden="true">
+							<span>R</span>
+						</div>
+						<div class="player-card__body">
+							<p class="player-card__name">Riley</p>
+							<p class="player-card__status">WAITING</p>
+							<p class="player-card__score">Score: 0</p>
+						</div>
+					</div>
+
+					<div class="player-card">
+						<div class="player-card__avatar" aria-hidden="true">
+							<span>T</span>
+						</div>
+						<div class="player-card__body">
+							<p class="player-card__name">Taylor</p>
+							<p class="player-card__status">WAITING</p>
+							<p class="player-card__score">Score: 0</p>
+						</div>
+					</div>
+
+					<div class="player-card">
+						<div class="player-card__avatar" aria-hidden="true">
+							<span>S</span>
+						</div>
+						<div class="player-card__body">
+							<p class="player-card__name">Sam</p>
+							<p class="player-card__status">WAITING</p>
+							<p class="player-card__score">Score: 0</p>
+						</div>
+					</div>
+				</section>
+			</main>
+		</div>
+	</body>
+</html>

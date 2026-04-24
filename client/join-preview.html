@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Join Room Preview</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700;800&display=swap"
+			rel="stylesheet"
+		/>
+		<style>
+			:root {
+				--bg: #f2f4fb;
+				--card: #ffffff;
+				--text: #0f172a;
+				--muted: #64748b;
+				--border: #e2e8f0;
+				--ring: #4a5eed;
+				--rose: #e11d48;
+				--rose-10: #fff1f2;
+				--shadow: 0 18px 45px rgba(15, 23, 42, 0.15);
+				--hero-glow-top: #b7c5ff;
+				--hero-glow-bottom: #c6d2ff;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				margin: 0;
+				font-family: "Instrument Sans", sans-serif;
+				color: var(--text);
+				background: var(--bg);
+			}
+
+			.page {
+				position: relative;
+				min-height: 100vh;
+				overflow: hidden;
+				padding: 48px 24px 80px;
+			}
+
+			.glow {
+				position: absolute;
+				pointer-events: none;
+				filter: blur(120px);
+				opacity: 0.8;
+			}
+
+			.glow.top {
+				width: 380px;
+				height: 380px;
+				background: var(--hero-glow-top);
+				left: -120px;
+				top: -140px;
+			}
+
+			.glow.bottom {
+				width: 420px;
+				height: 420px;
+				background: var(--hero-glow-bottom);
+				right: -160px;
+				bottom: -160px;
+			}
+
+			.hero {
+				position: relative;
+				max-width: 1100px;
+				margin: 0 auto;
+				background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(248, 250, 255, 0.9));
+				border: 1px solid var(--border);
+				border-radius: 26px;
+				padding: 32px 36px 48px;
+				box-shadow: 0 20px 50px rgba(74, 94, 237, 0.12);
+			}
+
+			.topbar {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 12px;
+			}
+
+			.brand {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+			}
+
+			.brand img {
+				height: 36px;
+			}
+
+			.pill {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				border-radius: 999px;
+				border: 1px solid #dbe7ff;
+				background: #eef4ff;
+				padding: 8px 14px;
+				font-size: 12px;
+				font-weight: 700;
+				color: #3b4fd3;
+			}
+
+			.hero-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+				gap: 28px;
+				margin-top: 28px;
+			}
+
+			.hero-copy h1 {
+				font-size: 42px;
+				margin: 0 0 8px;
+				line-height: 1.05;
+			}
+
+			.hero-copy h2 {
+				font-size: 42px;
+				margin: 0 0 14px;
+				line-height: 1.05;
+				color: var(--ring);
+			}
+
+			.hero-copy p {
+				margin: 0 0 18px;
+				color: var(--muted);
+			}
+
+			.actions {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 12px;
+			}
+
+			.button {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				padding: 12px 18px;
+				border-radius: 12px;
+				border: 1px solid var(--border);
+				background: #ffffff;
+				font-weight: 700;
+				font-size: 14px;
+				color: var(--text);
+			}
+
+			.button.primary {
+				background: var(--ring);
+				color: #ffffff;
+				border-color: var(--ring);
+			}
+
+			.hero-logo {
+				display: grid;
+				place-items: center;
+			}
+
+			.hero-logo img {
+				width: min(320px, 70vw);
+				filter: drop-shadow(0 20px 40px rgba(74, 94, 237, 0.25));
+			}
+
+			.modal-overlay {
+				position: absolute;
+				inset: 0;
+				background: rgba(15, 23, 42, 0.3);
+				backdrop-filter: blur(2px);
+				display: grid;
+				place-items: center;
+				padding: 24px;
+			}
+
+			.modal {
+				width: min(360px, 92vw);
+				background: var(--card);
+				border-radius: 18px;
+				padding: 20px 20px 22px;
+				border: 1px solid var(--border);
+				box-shadow: var(--shadow);
+			}
+
+			.modal-header {
+				display: flex;
+				align-items: flex-start;
+				justify-content: space-between;
+				gap: 12px;
+			}
+
+			.modal-title {
+				font-size: 18px;
+				font-weight: 800;
+				margin: 0 0 4px;
+			}
+
+			.modal-subtitle {
+				font-size: 13px;
+				color: var(--muted);
+				margin: 0;
+			}
+
+			.badge {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				padding: 6px 10px;
+				border-radius: 999px;
+				background: #eef4ff;
+				font-size: 11px;
+				font-weight: 700;
+				color: #3b4fd3;
+				margin-top: 10px;
+			}
+
+			.badge img,
+			.pill img {
+				width: 14px;
+				height: 14px;
+			}
+
+			.close {
+				border: none;
+				background: #f8fafc;
+				color: var(--muted);
+				font-weight: 700;
+				border-radius: 999px;
+				width: 32px;
+				height: 32px;
+			}
+
+			.alert {
+				display: flex;
+				gap: 10px;
+				align-items: flex-start;
+				margin-top: 14px;
+				padding: 10px 12px;
+				border-radius: 12px;
+				border: 1px solid #fecdd3;
+				background: var(--rose-10);
+				color: var(--rose);
+				font-size: 12px;
+				font-weight: 700;
+			}
+
+			.alert .dot {
+				display: grid;
+				place-items: center;
+				width: 20px;
+				height: 20px;
+			}
+
+			.alert .dot img {
+				width: 16px;
+				height: 16px;
+			}
+
+			.field {
+				margin-top: 16px;
+				display: grid;
+				gap: 12px;
+			}
+
+			.field input {
+				height: 44px;
+				border-radius: 12px;
+				border: 1px solid var(--border);
+				background: #ffffff;
+				padding: 0 12px;
+				font-weight: 700;
+				color: #64748b;
+			}
+
+			.field input::placeholder {
+				color: #94a3b8;
+			}
+
+			.field input.full {
+				color: #94a3b8;
+			}
+
+			.join-button {
+				height: 44px;
+				border-radius: 12px;
+				border: none;
+				background: #5666f2;
+				color: #ffffff;
+				font-weight: 700;
+			}
+
+			@media (max-width: 720px) {
+				.hero {
+					padding: 24px 22px 34px;
+				}
+
+				.hero-copy h1,
+				.hero-copy h2 {
+					font-size: 32px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="page">
+			<div class="glow top"></div>
+			<div class="glow bottom"></div>
+
+			<div class="hero">
+				<div class="topbar">
+					<div class="brand">
+						<img src="./src/assets/branding/logo.png" alt="Kichain" />
+						<img src="./src/assets/branding/logoname.png" alt="Kichain" />
+					</div>
+					<div class="pill">
+						<img src="./src/assets/people.svg" alt="" />
+						Perfect for 2 to 6 players per room
+					</div>
+				</div>
+
+				<div class="hero-grid">
+					<div class="hero-copy">
+						<h1>Build the sequence.</h1>
+						<h2>Outlast your friends.</h2>
+						<p>
+							Test your memory in this multiplayer sound chain game. Listen to the
+							sequence, repeat it perfectly, and add your own beat.
+						</p>
+						<div class="actions">
+							<button class="button primary" type="button">Create a Room</button>
+							<button class="button" type="button">Join with Code</button>
+						</div>
+					</div>
+					<div class="hero-logo">
+						<img src="./src/assets/branding/biglogo.png" alt="Kichain" />
+					</div>
+				</div>
+
+				<div class="modal-overlay">
+					<div class="modal">
+						<div class="modal-header">
+							<div>
+								<div class="modal-title">Join a Room</div>
+								<p class="modal-subtitle">
+									Enter the room code shared by your friend to join their game.
+								</p>
+								<div class="badge">
+									<img src="./src/assets/people.svg" alt="" />
+									Supports 2 to 6 players
+								</div>
+							</div>
+							<button class="close" type="button">×</button>
+						</div>
+
+						<div class="field">
+							<input type="text" placeholder="e.g. ABCD-1234" value="ABCD-1234" />
+							<button class="join-button" type="button">Join Game</button>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="hero" style="margin-top: 32px;">
+				<div class="topbar">
+					<div class="brand">
+						<img src="./src/assets/branding/logo.png" alt="Kichain" />
+						<img src="./src/assets/branding/logoname.png" alt="Kichain" />
+					</div>
+					<div class="pill">
+						<img src="./src/assets/people.svg" alt="" />
+						Perfect for 2 to 6 players per room
+					</div>
+				</div>
+
+				<div class="hero-grid">
+					<div class="hero-copy">
+						<h1>Build the sequence.</h1>
+						<h2>Outlast your friends.</h2>
+						<p>
+							Test your memory in this multiplayer sound chain game. Listen to the
+							sequence, repeat it perfectly, and add your own beat.
+						</p>
+						<div class="actions">
+							<button class="button primary" type="button">Create a Room</button>
+							<button class="button" type="button">Join with Code</button>
+						</div>
+					</div>
+					<div class="hero-logo">
+						<img src="./src/assets/branding/biglogo.png" alt="Kichain" />
+					</div>
+				</div>
+
+				<div class="modal-overlay">
+					<div class="modal">
+						<div class="modal-header">
+							<div>
+								<div class="modal-title">Join a Room</div>
+								<p class="modal-subtitle">
+									Enter the room code shared by your friend to join their game.
+								</p>
+								<div class="badge">
+									<img src="./src/assets/people.svg" alt="" />
+									Supports 2 to 6 players
+								</div>
+							</div>
+							<button class="close" type="button">×</button>
+						</div>
+
+						<div class="alert">
+							<span class="dot">
+								<img src="./src/assets/alert-red.svg" alt="" />
+							</span>
+							<span>This room is already full! You can create a new room instead.</span>
+						</div>
+
+						<div class="field">
+							<input class="full" type="text" placeholder="FULL" value="FULL" />
+							<button class="join-button" type="button">Join Game</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>

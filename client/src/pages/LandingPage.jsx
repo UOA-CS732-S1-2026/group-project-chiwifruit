@@ -1,11 +1,27 @@
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import Background from "../components/Common/Background"
 import bigLogo from "../assets/branding/biglogo.png"
+import peopleBlueIcon from "../assets/people-blue.svg"
+import alertIcon from "../assets/alert-red.svg"
 import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
 
 export default function LandingPage() {
+	const [isJoinOpen, setIsJoinOpen] = useState(false)
+	const [roomCode, setRoomCode] = useState("")
+	const isRoomFull = roomCode.trim().toUpperCase() === "FULL"
+	const navigate = useNavigate()
+
+	const handleJoinGame = () => {
+		if (isRoomFull) {
+			return
+		}
+		navigate("/room")
+	}
+
 	const guideItems = [
 		{
 			Icon: Headphones,
@@ -23,7 +39,7 @@ export default function LandingPage() {
 			Icon: Trophy,
 			title: "3. Last one standing",
 			description: "Make a mistake and you're out. Outlast everyone else to win the game!",
-			iconWrapClassName: "bg-muted text-chart-1",
+			iconWrapClassName: "bg-amber-50 text-amber-500",
 		},
 	]
 
@@ -53,6 +69,11 @@ export default function LandingPage() {
 							repeat it perfectly, and add your own beat. One mistake and you&apos;re out!
 						</p>
 
+						<div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-600 shadow-sm">
+							<img src={peopleBlueIcon} alt="" className="h-4 w-4" aria-hidden="true" />
+							Perfect for 2 to 6 players per room
+						</div>
+
 						<div className="flex flex-wrap items-center gap-3 pt-1">
 							<Button className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90">
 								<Play className="size-4 fill-current" />
@@ -61,6 +82,7 @@ export default function LandingPage() {
 							<Button
 								variant="outline"
 								className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
+								onClick={() => setIsJoinOpen(true)}
 							>
 								<LogIn className="size-4" />
 								Join with Code
@@ -100,6 +122,62 @@ export default function LandingPage() {
 					))}
 				</div>
 			</section>
+
+			{isJoinOpen ? (
+				<div className="fixed inset-0 z-40 grid place-items-center bg-slate-900/35 px-4 backdrop-blur-[2px]">
+					<div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
+						<div className="flex items-start justify-between gap-4">
+							<div className="space-y-1">
+								<h3 className="text-lg font-bold text-foreground">Join a Room</h3>
+								<p className="text-sm text-muted-theme">
+									Enter the room code shared by your friend to join their game.
+								</p>
+								<div className="mt-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
+									<img src={peopleBlueIcon} alt="" className="h-4 w-4" aria-hidden="true" />
+									Supports 2 to 6 players
+								</div>
+							</div>
+							<button
+								type="button"
+								className="inline-flex size-9 items-center justify-center rounded-full border border-transparent text-base font-semibold text-muted-theme transition hover:border-border hover:bg-muted"
+								onClick={() => setIsJoinOpen(false)}
+								aria-label="Close join room"
+							>
+								×
+							</button>
+						</div>
+
+						{isRoomFull ? (
+							<div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600">
+								<span className="mt-0.5 inline-flex size-5 items-center justify-center">
+									<img src={alertIcon} alt="" className="h-4 w-4" aria-hidden="true" />
+								</span>
+								<span>This room is already full! You can create a new room instead.</span>
+							</div>
+						) : null}
+
+						<div className="mt-4 space-y-4">
+							<input
+								type="text"
+								value={roomCode}
+								onChange={(event) => setRoomCode(event.target.value)}
+								placeholder="e.g. ABCD-1234"
+								className={`h-11 w-full rounded-xl border px-3 text-sm font-semibold text-slate-600 placeholder:text-slate-400 shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring/40 ${
+									isRoomFull
+										? "border-border bg-card text-slate-400 placeholder:text-slate-400"
+										: "border-border bg-card"
+								}`}
+							/>
+							<Button
+								className="h-11 w-full rounded-xl text-sm font-semibold"
+								onClick={handleJoinGame}
+							>
+								Join Game
+							</Button>
+						</div>
+					</div>
+				</div>
+			) : null}
 		</Background>
 	)
 }
