@@ -43,6 +43,11 @@ const roomSchema = new mongoose.Schema(
       enum: ['animals', 'music'],
       default: null
     },
+    difficulty: {
+      type: String,
+      enum: ['easy', 'medium', 'hard'],
+      default: 'easy'
+    },
     host: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
