@@ -217,6 +217,15 @@ Request:
 { "mode": "animals" }
 ```
 
+#### `PATCH /api/rooms/:roomCode/difficulty`
+Equivalent to `selectDifficulty()`.
+Only host can set difficulty.
+
+Request:
+```json
+{ "difficulty": "medium" }
+```
+
 #### `PATCH /api/rooms/:roomCode/ranking`
 Submit current player's correct-chain count for a finished round.
 The backend accumulates this value into the player's total and returns a sorted ranking.

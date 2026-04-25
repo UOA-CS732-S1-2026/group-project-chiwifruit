@@ -5,6 +5,7 @@ const {
   setCandidateReady,
   checkIfCandidateIsReady,
   selectMode,
+  selectDifficulty,
   submitRoundResult,
   getRanking
 } = require('../controllers/roomController');
@@ -132,6 +133,44 @@ router.get('/:roomCode/ready', authMiddleware, checkIfCandidateIsReady);
  *         description: Room not found
  */
 router.patch('/:roomCode/mode', authMiddleware, selectMode);
+
+/**
+ * @swagger
+ * /api/rooms/{roomCode}/difficulty:
+ *   patch:
+ *     summary: Select game difficulty (host only)
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: roomCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - difficulty
+ *             properties:
+ *               difficulty:
+ *                 type: string
+ *                 enum: [easy, medium, hard]
+ *     responses:
+ *       200:
+ *         description: Difficulty selected
+ *       400:
+ *         description: difficulty must be easy, medium, or hard
+ *       403:
+ *         description: Only host can select difficulty
+ *       404:
+ *         description: Room not found
+ */
+router.patch('/:roomCode/difficulty', authMiddleware, selectDifficulty);
 
 /**
  * @swagger

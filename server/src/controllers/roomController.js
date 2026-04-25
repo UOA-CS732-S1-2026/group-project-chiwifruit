@@ -2,6 +2,9 @@ const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
 
+const MAX_ROOM_PARTICIPANTS = 6;
+const MIN_PARTICIPANTS_TO_START = 2;
+
 function getParticipantSelector(identity) {
   if (identity.isGuest) {
     return (participant) => participant.guestId === identity.sub;
@@ -79,6 +82,12 @@ async function createRoom(req, res) {
     const alreadyJoined = room.participants.some(getParticipantSelector(identity));
 
     if (!alreadyJoined) {
+      if (room.participants.length >= MAX_ROOM_PARTICIPANTS) {
+        return res.status(409).json({
+          message: `Room is full. Maximum ${MAX_ROOM_PARTICIPANTS} participants are allowed`
+        });
+      }
+
       room.participants.push(createParticipant(identity));
       await room.save();
     }
@@ -143,12 +152,17 @@ async function getRoomState(roomCode) {
   }
 
   const everyoneReady = room.participants.length > 0 && room.participants.every((p) => p.isReady);
+  const canStartGame = room.participants.length >= MIN_PARTICIPANTS_TO_START && everyoneReady;
 
   return {
     roomCode: room.roomCode,
     mode: room.mode,
+    difficulty: room.difficulty,
     participantCount: room.participants.length,
+    maxParticipantCount: MAX_ROOM_PARTICIPANTS,
+    minParticipantsToStart: MIN_PARTICIPANTS_TO_START,
     everyoneReady,
+    canStartGame,
     participants: room.participants.map((participant) => ({
       userId: participant.user?._id || participant.guestId,
       username: participant.user?.username || participant.guestName,
@@ -202,6 +216,39 @@ async function selectMode(req, res) {
   }
 
   return res.json({ message: 'Mode selected', roomCode: room.roomCode, mode: room.mode });
+}
+
+async function selectDifficulty(req, res) {
+  const { roomCode } = req.params;
+  const { difficulty } = req.body;
+  const userId = req.user.sub;
+
+  if (!['easy', 'medium', 'hard'].includes(difficulty)) {
+    return res.status(400).json({ message: 'difficulty must be easy, medium, or hard' });
+  }
+
+  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });
+  if (!room) {
+    return res.status(404).json({ message: 'Room not found' });
+  }
+
+  if (String(room.host) !== String(userId)) {
+    return res.status(403).json({ message: 'Only the host can select difficulty' });
+  }
+
+  room.difficulty = difficulty;
+  await room.save();
+
+  const roomState = await getRoomState(room.roomCode);
+  if (roomState) {
+    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+  }
+
+  return res.json({
+    message: 'Difficulty selected',
+    roomCode: room.roomCode,
+    difficulty: room.difficulty
+  });
 }
 
 async function submitRoundResult(req, res) {
@@ -267,6 +314,7 @@ module.exports = {
   setCandidateReady,
   checkIfCandidateIsReady,
   selectMode,
+  selectDifficulty,
   submitRoundResult,
   getRanking
 };
