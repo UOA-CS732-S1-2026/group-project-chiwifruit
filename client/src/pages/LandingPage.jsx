@@ -3,7 +3,7 @@ import bigLogo from "../assets/branding/biglogo.png"
 import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
-import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
+import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy, Users } from "lucide-react"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
@@ -69,27 +69,32 @@ export default function LandingPage() {
 							</h2>
 						</div>
 
-						<p className="text-muted-theme max-w-[40ch] text-[1.02rem] leading-relaxed md:text-[1.08rem]">
-							Test your memory in this multiplayer sound chain game. Listen to the sequence,
-							repeat it perfectly, and add your own beat. One mistake and you&apos;re out!
-						</p>
-
-						<div className="flex flex-wrap items-center gap-3 pt-1">
-							<Button
-								className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90"
-								onClick={() => navigate("/room", { state: { isHost: true } })}
-							>
-								<Play className="size-4 fill-current" />
-								Create a Room
-							</Button>
-							<Button
-								variant="outline"
-								className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
-								onClick={() => setJoinModalOpen(true)}
-							>
-								<LogIn className="size-4" />
-								Join with Code
-							</Button>
+						<div className="flex max-w-[40ch] flex-col gap-3">
+							<p className="text-muted-theme text-[1.02rem] leading-relaxed md:text-[1.08rem]">
+								Test your memory in this multiplayer sound chain game. Listen to the sequence,
+								repeat it perfectly, and add your own beat. One mistake and you&apos;re out!
+							</p>
+							<div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-600 shadow-sm">
+								<Users className="size-4" />
+								Perfect for 2 to 6 players per room
+							</div>
+							<div className="flex flex-wrap items-center gap-3 pt-1">
+								<Button
+									className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90"
+									onClick={() => navigate("/room", { state: { isHost: true } })}
+								>
+									<Play className="size-4 fill-current" />
+									Create a Room
+								</Button>
+								<Button
+									variant="outline"
+									className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
+									onClick={() => setJoinModalOpen(true)}
+								>
+									<LogIn className="size-4" />
+									Join with Code
+								</Button>
+							</div>
 						</div>
 					</div>
 
