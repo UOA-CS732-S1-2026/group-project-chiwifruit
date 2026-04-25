@@ -68,10 +68,6 @@ async function createRoom(req, res) {
   const identity = req.user;
   const { joinRoomCode } = req.body;
 
-  if (!joinRoomCode && identity.isGuest) {
-    return res.status(403).json({ message: 'Guest users can only join existing rooms' });
-  }
-
   if (joinRoomCode) {
     const room = await Room.findOne({ roomCode: joinRoomCode.toUpperCase() });
 
