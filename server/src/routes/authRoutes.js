@@ -66,7 +66,7 @@ router.post('/login', login);
  *     summary: Continue as guest
  *     tags: [Auth]
  *     requestBody:
- *       required: true
+ *       required: false
  *     responses:
  *       200:
  *         description: Guest session created
