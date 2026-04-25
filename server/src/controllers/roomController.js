@@ -194,8 +194,8 @@ async function selectMode(req, res) {
   const { mode } = req.body;
   const userId = req.user.sub;
 
-  if (!['animals', 'music'].includes(mode)) {
-    return res.status(400).json({ message: 'mode must be animals or music' });
+  if (!['bird', 'piano'].includes(mode)) {
+    return res.status(400).json({ message: 'mode must be bird or piano' });
   }
 
   const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });

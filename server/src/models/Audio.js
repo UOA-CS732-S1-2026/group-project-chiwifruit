@@ -9,7 +9,7 @@ const audioSchema = new mongoose.Schema(
     },
     mode: {
       type: String,
-      enum: ['animals', 'music'],
+      enum: ['bird', 'piano'],
       required: true
     },
     s3Key: {
