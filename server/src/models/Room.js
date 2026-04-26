@@ -49,8 +49,7 @@ const roomSchema = new mongoose.Schema(
       default: 'easy'
     },
     host: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      type: mongoose.Schema.Types.Mixed,
       required: true
     },
     participants: [participantSchema]
