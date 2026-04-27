@@ -108,4 +108,4 @@ async function continueAsGuest(_req, res) {
   });
 }
 
-module.exports = { login, register, continueAsGuest };
+module.exports = { login, register, continueAsGuest, buildAvatarUrl };
