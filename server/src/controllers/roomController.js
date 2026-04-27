@@ -1,6 +1,7 @@
 const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
+const { buildAvatarUrl } = require('./authController');
 
 const MAX_ROOM_PARTICIPANTS = 6;
 const MIN_PARTICIPANTS_TO_START = 2;
@@ -36,7 +37,8 @@ function buildRanking(room) {
       userId: participant.user?._id || participant.guestId,
       username: participant.user?.username || participant.guestName,
       isGuest: Boolean(participant.guestId),
-      correctCount: participant.correctCount || 0
+      correctCount: participant.correctCount || 0,
+      avatarUrl: participant.user ? buildAvatarUrl(participant.user._id.toString()) : buildAvatarUrl(participant.guestId)
     }))
     .sort((a, b) => {
       if (b.correctCount !== a.correctCount) {
@@ -164,7 +166,8 @@ async function getRoomState(roomCode) {
       username: participant.user?.username || participant.guestName,
       isGuest: Boolean(participant.guestId),
       correctCount: participant.correctCount || 0,
-      isReady: participant.isReady
+      isReady: participant.isReady,
+      avatarUrl: participant.user ? buildAvatarUrl(participant.user._id.toString()) : buildAvatarUrl(participant.guestId)
     }))
   };
 }
