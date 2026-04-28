@@ -3,6 +3,10 @@ import { X } from "lucide-react"
 
 import BaseModal from "../ui/BaseModal"
 
+// NOTE (2026-04-29): Join Room 的输入规范化在前端做：
+// - 统一大写并剔除空白
+// - 仅允许 [A-Z0-9-]，避免把奇怪字符传到后端
+
 // Normalizes room code input so users can paste with spaces/lowercase.
 // We keep `-` because codes may include it (e.g. ABCD-1234).
 function normalizeRoomCode(raw) {
@@ -16,7 +20,7 @@ function normalizeRoomCode(raw) {
 // - Uses BaseModal for shared overlay/portal behavior.
 // - Auto-focuses the input when opened.
 // - Calls `onJoin(normalizedRoomCode)` on submit.
-export default function JoinRoomModal({ open, onOpenChange, onJoin }) {
+export default function JoinRoomModal({ open, onOpenChange, onJoin, isSubmitting = false }) {
 	const [roomCode, setRoomCode] = useState("")
 	const inputRef = useRef(null)
 
@@ -33,13 +37,14 @@ export default function JoinRoomModal({ open, onOpenChange, onJoin }) {
 	}, [open])
 
 	const normalizedRoomCode = useMemo(() => normalizeRoomCode(roomCode), [roomCode])
-	const canJoin = normalizedRoomCode.length > 0
+	const canJoin = normalizedRoomCode.length > 0 && !isSubmitting
 
 	return (
 		<BaseModal open={open} onOpenChange={onOpenChange}>
 			<div className="relative w-[448px] max-w-[calc(100vw-32px)] rounded-[24px] bg-white shadow-[0px_25px_50px_0px_rgba(0,0,0,0.25)]">
 				<button
 					type="button"
+					disabled={isSubmitting}
 					onClick={() => onOpenChange?.(false)}
 					className="absolute right-4 top-4 flex size-9 cursor-pointer items-center justify-center rounded-full px-2 pt-2 text-[#62748e] transition-colors hover:bg-[#f1f5f9] hover:text-[#091149] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
 					aria-label="Close"
@@ -70,6 +75,7 @@ export default function JoinRoomModal({ open, onOpenChange, onJoin }) {
 								ref={inputRef}
 								autoComplete="off"
 								inputMode="text"
+								disabled={isSubmitting}
 								value={roomCode}
 								onChange={(event) => setRoomCode(event.target.value)}
 								placeholder="e.g. ABCD-1234"
@@ -86,7 +92,7 @@ export default function JoinRoomModal({ open, onOpenChange, onJoin }) {
 										: "cursor-not-allowed bg-[#4a5eed] opacity-50")
 								}
 							>
-								Join Game
+								{isSubmitting ? "Joining..." : "Join Game"}
 							</button>
 						</form>
 					</div>

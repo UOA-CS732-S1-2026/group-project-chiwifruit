@@ -1,7 +1,16 @@
-import { useEffect, useRef } from "react"
-
-import backgroundMusicUrl from "../assets/audio/common/backgroundmusic.mp3"
+import { useEffect } from "react"
 import useSoundStore from "../store/useSoundStore"
+import {
+	disableBackgroundMusicAutoplayRetry,
+	enableBackgroundMusicAutoplayRetry,
+	pauseBackgroundMusic,
+	setBackgroundMusicVolume,
+	startBackgroundMusic,
+	syncBackgroundMusicWithMute,
+} from "../lib/sound"
+
+// NOTE (2026-04-29): 页面级背景音乐 hook。
+// 重点处理：浏览器 autoplay 限制（首次交互后重试）以及与全局 mute 状态同步。
 
 // Plays looping background music for a page.
 // Notes:
@@ -9,40 +18,29 @@ import useSoundStore from "../store/useSoundStore"
 //   then retry once on first pointerdown/keydown.
 // - The music respects the global mute toggle via `useSoundStore`.
 export default function useBackgroundMusic({ enabled = true, volume = 0.22 } = {}) {
-	const audioRef = useRef(null)
-	const startedRef = useRef(false)
 	const muted = useSoundStore((state) => state.muted)
 
 	useEffect(() => {
-		if (!enabled || muted) return
-
-		const audio = new Audio(backgroundMusicUrl)
-		audio.loop = true
-		audio.preload = "auto"
-		audio.volume = volume
-		audioRef.current = audio
-
-		const tryStart = () => {
-			if (startedRef.current) return
-			startedRef.current = true
-			void audio.play().catch(() => {
-				// Autoplay can be blocked; if so we remain silent.
-				// (Click SFX will still work because it is user-gesture driven.)
-			})
+		// Page-level lifecycle: enable BGM + autoplay-retry while this page is active.
+		if (!enabled) {
+			pauseBackgroundMusic()
+			disableBackgroundMusicAutoplayRetry()
+			return
 		}
 
-		// Try immediately; if blocked, allow user gesture to start.
-		tryStart()
-		window.addEventListener("pointerdown", tryStart, { once: true, capture: true })
-		window.addEventListener("keydown", tryStart, { once: true, capture: true })
+		setBackgroundMusicVolume(volume)
+		enableBackgroundMusicAutoplayRetry()
+		startBackgroundMusic()
 
 		return () => {
-			window.removeEventListener("pointerdown", tryStart, { capture: true })
-			window.removeEventListener("keydown", tryStart, { capture: true })
-			audio.pause()
-			audio.currentTime = 0
-			if (audioRef.current === audio) audioRef.current = null
-			startedRef.current = false
+			pauseBackgroundMusic()
+			disableBackgroundMusicAutoplayRetry()
 		}
-	}, [enabled, muted, volume])
+	}, [enabled, volume])
+
+	useEffect(() => {
+		if (!enabled) return
+		// Keep playback state aligned with the global mute toggle.
+		syncBackgroundMusicWithMute(muted)
+	}, [enabled, muted])
 }

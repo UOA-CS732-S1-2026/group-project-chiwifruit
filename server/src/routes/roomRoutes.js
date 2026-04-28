@@ -4,6 +4,7 @@ const {
   createRoom,
   setCandidateReady,
   checkIfCandidateIsReady,
+  leaveRoom,
   selectMode,
   selectDifficulty,
   submitRoundResult,
@@ -230,5 +231,32 @@ router.patch('/:roomCode/ranking', authMiddleware, submitRoundResult);
  *         description: Room not found
  */
 router.get('/:roomCode/ranking', authMiddleware, getRanking);
+
+/**
+ * @swagger
+ * /api/rooms/{roomCode}:
+ *   delete:
+ *     summary: Leave a room
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: roomCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Left room
+ *       403:
+ *         description: Not joined the room
+ *       404:
+ *         description: Room not found
+ */
+router.delete('/:roomCode', authMiddleware, leaveRoom);
+
+// NOTE (2026-04-29): 该 DELETE 接口用于“离开房间名单”（例如 results 回首页），
+// 不等同于 socket 的 leave_room（离开比赛=判负）。
 
 module.exports = router;
