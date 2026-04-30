@@ -1,25 +1,116 @@
+import { Howl } from "howler"
+
 import clickSfxUrl from "../assets/audio/common/click.mp3"
+import backgroundMusicUrl from "../assets/audio/common/backgroundmusic.mp3"
 import useSoundStore from "../store/useSoundStore"
 
-// Lazily created singleton Audio instance for click SFX.
-// Reusing the same element avoids repeated network/decoder work.
-let clickAudio
+// NOTE (2026-04-29): 声音播放统一入口（Howler.js）。
+// - clickSfx: 需要 stop()->play() 来保证连续点击时每次都从头播放
+// - backgroundMusic: 处理 autoplay 被拒绝后的 unlock 重试 + 首次用户交互 retry
+
+let clickSound
+let backgroundSound
+let backgroundVolume = 0.22
+let retryListenersAttached = false
+
+function getClickSound() {
+	if (!clickSound) {
+		clickSound = new Howl({
+			src: [clickSfxUrl],
+			volume: 0.7,
+			preload: true,
+		})
+	}
+	return clickSound
+}
+
+function getBackgroundSound() {
+	if (!backgroundSound) {
+		backgroundSound = new Howl({
+			src: [backgroundMusicUrl],
+			loop: true,
+			volume: backgroundVolume,
+			preload: true,
+		})
+
+		// Browser may reject autoplay until first user interaction.
+		backgroundSound.on("playerror", () => {
+			backgroundSound.once("unlock", () => {
+				startBackgroundMusic()
+			})
+		})
+	}
+	return backgroundSound
+}
+
+function detachRetryListeners() {
+	if (!retryListenersAttached) return
+	document.removeEventListener("pointerdown", onRetryUserInteraction, true)
+	document.removeEventListener("click", onRetryUserInteraction, true)
+	window.removeEventListener("keydown", onRetryKeyDown)
+	retryListenersAttached = false
+}
+
+function onRetryUserInteraction() {
+	// Defer to next tick so React click handlers (mute toggle) apply first.
+	window.setTimeout(() => {
+		startBackgroundMusic()
+		if (backgroundSound?.playing()) detachRetryListeners()
+	}, 0)
+}
+
+function onRetryKeyDown() {
+	startBackgroundMusic()
+	if (backgroundSound?.playing()) detachRetryListeners()
+}
+
+function attachRetryListeners() {
+	if (retryListenersAttached) return
+	document.addEventListener("pointerdown", onRetryUserInteraction, true)
+	document.addEventListener("click", onRetryUserInteraction, true)
+	window.addEventListener("keydown", onRetryKeyDown)
+	retryListenersAttached = true
+}
 
 export function playClickSfx() {
-	try {
-		// Respect the global mute toggle.
-		if (useSoundStore.getState().muted) return
+	if (useSoundStore.getState().muted) return
+	const sound = getClickSound()
+	// Restart from the beginning for consistent feedback on rapid clicks.
+	sound.stop()
+	sound.play()
+}
 
-		if (!clickAudio) {
-			clickAudio = new Audio(clickSfxUrl)
-			clickAudio.preload = "auto"
-			clickAudio.volume = 0.7
-		}
+export function setBackgroundMusicVolume(volume) {
+	backgroundVolume = volume
+	if (!backgroundSound) return
+	backgroundSound.volume(volume)
+}
 
-		clickAudio.currentTime = 0
-		// `play()` must be called from a user gesture to reliably work.
-		void clickAudio.play()
-	} catch {
-		// no-op: audio can fail due to browser policies
+export function startBackgroundMusic() {
+	if (useSoundStore.getState().muted) return
+	const sound = getBackgroundSound()
+	sound.volume(backgroundVolume)
+	if (sound.playing()) return
+	sound.play()
+}
+
+export function pauseBackgroundMusic() {
+	if (!backgroundSound) return
+	backgroundSound.pause()
+}
+
+export function syncBackgroundMusicWithMute() {
+	if (useSoundStore.getState().muted) {
+		pauseBackgroundMusic()
+		return
 	}
+	startBackgroundMusic()
+}
+
+export function enableBackgroundMusicAutoplayRetry() {
+	attachRetryListeners()
+}
+
+export function disableBackgroundMusicAutoplayRetry() {
+	detachRetryListeners()
 }
