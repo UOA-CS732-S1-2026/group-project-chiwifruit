@@ -215,7 +215,17 @@ export default function GamePage() {
     socket.on("game_pad_sound", onGamePadSound);
 
     emitGameRequestState(roomCode, (response) => {
-      if (response?.ok && response.game) onGameState(response.game);
+      if (response?.ok && response.game) {
+        if (response.game.status === "finished") {
+          setSocketError("This game has already ended.");
+          return;
+        }
+
+        onGameState(response.game);
+        return;
+      }
+
+      setSocketError("Game not found or no longer available.");
     });
 
     return () => {
@@ -690,20 +700,20 @@ export default function GamePage() {
   }, [socketGame]);
 
   if (!socketGame) {
-    if (loadingTimeout) {
+    if (socketError || loadingTimeout) {
       return (
         <Background>
           <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
             <p className="text-sm font-semibold text-red-500">
-              Failed to connect to game.
+              {socketError || "Failed to connect to game."}
             </p>
             <Button
               type="button"
               variant="outline"
               className="mt-4"
-              onClick={() => navigate("/")}
+              onClick={() => navigate(roomCode ? `/room/${roomCode}` : "/")}
             >
-              Back to Home
+              Back to Room
             </Button>
           </div>
         </Background>
