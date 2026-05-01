@@ -222,17 +222,7 @@ export default function RoomPage() {
   const errorMessage =
     setupError || (roomQueryError ? getApiErrorMessage(roomQueryError) : "");
   const isSettingUpRoom = joinRoomMutation.isPending;
-  if (!identity?.sub) {
-    return (
-      <Background>
-        <div className="flex min-h-screen items-center justify-center px-6 text-center">
-          <p className="text-sm font-semibold text-muted-foreground">
-            Redirecting to home...
-          </p>
-        </div>
-      </Background>
-    );
-  }
+
   const user = getStoredAuthUser();
   const avatarUrl =
     typeof user?.avatarUrl === "string" ? user.avatarUrl : undefined;
@@ -251,6 +241,17 @@ export default function RoomPage() {
   useEffect(() => {
     if (!roomCode) return;
     const socket = reconnectSocket();
+    if (!identity?.sub) {
+      return (
+        <Background>
+          <div className="flex min-h-screen items-center justify-center px-6 text-center">
+            <p className="text-sm font-semibold text-muted-foreground">
+              Redirecting to home...
+            </p>
+          </div>
+        </Background>
+      );
+    }
 
     const maybeNavigateToGame = (gameState) => {
       const stateRoomCode = String(gameState?.roomCode ?? "")
