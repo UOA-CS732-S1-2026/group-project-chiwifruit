@@ -218,6 +218,14 @@ export default function GamePage() {
       if (response?.ok && response.game) {
         if (response.game.status === "finished") {
           setSocketError("This game has already ended.");
+
+          Promise.resolve()
+            .then(() => leaveRoom(roomCode))
+            .catch(() => null)
+            .finally(() => {
+              leaveSocketRoom(roomCode);
+            });
+
           return;
         }
 
