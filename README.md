@@ -168,6 +168,7 @@ docker build -t kichain-dev:local .
 docker run --rm \
   --name kichain-dev-local \
   --network kichain-net \
+  --env-file docker.local.env \
   -p 5173:5173 \
   -p 3000:3000 \
   kichain-dev:local
