@@ -13,32 +13,32 @@ function persistAuthSession(responseData) {
 export function useRegisterMutation(options = {}) {
 	return useMutation({
 		mutationFn: register,
+		...options,
 		onSuccess: (data, variables, context) => {
 			persistAuthSession(data)
 			options.onSuccess?.(data, variables, context)
 		},
-		...options,
 	})
 }
 
 export function useLoginMutation(options = {}) {
 	return useMutation({
 		mutationFn: login,
+		...options,
 		onSuccess: (data, variables, context) => {
 			persistAuthSession(data)
 			options.onSuccess?.(data, variables, context)
 		},
-		...options,
 	})
 }
 
 export function useGuestMutation(options = {}) {
 	return useMutation({
 		mutationFn: continueAsGuest,
+		...options,
 		onSuccess: (data, variables, context) => {
 			persistAuthSession(data)
 			options.onSuccess?.(data, variables, context)
 		},
-		...options,
 	})
 }
