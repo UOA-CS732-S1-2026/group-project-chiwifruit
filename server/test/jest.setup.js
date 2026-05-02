@@ -64,23 +64,15 @@ jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(),
 }));
 
-// Mock buildAvatarUrl
-jest.mock('../src/controllers/authController', () => ({
-  buildAvatarUrl: (seed, style = 'bottts') => `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}`,
-  login: jest.fn(),
-  register: jest.fn(),
-  continueAsGuest: jest.fn((req, res) => {
-    res.status(201).json({
-      message: 'Guest session created',
-      token: 'guestToken',
-      user: {
-        id: 'guest_123',
-        username: 'SwiftFalcon1234',
-        isGuest: true,
-        avatarUrl: 'https://api.dicebear.com/9.x/bottts/svg?seed=guest_123',
-      },
-    });
-  }),
+// Mock crypto for predictable UUIDs
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'test-uuid-123'),
+}));
+
+// Mock tokenService
+jest.mock('../src/services/tokenService', () => ({
+  createToken: jest.fn(),
 }));
 
 // Mock getRoomState to prevent DB calls
