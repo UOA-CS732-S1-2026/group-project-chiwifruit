@@ -5,17 +5,26 @@ import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy, Users } from "lucide-react"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
+import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
+
+// NOTE (2026-04-29): Landing 的 create/join 操作走“guarded”流程：
+// 若当前没有 token，会先创建 guest session（拿到 token）再调用房间 API。
 
 export default function LandingPage() {
 	// Background music is enabled on Landing + Room pages.
 	useBackgroundMusic()
 
-	const navigate = useNavigate()
 	// Controls the Join Room modal triggered by "Join with Code".
 	const [joinModalOpen, setJoinModalOpen] = useState(false)
+	const {
+		actionError,
+		clearActionError,
+		isPending,
+		createRoomGuarded,
+		joinRoomGuarded,
+	} = useGuardedRoomNavigation()
 
 	const guideItems = [
 		{
@@ -44,11 +53,17 @@ export default function LandingPage() {
 
 			<JoinRoomModal
 				open={joinModalOpen}
-				onOpenChange={setJoinModalOpen}
+				onOpenChange={(open) => {
+					setJoinModalOpen(open)
+					if (open) clearActionError()
+				}}
+				isSubmitting={isPending}
 				onJoin={(roomCode) => {
-					setJoinModalOpen(false)
-					// Pass minimal state to initialize RoomPage as guest.
-					navigate("/room", { state: { isHost: false, roomCode } })
+					joinRoomGuarded(roomCode, {
+						onSuccess: () => {
+							setJoinModalOpen(false)
+						},
+					})
 				}}
 			/>
 
@@ -69,33 +84,44 @@ export default function LandingPage() {
 							</h2>
 						</div>
 
-						<div className="flex max-w-[40ch] flex-col gap-3">
-							<p className="text-muted-theme text-[1.02rem] leading-relaxed md:text-[1.08rem]">
-								Test your memory in this multiplayer sound chain game. Listen to the sequence,
-								repeat it perfectly, and add your own beat. One mistake and you&apos;re out!
-							</p>
-							<div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-600 shadow-sm">
-								<Users className="size-4" />
-								Perfect for 2 to 6 players per room
+							<div className="flex max-w-[40ch] flex-col gap-3">
+								<p className="text-muted-theme text-[1.02rem] leading-relaxed md:text-[1.08rem]">
+									Test your memory in this multiplayer sound chain game. Listen to the sequence,
+									repeat it perfectly, and add your own beat. One mistake and you&apos;re out!
+								</p>
+								<div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-600 shadow-sm">
+									<Users className="size-4" />
+									Perfect for 2 to 6 players per room
+								</div>
+								<div className="flex flex-wrap items-center gap-3 pt-1">
+									<Button
+										className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90"
+										onClick={() => {
+											createRoomGuarded()
+										}}
+										disabled={isPending}
+									>
+										<Play className="size-4 fill-current" />
+										Create a Room
+									</Button>
+									<Button
+										variant="outline"
+										className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
+										onClick={() => {
+											clearActionError()
+											setJoinModalOpen(true)
+										}}
+										disabled={isPending}
+									>
+										<LogIn className="size-4" />
+										Join with Code
+									</Button>
+								</div>
 							</div>
-							<div className="flex flex-wrap items-center gap-3 pt-1">
-								<Button
-									className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90"
-									onClick={() => navigate("/room", { state: { isHost: true } })}
-								>
-									<Play className="size-4 fill-current" />
-									Create a Room
-								</Button>
-								<Button
-									variant="outline"
-									className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
-									onClick={() => setJoinModalOpen(true)}
-								>
-									<LogIn className="size-4" />
-									Join with Code
-								</Button>
-							</div>
-						</div>
+
+						{actionError ? (
+							<p className="text-sm font-medium text-destructive">{actionError}</p>
+						) : null}
 					</div>
 
 					<div className="relative flex items-center justify-center lg:justify-end lg:pr-2">

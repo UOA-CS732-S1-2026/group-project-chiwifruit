@@ -12,6 +12,7 @@ on:
 
 jobs:
   validate:
+    name: Validate client and server
     runs-on: ubuntu-latest
 
     steps:
@@ -30,5 +31,17 @@ jobs:
       - name: Run frontend quality checks
         run: npm run ci --workspace=client
 
-      - name: Run backend integrity + smoke checks
+      - name: Run backend integrity and smoke checks
         run: npm run ci --workspace=server
+
+  docker-build:
+    name: Validate Docker image build
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t kichain-dev:test .

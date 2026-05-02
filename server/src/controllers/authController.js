@@ -13,7 +13,7 @@ function generateGuestName() {
   return `${prefix}${noun}${suffix}`;
 }
 
-function buildAvatarUrl(seed, style = 'lorelei') {
+function buildAvatarUrl(seed, style = 'bottts') {
   return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}`;
 }
 
@@ -108,4 +108,4 @@ async function continueAsGuest(_req, res) {
   });
 }
 
-module.exports = { login, register, continueAsGuest };
+module.exports = { login, register, continueAsGuest, buildAvatarUrl };

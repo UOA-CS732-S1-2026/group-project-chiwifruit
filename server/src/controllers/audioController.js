@@ -9,8 +9,8 @@ async function getAudioByIndex(req, res) {
     return res.status(400).json({ message: 'num must be a positive integer' });
   }
 
-  if (mode && !['animals', 'music'].includes(mode)) {
-    return res.status(400).json({ message: 'mode must be animals or music' });
+  if (mode && !['bird', 'piano'].includes(mode)) {
+    return res.status(400).json({ message: 'mode must be bird or piano' });
   }
 
   const filter = { index: num };
