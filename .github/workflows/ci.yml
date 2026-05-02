@@ -83,7 +83,10 @@ jobs:
           docker login --username AWS --password-stdin "${{ steps.meta.outputs.ecr_repo }}"
 
       - name: Build Docker image
-        run: docker build -t kichain-dev:local .
+        run: |
+          docker build \
+          --build-arg VITE_BUILD_VERSION="${{ steps.meta.outputs.short_sha }}" \
+          -t kichain-dev:local .
 
       - name: Tag Docker image
         run: |

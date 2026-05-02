@@ -13,6 +13,11 @@ import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
 // 若当前没有 token，会先创建 guest session（拿到 token）再调用房间 API。
 
 export default function LandingPage() {
+
+	// For local development, the build version is set to "local". In dev/prod, 
+	// it should be set to the actual build version via the VITE_BUILD_VERSION environment variable.
+	const buildVersion = import.meta.env.VITE_BUILD_VERSION || "local"
+
 	// Background music is enabled on Landing + Room pages.
 	useBackgroundMusic()
 
@@ -49,6 +54,12 @@ export default function LandingPage() {
 
 	return (
 		<Background>
+
+			{/* Display the build version in the top-left corner for debugging purposes. */}
+			<div className="fixed bottom-2 right-3 z-50 rounded-md bg-black/35 px-2 py-1 text-[10px] font-mono text-white/70 shadow-sm">
+				build: {buildVersion}
+			</div>
+
 			<LandingTopBar />
 
 			<JoinRoomModal
