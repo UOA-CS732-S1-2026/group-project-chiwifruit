@@ -4,8 +4,28 @@ import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
+import { useState } from "react"
+import JoinRoomModal from "../components/Landing/JoinRoomModal"
+import useBackgroundMusic from "../hooks/useBackgroundMusic"
+import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
+
+// NOTE (2026-04-29): Landing 的 create/join 操作走“guarded”流程：
+// 若当前没有 token，会先创建 guest session（拿到 token）再调用房间 API。
 
 export default function LandingPage() {
+	// Background music is enabled on Landing + Room pages.
+	useBackgroundMusic()
+
+	// Controls the Join Room modal triggered by "Join with Code".
+	const [joinModalOpen, setJoinModalOpen] = useState(false)
+	const {
+		actionError,
+		clearActionError,
+		isPending,
+		createRoomGuarded,
+		joinRoomGuarded,
+	} = useGuardedRoomNavigation()
+
 	const guideItems = [
 		{
 			Icon: Headphones,
@@ -31,6 +51,22 @@ export default function LandingPage() {
 		<Background>
 			<LandingTopBar />
 
+			<JoinRoomModal
+				open={joinModalOpen}
+				onOpenChange={(open) => {
+					setJoinModalOpen(open)
+					if (open) clearActionError()
+				}}
+				isSubmitting={isPending}
+				onJoin={(roomCode) => {
+					joinRoomGuarded(roomCode, {
+						onSuccess: () => {
+							setJoinModalOpen(false)
+						},
+					})
+				}}
+			/>
+
 			<section className="relative mx-auto w-full max-w-[90rem] px-4 pb-14 pt-24 md:px-6 md:pt-28 lg:px-8">
 				<div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
 					<div className="flex flex-col items-start gap-5 md:gap-6">
@@ -54,18 +90,33 @@ export default function LandingPage() {
 						</p>
 
 						<div className="flex flex-wrap items-center gap-3 pt-1">
-							<Button className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90">
+							<Button
+								className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90"
+								onClick={() => {
+									createRoomGuarded()
+								}}
+								disabled={isPending}
+							>
 								<Play className="size-4 fill-current" />
 								Create a Room
 							</Button>
 							<Button
 								variant="outline"
 								className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
+								onClick={() => {
+									clearActionError()
+									setJoinModalOpen(true)
+								}}
+								disabled={isPending}
 							>
 								<LogIn className="size-4" />
 								Join with Code
 							</Button>
 						</div>
+
+						{actionError ? (
+							<p className="text-sm font-medium text-destructive">{actionError}</p>
+						) : null}
 					</div>
 
 					<div className="relative flex items-center justify-center lg:justify-end lg:pr-2">

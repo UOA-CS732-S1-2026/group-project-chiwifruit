@@ -4,7 +4,9 @@ const {
   createRoom,
   setCandidateReady,
   checkIfCandidateIsReady,
+  leaveRoom,
   selectMode,
+  selectDifficulty,
   submitRoundResult,
   getRanking
 } = require('../controllers/roomController');
@@ -122,7 +124,7 @@ router.get('/:roomCode/ready', authMiddleware, checkIfCandidateIsReady);
  *             properties:
  *               mode:
  *                 type: string
- *                 enum: [animals, music]
+ *                 enum: [bird, piano]
  *     responses:
  *       200:
  *         description: Mode selected
@@ -132,6 +134,44 @@ router.get('/:roomCode/ready', authMiddleware, checkIfCandidateIsReady);
  *         description: Room not found
  */
 router.patch('/:roomCode/mode', authMiddleware, selectMode);
+
+/**
+ * @swagger
+ * /api/rooms/{roomCode}/difficulty:
+ *   patch:
+ *     summary: Select game difficulty (host only)
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: roomCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - difficulty
+ *             properties:
+ *               difficulty:
+ *                 type: string
+ *                 enum: [easy, medium, hard]
+ *     responses:
+ *       200:
+ *         description: Difficulty selected
+ *       400:
+ *         description: difficulty must be easy, medium, or hard
+ *       403:
+ *         description: Only host can select difficulty
+ *       404:
+ *         description: Room not found
+ */
+router.patch('/:roomCode/difficulty', authMiddleware, selectDifficulty);
 
 /**
  * @swagger
@@ -191,5 +231,32 @@ router.patch('/:roomCode/ranking', authMiddleware, submitRoundResult);
  *         description: Room not found
  */
 router.get('/:roomCode/ranking', authMiddleware, getRanking);
+
+/**
+ * @swagger
+ * /api/rooms/{roomCode}:
+ *   delete:
+ *     summary: Leave a room
+ *     tags: [Rooms]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: roomCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Left room
+ *       403:
+ *         description: Not joined the room
+ *       404:
+ *         description: Room not found
+ */
+router.delete('/:roomCode', authMiddleware, leaveRoom);
+
+// NOTE (2026-04-29): 该 DELETE 接口用于“离开房间名单”（例如 results 回首页），
+// 不等同于 socket 的 leave_room（离开比赛=判负）。
 
 module.exports = router;

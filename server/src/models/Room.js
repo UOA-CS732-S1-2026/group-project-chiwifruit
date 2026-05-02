@@ -40,12 +40,16 @@ const roomSchema = new mongoose.Schema(
     },
     mode: {
       type: String,
-      enum: ['animals', 'music'],
+      enum: ['bird', 'piano'],
       default: null
     },
+    difficulty: {
+      type: String,
+      enum: ['easy', 'medium', 'hard'],
+      default: 'easy'
+    },
     host: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      type: mongoose.Schema.Types.Mixed,
       required: true
     },
     participants: [participantSchema]

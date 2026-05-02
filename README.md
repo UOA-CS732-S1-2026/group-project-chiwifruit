@@ -97,126 +97,133 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Backend health endpoint: `http://localhost:3000/health`
 
-## Run Locally with Docker (Client + Server + MongoDB)
 
-To reduce local setup friction, this repo includes:
-- A single app image that runs both frontend and backend in one container
-- A local MongoDB container managed by Docker Compose
+## Local Docker Development Environment
 
-### Why this base image?
+This project can be run locally using Docker with two containers:
 
-The Dockerfile uses `node:20-bookworm-slim` (Debian-based) instead of Alpine:
-- Better compatibility with Node packages that may rely on native binaries
-- Lower technical debt/risk versus musl/glibc edge cases on Alpine
-- Still relatively lightweight (`slim`) for local iteration
+- `kichain-db`: MongoDB container
+- `kichain-dev-local`: application container running both the Vite client and Express server
 
-### 1) Prepare environment files
+The app container connects to MongoDB through a shared Docker network.
 
-From the repo root:
+### 1. Create a Docker network
 
 ```bash
-cp server/.env.example server/.env
-cp client/.env.example client/.env
+docker network create kichain-net
 ```
 
-Then update values in `server/.env` (MongoDB/AWS/JWT) and `client/.env` if needed.
+If the network already exists, Docker may show an error. This is fine and can be ignored.
 
-### 2) Start everything with Docker Compose (recommended)
+### 2. Start MongoDB
 
 ```bash
-docker compose -f docker-compose.local.yml up --build
+docker run -d \
+  --name kichain-db \
+  --network kichain-net \
+  -p 27017:27017 \
+  mongo:latest
 ```
 
-This starts:
-- `sound-chain-app` (frontend + backend)
-- `kichain-db` (MongoDB on port `27017`)
+This starts a MongoDB container named kichain-db.
 
-> Why this now works reliably: inside Docker, `localhost` means "this container", not "another container".  
-> So the backend must use `mongodb` (the Compose service name) instead of `localhost` for MongoDB.  
-> `docker-compose.local.yml` now forces `MONGODB_URI=mongodb://mongodb:27017/kichain-db` for the app service.
+### 3. Configure environment variables
 
-### 3) Verify locally
-
-- Frontend (Vite UI): `http://localhost:5173`
-- Backend root info: `http://localhost:3000`
-- Backend health: `http://localhost:3000/health`
-- Backend API docs: `http://localhost:3000/api-docs`
-
-### 4) Stop services
+Create or update server/.env:
 
 ```bash
-docker compose -f docker-compose.local.yml down
+PORT=3000
+FRONTEND_ORIGIN=http://localhost:5173
+MONGODB_URI=mongodb://kichain-db:27017/kichain-db
+JWT_SECRET=local_dev_secret_change_later
+JWT_EXPIRES_IN=1d
+AWS_REGION=ap-southeast-2
+AWS_ACCESS_KEY_ID=dummy
+AWS_SECRET_ACCESS_KEY=dummy
+AWS_S3_BUCKET=dummy
 ```
 
-If you want to remove the MongoDB data volume too:
+Create or update client/.env:
 
 ```bash
-docker compose -f docker-compose.local.yml down -v
+VITE_API_URL=http://localhost:3000/api
+VITE_SOCKET_URL=http://localhost:3000
+VITE_APP_NAME=KiChain
+VITE_APP_ENV=development
 ```
 
-### Alternative: app container only (without Compose)
+Note: When the backend runs inside a Docker container, localhost does not refer to the MongoDB container. The backend should connect to MongoDB using the container name kichain-db on the shared Docker network.
+
+### 4. Build the app image
+
+From the project root:
 
 ```bash
-docker build -t sound-chain-local .
+docker build -t kichain-dev:local .
 ```
 
-Run only the app container (assumes MongoDB is available separately):
+### 5. Start the app container
 
 ```bash
-docker run --rm -it \
-  -p 3000:3000 \
+docker run --rm \
+  --name kichain-dev-local \
+  --network kichain-net \
+  --env-file docker.local.env \
   -p 5173:5173 \
-  -v "$(pwd)/server/.env:/app/server/.env:ro" \
-  -v "$(pwd)/client/.env:/app/client/.env:ro" \
-  sound-chain-local
+  -p 3000:3000 \
+  kichain-dev:local
 ```
 
-### Notes
+The app will be available at:
 
-- This container is optimized for local development only (not production deployment).
-- The backend is served on `localhost:3000`, but the playable frontend app is on `localhost:5173`.
-- `localhost:3000` now returns a JSON status response, and API docs are available at `/api-docs`.
-- This setup is local-first. For ECS/EC2 later, this can evolve into separate frontend/backend images and environment-specific Compose/task definitions.
+`http://localhost:5173`
 
-## Environment Variables
+### 6. Check running containers
 
-### Backend
+In another terminal:
 
-See [server/.env.example](server/.env.example).
+```bash
+docker ps
+```
 
-Important defaults:
-- `PORT=3000`
-- `FRONTEND_ORIGIN=http://localhost:5173`
-- `MONGODB_URI=mongodb://localhost:27017/kichain-db`
+You should see both containers running:
 
-### Frontend
+```bash
+kichain-db
+kichain-dev-local
+```
 
-See [client/.env.example](client/.env.example).
+### 7. Stop the containers
 
-Important defaults:
-- `VITE_API_URL=http://localhost:3000/api`
-- `VITE_SOCKET_URL=http://localhost:3000`
+To stop the app container:
 
-## Dataset Note
+```bash
+docker stop kichain-dev-local
+```
 
-The CSV at repository root is a reference metadata file for bird audio samples.
+To stop MongoDB:
 
-Fields include:
-- `fileName`
-- `species`
-- `source`
-- `location`
-- `recordedAt`
-- `pageTitle`
-- `notes`
+```bash
+docker stop kichain-db
+```
 
-Planned usage:
-- Audio files in AWS S3
-- Metadata persisted in MongoDB
+To remove the MongoDB container if needed:
 
-## Troubleshooting
+```bash
+docker rm kichain-db
+```
 
-- If backend fails on startup, verify MongoDB is running and `MONGODB_URI` is valid in `server/.env`.
-- If frontend cannot call backend, verify `VITE_API_URL` and `VITE_SOCKET_URL` in `client/.env`.
-- If S3-related endpoints fail, replace placeholder AWS values in `server/.env` with real credentials and bucket settings.
-- If `localhost:3000` is unreachable in Docker mode, run `docker compose -f docker-compose.local.yml logs app` and verify backend connects to `mongodb://mongodb:27017/kichain-db` (not `localhost`).
+### 8. Reset local MongoDB container
+
+If you need a clean MongoDB container:
+
+```bash
+docker stop kichain-db
+docker rm kichain-db
+```
+```bash
+docker run -d \
+  --name kichain-db \
+  --network kichain-net \
+  -p 27017:27017 \
+```

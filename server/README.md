@@ -16,7 +16,7 @@ This repository now contains an initialized backend project for a **sound chain 
 4. `getAudios(num)`
 5. `createRoom()` (also supports joining with room ID/code param)
 6. `CheckIfCandidateIsReady`
-7. `SelectMode()` (`animals` or `music`)
+7. `SelectMode()` (`bird` or `piano`)
 8. `Ranking` (submit each round result + fetch current ranking)
 9. **WebSocket `room_update` events** for live room state sync
 
@@ -174,7 +174,7 @@ Use `Authorization: Bearer <jwt>` for protected routes.
 
 ### Audios
 
-#### `GET /api/audios/:num?mode=animals|music`
+#### `GET /api/audios/:num?mode=bird|piano`
 Equivalent to `getAudios(num)`.
 Returns audio metadata + short-lived S3 signed URL.
 
@@ -214,7 +214,16 @@ Only host can set mode.
 
 Request:
 ```json
-{ "mode": "animals" }
+{ "mode": "bird" }
+```
+
+#### `PATCH /api/rooms/:roomCode/difficulty`
+Equivalent to `selectDifficulty()`.
+Only host can set difficulty.
+
+Request:
+```json
+{ "difficulty": "medium" }
 ```
 
 #### `PATCH /api/rooms/:roomCode/ranking`
@@ -297,8 +306,8 @@ React and Express can communicate perfectly in either approach as long as:
 ### `audios` seed expectation
 Each audio record should include:
 - `index` (number)
-- `mode` (`animals` or `music`)
-- `s3Key` (e.g. `animals/cat-01.mp3`)
+- `mode` (`bird` or `piano`)
+- `s3Key` (e.g. `bird/cat-01.mp3`)
 - `title` (optional)
 
 The backend signs `s3Key` into downloadable URL via S3.
