@@ -1,5 +1,8 @@
 # Group Project Chiwifruit
 
+[![CI/CD](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml)
+
+
 Full-stack workspace for the Sound Chain game project.
 
 This repository contains:
