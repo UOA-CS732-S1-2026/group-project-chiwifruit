@@ -1,6 +1,7 @@
-name: CI
+name: CI/CD
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - dev
@@ -12,6 +13,7 @@ on:
 
 jobs:
   validate:
+    name: Validate client and server
     runs-on: ubuntu-latest
 
     steps:
@@ -30,5 +32,114 @@ jobs:
       - name: Run frontend quality checks
         run: npm run ci --workspace=client
 
-      - name: Run backend integrity + smoke checks
+      - name: Run backend integrity and smoke checks
         run: npm run ci --workspace=server
+
+  docker-build:
+    name: Validate Docker image build
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t kichain-dev:test .
+
+  deploy-dev:
+    name: Build, push, and deploy dev image
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - docker-build
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Derive image metadata
+        id: meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          ECR_REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "ecr_repo=$ECR_REPO" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region "${{ secrets.AWS_REGION }}" | \
+          docker login --username AWS --password-stdin "${{ steps.meta.outputs.ecr_repo }}"
+
+      - name: Build Docker image
+        run: docker build -t kichain-dev:local .
+
+      - name: Tag Docker image
+        run: |
+          docker tag kichain-dev:local "${{ steps.meta.outputs.ecr_repo }}:${{ steps.meta.outputs.short_sha }}"
+          docker tag kichain-dev:local "${{ steps.meta.outputs.ecr_repo }}:dev"
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push "${{ steps.meta.outputs.ecr_repo }}:${{ steps.meta.outputs.short_sha }}"
+          docker push "${{ steps.meta.outputs.ecr_repo }}:dev"
+
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
+            REGION="${{ secrets.AWS_REGION }}"
+            ECR_REPOSITORY="${{ secrets.ECR_REPOSITORY }}"
+            ECR_REPO="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$ECR_REPOSITORY"
+
+            aws ecr get-login-password --region "$REGION" | \
+            docker login --username AWS --password-stdin "$ECR_REPO"
+
+            docker pull "$ECR_REPO:dev"
+
+            docker network inspect kichain-net >/dev/null 2>&1 || docker network create kichain-net
+
+            if ! docker ps -a --format '{{.Names}}' | grep -q '^kichain-db$'; then
+              docker run -d \
+                --name kichain-db \
+                --restart unless-stopped \
+                --network kichain-net \
+                -p 27017:27017 \
+                mongo:latest
+            elif ! docker ps --format '{{.Names}}' | grep -q '^kichain-db$'; then
+              docker start kichain-db
+            fi
+
+            if docker ps -a --format '{{.Names}}' | grep -q '^kichain-dev$'; then
+              docker stop kichain-dev || true
+              docker rm kichain-dev || true
+            fi
+
+            docker run -d \
+              --name kichain-dev \
+              --restart unless-stopped \
+              --network kichain-net \
+              --env-file /home/ubuntu/kichain-dev.env \
+              -p 5173:5173 \
+              -p 3000:3000 \
+              "$ECR_REPO:dev"
+
+            docker logs --tail 80 kichain-dev
+
+            curl -f http://localhost:3000/health
