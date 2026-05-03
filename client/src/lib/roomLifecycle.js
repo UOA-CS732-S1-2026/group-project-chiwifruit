@@ -37,8 +37,6 @@ export async function leaveTrackedRoom({ roomCode, clear = true } = {}) {
 	try {
 		return await leaveRoom(normalized)
 	} catch (error) {
-		// Leaving is best-effort on navigation. If the room was already deleted, the
-		// membership cleanup has effectively happened from the user's perspective.
 		return { skipped: false, error }
 	} finally {
 		if (clear) clearCurrentRoomCode(normalized)
@@ -48,7 +46,8 @@ export async function leaveTrackedRoom({ roomCode, clear = true } = {}) {
 export async function leavePreviousRoomIfNeeded(nextRoomCode) {
 	const next = normalizeRoomCode(nextRoomCode)
 	const current = getCurrentRoomCode()
-	if (!current || !next || current === next) return
+	if (!current) return
+	if (next && current === next) return
 	await leaveTrackedRoom({ roomCode: current, clear: true })
 }
 
