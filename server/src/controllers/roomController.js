@@ -9,6 +9,7 @@ const {
   isIdentityParticipant,
   removeIdentityFromOtherRooms,
   removeIdentityFromRoom,
+  resolveMaybePopulate,
 } = require('../services/roomMembershipService');
 
 function buildRanking(room) {
@@ -174,7 +175,11 @@ async function submitRoundResult(req, res) {
   const updateResult = await Room.updateOne({ roomCode: roomCode.toUpperCase(), ...selector }, { $inc: { 'participants.$.correctCount': roundCorrectCount } });
   if (updateResult.matchedCount === 0) return res.status(403).json({ message: 'Join the room first before submitting round results' });
 
-  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() }).populate('participants.user', 'username');
+  const room = await resolveMaybePopulate(
+    Room.findOne({ roomCode: roomCode.toUpperCase() }),
+    'participants.user',
+    'username'
+  );
   if (!room) return res.status(404).json({ message: 'Room not found' });
 
   const participant = room.participants.find((p) => isIdentityParticipant(p, identity));
@@ -190,7 +195,11 @@ async function submitRoundResult(req, res) {
 
 async function getRanking(req, res) {
   const { roomCode } = req.params;
-  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() }).populate('participants.user', 'username');
+  const room = await resolveMaybePopulate(
+    Room.findOne({ roomCode: roomCode.toUpperCase() }),
+    'participants.user',
+    'username'
+  );
   if (!room) return res.status(404).json({ message: 'Room not found' });
   return res.json({ roomCode: room.roomCode, ranking: buildRanking(room) });
 }
