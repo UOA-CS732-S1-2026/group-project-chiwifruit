@@ -101,7 +101,7 @@ function ResultsRow({
 	)
 }
 
-export default function GameResultsModal({ open, players, onBackToRoom, onBackToHome, onClose }) {
+export default function GameResultsModal({ open, players, onBackToRoom, onBackToHome }) {
 	const sortedPlayers = React.useMemo(() => {
 		const safePlayers = Array.isArray(players) ? players : []
 		return [...safePlayers].sort((a, b) => (b?.score ?? 0) - (a?.score ?? 0))
@@ -110,11 +110,12 @@ export default function GameResultsModal({ open, players, onBackToRoom, onBackTo
 	return (
 		<BaseModal
 			open={open}
-			onOpenChange={(nextOpen) => {
-				if (!nextOpen) onClose?.()
-			}}
+			// Game over is a terminal state. Do not allow Escape/backdrop close to reveal
+			// the stale game/familiarisation UI behind the results dialog.
+			onOpenChange={undefined}
+			overlayClassName="bg-[#f1f5f9]"
 		>
-			<div className="relative w-[448px] max-w-[calc(100vw-2rem)] rounded-[32px] bg-white px-8 pb-8 pt-12">
+			<div className="relative w-[448px] max-w-[calc(100vw-2rem)] rounded-[32px] bg-white px-8 pb-8 pt-12 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
 				<div className="absolute -top-8 left-1/2 -translate-x-1/2">
 					<div className="flex size-16 items-center justify-center rounded-full bg-[#fdc700] shadow-[0px_0px_25px_0px_rgba(250,204,21,0.5)]">
 						<img alt="" aria-hidden="true" src={trophyIcon} className="size-10" />
