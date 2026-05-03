@@ -6,6 +6,7 @@ const {
   buildParticipant,
   buildRoomState,
   emitUpdatedRoom,
+  isGuestIdentity,
   isIdentityParticipant,
   removeIdentityFromOtherRooms,
   removeIdentityFromRoom,
@@ -171,7 +172,7 @@ async function submitRoundResult(req, res) {
     return res.status(400).json({ message: 'roundCorrectCount must be a non-negative integer' });
   }
 
-  const selector = identity.isGuest ? { 'participants.guestId': identity.sub } : { 'participants.user': identity.sub };
+  const selector = isGuestIdentity(identity) ? { 'participants.guestId': identity.sub } : { 'participants.user': identity.sub };
   const updateResult = await Room.updateOne({ roomCode: roomCode.toUpperCase(), ...selector }, { $inc: { 'participants.$.correctCount': roundCorrectCount } });
   if (updateResult.matchedCount === 0) return res.status(403).json({ message: 'Join the room first before submitting round results' });
 
