@@ -39,6 +39,12 @@ function buildParticipant(identity) {
   };
 }
 
+async function resolveMaybePopulate(query, path, select) {
+  if (!query) return null;
+  if (typeof query.populate === 'function') return query.populate(path, select);
+  return query;
+}
+
 function transferHostIfNeeded(room, leavingId) {
   if (!leavingId || String(room.host) !== String(leavingId)) return;
   const next = room.participants[0];
@@ -47,7 +53,11 @@ function transferHostIfNeeded(room, leavingId) {
 }
 
 async function buildRoomState(roomCode) {
-  const room = await Room.findOne({ roomCode: String(roomCode).toUpperCase() }).populate('participants.user', 'username');
+  const room = await resolveMaybePopulate(
+    Room.findOne({ roomCode: String(roomCode).toUpperCase() }),
+    'participants.user',
+    'username'
+  );
   if (!room) return null;
 
   const hostId = room.host != null ? String(room.host) : null;
@@ -144,4 +154,5 @@ module.exports = {
   isIdentityParticipant,
   removeIdentityFromOtherRooms,
   removeIdentityFromRoom,
+  resolveMaybePopulate,
 };
