@@ -39,7 +39,7 @@ const PHASE = {
 	PLAYING: "playing",
 }
 
-const FAMILIARIZE_AUTOPLAY_MS = 900
+const FAMILIARIZE_AUTOPLAY_MS = 2000
 const FREE_PLAY_MS = 20_000
 // const COUNTDOWN_MS = 5_000
 
@@ -412,15 +412,7 @@ export default function GamePage() {
 				}
 				return next
 			})
-		}, 900)
-
-		return () => window.clearInterval(intervalId)
-	}, [isSocketDriven, padCount, phase])
-
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_AUTO) return
-		setActivePadIndex(autoPlayIndex)
+	}, 2000)
 	}, [autoPlayIndex, isSocketDriven, phase])
 
 	React.useEffect(() => {
