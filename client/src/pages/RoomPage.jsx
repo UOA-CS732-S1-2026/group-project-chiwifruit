@@ -46,6 +46,12 @@ function BirdIcon({ className, ...props }) {
 	)
 }
 
+function getSocketResponseMessage(response, fallback) {
+	if (typeof response?.error === "string") return response.error
+	if (typeof response?.message === "string") return response.message
+	return fallback
+}
+
 export default function RoomPage() {
 	const navigate = useNavigate()
 	const { roomCode: roomCodeParam = "" } = useParams()
@@ -56,6 +62,7 @@ export default function RoomPage() {
 	const requestedJoinCode = normalizedParamCode === "NEW" ? "" : normalizedParamCode
 	const [roomCode, setRoomCode] = useState("")
 	const [setupError, setSetupError] = useState("")
+	const [isStartingGame, setIsStartingGame] = useState(false)
 
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
@@ -153,14 +160,38 @@ export default function RoomPage() {
 	)
 	const currentUserReady = Boolean(currentUserPlayer?.isReady)
 
+	const canStartGame = Boolean(isHost && roomState?.canStartGame)
+
 	const handleStartGame = () => {
 		if (!isHost) return
 		if (!canStartGame) return
-		emitGameStart(roomCode)
-		navigate(`/game/${roomCode}`, { state: { difficulty, soundMode: mode, roomCode } })
-	}
+		if (isStartingGame) return
 
-	const canStartGame = Boolean(isHost && roomState?.canStartGame)
+		setSetupError("")
+		setIsStartingGame(true)
+		// NOTE (2026-05-03): Wait for the server game_start acknowledgement before
+		// entering /game. Navigating first lets GameRouteGuard request state while the
+		// previous finished game is still in memory, which can wrongly show "Game ended"
+		// to the host even though a new game is starting.
+		emitGameStart(roomCode, (response) => {
+			setIsStartingGame(false)
+
+			if (response?.ok && response.game) {
+				hasNavigatedToGameRef.current = true
+				navigate(`/game/${roomCode}`, {
+					state: {
+						difficulty,
+						soundMode: mode,
+						roomCode,
+						startedGame: response.game,
+					},
+				})
+				return
+			}
+
+			setSetupError(getSocketResponseMessage(response, "Unable to start game."))
+		})
+	}
 
 	const handleCopyCode = async () => {
 		if (!roomCode) return
@@ -376,11 +407,11 @@ export default function RoomPage() {
 							<Button
 								type="button"
 								onClick={handleStartGame}
-								disabled={!canStartGame}
+								disabled={!canStartGame || isStartingGame}
 								className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"
 							>
 								<Play className="size-4 fill-current" />
-								Start Game
+								{isStartingGame ? "Starting..." : "Start Game"}
 							</Button>
 						) : (
 							<Button
