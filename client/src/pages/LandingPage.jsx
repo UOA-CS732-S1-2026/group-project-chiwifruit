@@ -16,8 +16,8 @@ import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
 
 export default function LandingPage() {
     const [showAuthModal, setShowAuthModal] = useState(
-    () => !getStoredAuthUser(),
-  )
+      () => !getStoredAuthUser(),
+    )
 	// For local development, the build version is set to "local". In dev/prod, 
 	// it should be set to the actual build version via the VITE_BUILD_VERSION environment variable.
 	const buildVersion = import.meta.env.VITE_BUILD_VERSION || "local"
@@ -169,6 +169,6 @@ export default function LandingPage() {
 				</div>
 			</section>
 		</Background>
-	 </>
+	  </>
 	)
 }
