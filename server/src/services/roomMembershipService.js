@@ -1,6 +1,5 @@
 const Room = require('../models/Room');
 const { buildAvatarUrl } = require('../controllers/authController');
-const { emitRoomUpdate } = require('../socket');
 
 const MAX_ROOM_PARTICIPANTS = 6;
 const MIN_PARTICIPANTS_TO_START = 2;
@@ -88,7 +87,7 @@ async function buildRoomState(roomCode) {
 
 async function emitUpdatedRoom(io, roomCode) {
   const roomState = await buildRoomState(roomCode);
-  if (roomState) emitRoomUpdate(io, roomCode, roomState);
+  if (roomState && io) io.to(String(roomCode).toUpperCase()).emit('room_update', roomState);
   return roomState;
 }
 
