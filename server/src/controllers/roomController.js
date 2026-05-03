@@ -6,7 +6,6 @@ const {
   buildParticipant,
   buildRoomState,
   emitUpdatedRoom,
-  getParticipantId,
   isIdentityParticipant,
   removeIdentityFromOtherRooms,
   removeIdentityFromRoom,
@@ -50,15 +49,16 @@ async function createRoom(req, res) {
     const room = await Room.findOne({ roomCode: joinRoomCode });
     if (!room) return res.status(404).json({ message: 'Room not found' });
 
+    const alreadyJoined = room.participants.some((participant) => isIdentityParticipant(participant, identity));
+    if (!alreadyJoined && room.participants.length >= MAX_ROOM_PARTICIPANTS) {
+      return res.status(409).json({ message: `Room is full. Maximum ${MAX_ROOM_PARTICIPANTS} participants are allowed` });
+    }
+
     // One browser/session should only be in one room roster at a time. Clean up
-    // old rooms before joining this one, including direct URL joins.
+    // old rooms only after the target room is known to be joinable.
     await removeIdentityFromOtherRooms({ identity, keepRoomCode: joinRoomCode, io });
 
-    const alreadyJoined = room.participants.some((participant) => isIdentityParticipant(participant, identity));
     if (!alreadyJoined) {
-      if (room.participants.length >= MAX_ROOM_PARTICIPANTS) {
-        return res.status(409).json({ message: `Room is full. Maximum ${MAX_ROOM_PARTICIPANTS} participants are allowed` });
-      }
       room.participants.push(buildParticipant(identity));
       await room.save();
     }
