@@ -8,6 +8,11 @@ function getIdentityId(identity) {
   return identity?.sub ? String(identity.sub) : null;
 }
 
+function isGuestIdentity(identity) {
+  const identityId = getIdentityId(identity);
+  return Boolean(identity?.isGuest) || Boolean(identityId?.startsWith('guest_'));
+}
+
 function getParticipantId(participant) {
   if (!participant) return null;
   if (participant.user?._id) return String(participant.user._id);
@@ -22,8 +27,9 @@ function getIdentityParticipantSelector(identity) {
 
   // Guest IDs are plain strings such as `guest_<uuid>`. Never query the ObjectId
   // participants.user field with a guest ID, because Mongoose will try to cast it
-  // to ObjectId and can crash the request with a CastError.
-  if (identity?.isGuest) {
+  // to ObjectId and can crash the request with a CastError. Also handle old local
+  // guest tokens that may not contain the isGuest flag but still have a guest_* sub.
+  if (isGuestIdentity(identity)) {
     return { 'participants.guestId': identityId };
   }
 
@@ -37,7 +43,7 @@ function isIdentityParticipant(participant, identity) {
 }
 
 function buildParticipant(identity) {
-  if (identity?.isGuest) {
+  if (isGuestIdentity(identity)) {
     return {
       guestId: identity.sub,
       guestName: identity.username,
@@ -53,10 +59,19 @@ function buildParticipant(identity) {
   };
 }
 
-async function resolveMaybePopulate(query, path, select) {
-  if (!query) return null;
-  if (typeof query.populate === 'function') return query.populate(path, select);
-  return query;
+async function resolveMaybePopulate(queryOrDoc, path, select) {
+  if (!queryOrDoc) return null;
+
+  if (typeof queryOrDoc.populate === 'function') {
+    return queryOrDoc.populate(path, select);
+  }
+
+  const resolved = await queryOrDoc;
+  if (resolved && typeof resolved.populate === 'function') {
+    return resolved.populate(path, select);
+  }
+
+  return resolved;
 }
 
 function transferHostIfNeeded(room, leavingId) {
@@ -166,6 +181,7 @@ module.exports = {
   emitUpdatedRoom,
   getIdentityParticipantSelector,
   getParticipantId,
+  isGuestIdentity,
   isIdentityParticipant,
   removeIdentityFromOtherRooms,
   removeIdentityFromRoom,
