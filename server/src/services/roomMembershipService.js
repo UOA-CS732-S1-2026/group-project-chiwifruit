@@ -16,6 +16,20 @@ function getParticipantId(participant) {
   return null;
 }
 
+function getIdentityParticipantSelector(identity) {
+  const identityId = getIdentityId(identity);
+  if (!identityId) return null;
+
+  // Guest IDs are plain strings such as `guest_<uuid>`. Never query the ObjectId
+  // participants.user field with a guest ID, because Mongoose will try to cast it
+  // to ObjectId and can crash the request with a CastError.
+  if (identity?.isGuest) {
+    return { 'participants.guestId': identityId };
+  }
+
+  return { 'participants.user': identityId };
+}
+
 function isIdentityParticipant(participant, identity) {
   const identityId = getIdentityId(identity);
   if (!identityId) return false;
@@ -127,13 +141,13 @@ async function removeIdentityFromRoom({ identity, roomCode, io }) {
 }
 
 async function removeIdentityFromOtherRooms({ identity, keepRoomCode, io }) {
-  const identityId = getIdentityId(identity);
-  if (!identityId) return [];
+  const selector = getIdentityParticipantSelector(identity);
+  if (!selector) return [];
 
   const keep = keepRoomCode ? String(keepRoomCode).toUpperCase() : null;
   const rooms = await Room.find({
     ...(keep ? { roomCode: { $ne: keep } } : {}),
-    $or: [{ 'participants.user': identityId }, { 'participants.guestId': identityId }],
+    ...selector,
   });
 
   const results = [];
@@ -150,6 +164,7 @@ module.exports = {
   buildParticipant,
   buildRoomState,
   emitUpdatedRoom,
+  getIdentityParticipantSelector,
   getParticipantId,
   isIdentityParticipant,
   removeIdentityFromOtherRooms,
