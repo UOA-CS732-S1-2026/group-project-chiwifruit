@@ -5,8 +5,8 @@ import Background from "../components/Common/Background"
 import { Button } from "../components/ui/button"
 import { getStoredAuthUser } from "../api/axios"
 import { emitGameRequestState, joinSocketRoom, reconnectSocket } from "../socket/socket"
+import CleanGamePage from "./CleanGamePage"
 import GameFinishedPage from "./GameFinishedPage"
-import GamePage from "./GamePage"
 
 const ACTIVE_STATUSES = new Set(["familiarizing", "playing"])
 
@@ -126,7 +126,7 @@ export default function GameRouteGuard() {
 		}
 	}, [navigate, playerId, roomCode, startedGame])
 
-	if (routeState.status === "active") return <GamePage initialGame={routeState.game} />
+	if (routeState.status === "active") return <CleanGamePage initialGame={routeState.game} />
 	if (routeState.status === "finished") return <GameFinishedPage roomCode={roomCode} game={routeState.game} />
 	if (routeState.status === "error") return <RouteError title="Unable to load game" message={routeState.message} roomCode={roomCode} />
 
