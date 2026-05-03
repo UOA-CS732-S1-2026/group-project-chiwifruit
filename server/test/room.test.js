@@ -83,12 +83,13 @@ describe('Room API', () => {
   const token = 'Bearer test-token';
 
   beforeEach(() => {
-    ['findOne', 'create', 'exists', 'updateOne', 'deleteOne'].forEach((method) => {
+    ['find', 'findOne', 'create', 'exists', 'updateOne', 'deleteOne'].forEach((method) => {
       if (!Room[method]) {
         Room[method] = jest.fn();
       }
       Room[method].mockReset();
     });
+    Room.find.mockResolvedValue([]);
   });
 
   it('should reject without token', async () => {
