@@ -77,6 +77,7 @@ export default function CleanGamePage({ initialGame = null }) {
 	const [isOutModalOpen, setIsOutModalOpen] = React.useState(false)
 	const [isSpectating, setIsSpectating] = React.useState(false)
 	const dismissedOutModalRef = React.useRef(false)
+	const hasLoadedGameRef = React.useRef(Boolean(initialGame))
 	const lastAutoPlayedPadRef = React.useRef({ gameId: null, index: null, at: 0 })
 	const noteUrlsRef = React.useRef([])
 
@@ -119,6 +120,7 @@ export default function CleanGamePage({ initialGame = null }) {
 		const applyGameState = (nextState) => {
 			if (!mounted) return
 			if (typeof nextState?.serverNow === "number") setServerOffsetMs(nextState.serverNow - Date.now())
+			hasLoadedGameRef.current = true
 			setSocketGame(nextState)
 			setGameLoadError("")
 			setIsGameLoading(false)
@@ -128,7 +130,7 @@ export default function CleanGamePage({ initialGame = null }) {
 			const message = getSocketMessage(payload, "Game error")
 			if (!mounted) return
 			setToastMessage(message)
-			if (!socketGame) {
+			if (!hasLoadedGameRef.current) {
 				setGameLoadError(message)
 				setIsGameLoading(false)
 			}
@@ -171,7 +173,7 @@ export default function CleanGamePage({ initialGame = null }) {
 			socket.off("game_pad_sound", onGamePadSound)
 			socket.off("connect_error", onConnectError)
 		}
-	}, [currentUserId, navigate, roomCode, socketGame])
+	}, [currentUserId, navigate, roomCode])
 
 	React.useEffect(() => {
 		if (!socketGame) return
