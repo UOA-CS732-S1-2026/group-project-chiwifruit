@@ -11,8 +11,8 @@ import JoinRoomModal from "../components/Landing/JoinRoomModal"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
 
-// NOTE (2026-04-29): Landing create/join actions follow a guarded flow:
-// If no token exists, create a guest session first (obtain token), then call the room API.
+// NOTE (2026-04-29): Landing 的 create/join 操作走“guarded”流程：
+// 若当前没有 token，会先创建 guest session（拿到 token）再调用房间 API。
 
 export default function LandingPage() {
     const [showAuthModal, setShowAuthModal] = useState(
