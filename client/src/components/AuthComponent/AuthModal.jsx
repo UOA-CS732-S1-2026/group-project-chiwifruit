@@ -1,23 +1,23 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { continueAsGuest } from "../../api/auth";
-import { setStoredAuthSession } from "../../api/axios";
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { continueAsGuest } from "../../api/auth"
+import { setStoredAuthSession } from "../../api/axios"
 
 export default function AuthModal({ open, onClose }) {
-  const navigate = useNavigate();
-  const [error, setError] = useState("");
+  const navigate = useNavigate()
+  const [error, setError] = useState("")
 
-  if (!open) return null;
+  if (!open) return null
 
   const handleGuest = async () => {
     try {
-      const data = await continueAsGuest();
-      setStoredAuthSession(data);
-      onClose();
+      const data = await continueAsGuest()
+      setStoredAuthSession(data)
+      onClose()
     } catch {
-      setError("Failed to continue as guest");
+      setError("Failed to continue as guest")
     }
-  };
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6">
@@ -61,5 +61,5 @@ export default function AuthModal({ open, onClose }) {
         </div>
       </div>
     </div>
-  );
+  )
 }
