@@ -18,18 +18,21 @@ function room(overrides = {}) {
   };
 }
 
-function startPlayingGame(roomCode = 'PLAYING_ROOM') {
-  const start = gameService.startGame({ room: room({ roomCode }), requestedByUserId: 'user1' });
+function startPlayingGame(roomCode = 'PLAYING_ROOM', participants = [participant('user1', 'Host'), participant('user2', 'Player Two')]) {
+  const start = gameService.startGame({ room: room({ roomCode, participants }), requestedByUserId: 'user1' });
   expect(start.ok).toBe(true);
 
   let ready = gameService.markFamiliarReady({ roomCode, userId: 'user1' });
   expect(ready.ok).toBe(true);
   expect(ready.game.status).toBe('familiarizing');
 
-  ready = gameService.markFamiliarReady({ roomCode, userId: 'user2' });
-  expect(ready.ok).toBe(true);
-  expect(ready.game.status).toBe('playing');
+  for (const gameParticipant of participants.slice(1)) {
+    const userId = String(gameParticipant.user._id);
+    ready = gameService.markFamiliarReady({ roomCode, userId });
+    expect(ready.ok).toBe(true);
+  }
 
+  expect(ready.game.status).toBe('playing');
   return ready.game;
 }
 
@@ -225,15 +228,138 @@ describe('gameService state machine', () => {
       expect(result.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user2' });
     });
 
-    it('should forfeit a player and finish when only one player remains', () => {
-      const roomCode = 'FORFEIT_PLAYER';
+    it('should finish when a non-turn player forfeits and only one player remains', () => {
+      const roomCode = 'FORFEIT_NON_TURN_PLAYER';
       startPlayingGame(roomCode);
 
       const result = gameService.forfeitPlayer({ roomCode, userId: 'user2', reason: 'leave_room' });
 
       expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('finished');
       expect(result.game.eliminatedUserIds).toContain('user2');
-      expect(result.game.lastEvent).toMatchObject({ type: 'player_eliminated', userId: 'user2', reason: 'leave_room' });
+      expect(result.game.turnEndsAt).toBeNull();
+      expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
+    });
+
+    it('should finish when the current player forfeits and only one player remains', () => {
+      const roomCode = 'FORFEIT_CURRENT_PLAYER';
+      startPlayingGame(roomCode);
+
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user1', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('finished');
+      expect(result.game.eliminatedUserIds).toContain('user1');
+      expect(result.game.turnEndsAt).toBeNull();
+      expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user2' });
+    });
+
+    it('should advance turn when the current player forfeits in a three-player game', () => {
+      const roomCode = 'FORFEIT_CURRENT_THREE_PLAYERS';
+      startPlayingGame(roomCode, [
+        participant('user1', 'Host'),
+        participant('user2', 'Player Two'),
+        participant('user3', 'Player Three'),
+      ]);
+
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user1', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('playing');
+      expect(result.game.currentTurnUserId).toBe('user2');
+      expect(result.game.eliminatedUserIds).toContain('user1');
+    });
+
+    it('should not advance turn when a non-current player forfeits in a three-player game', () => {
+      const roomCode = 'FORFEIT_NON_CURRENT_THREE_PLAYERS';
+      startPlayingGame(roomCode, [
+        participant('user1', 'Host'),
+        participant('user2', 'Player Two'),
+        participant('user3', 'Player Three'),
+      ]);
+
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('playing');
+      expect(result.game.currentTurnUserId).toBe('user1');
+      expect(result.game.eliminatedUserIds).toContain('user3');
+      expect(result.game.lastEvent).toMatchObject({ type: 'player_eliminated', userId: 'user3', reason: 'disconnect' });
+    });
+
+    it('should not advance turn when a non-current player forfeits in a four-player game', () => {
+      const roomCode = 'FORFEIT_NON_CURRENT_FOUR_PLAYERS';
+      startPlayingGame(roomCode, [
+        participant('user1', 'Host'),
+        participant('user2', 'Player Two'),
+        participant('user3', 'Player Three'),
+        participant('user4', 'Player Four'),
+      ]);
+
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user4', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('playing');
+      expect(result.game.currentTurnUserId).toBe('user1');
+      expect(result.game.eliminatedUserIds).toContain('user4');
+    });
+
+    it('should not advance turn when a non-current player forfeits in a five-player game', () => {
+      const roomCode = 'FORFEIT_NON_CURRENT_FIVE_PLAYERS';
+      startPlayingGame(roomCode, [
+        participant('user1', 'Host'),
+        participant('user2', 'Player Two'),
+        participant('user3', 'Player Three'),
+        participant('user4', 'Player Four'),
+        participant('user5', 'Player Five'),
+      ]);
+
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user5', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('playing');
+      expect(result.game.currentTurnUserId).toBe('user1');
+      expect(result.game.eliminatedUserIds).toContain('user5');
+    });
+
+    it('should keep the same current turn when two non-current players forfeit consecutively and multiple players remain', () => {
+      const roomCode = 'FORFEIT_TWO_NON_CURRENT_PLAYERS_REMAIN';
+      startPlayingGame(roomCode, [
+        participant('user1', 'Host'),
+        participant('user2', 'Player Two'),
+        participant('user3', 'Player Three'),
+        participant('user4', 'Player Four'),
+      ]);
+
+      const firstResult = gameService.forfeitPlayer({ roomCode, userId: 'user4', reason: 'disconnect' });
+      expect(firstResult.game.status).toBe('playing');
+      expect(firstResult.game.currentTurnUserId).toBe('user1');
+
+      const secondResult = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'disconnect' });
+      expect(secondResult.ok).toBe(true);
+      expect(secondResult.game.status).toBe('playing');
+      expect(secondResult.game.currentTurnUserId).toBe('user1');
+      expect(secondResult.game.eliminatedUserIds).toEqual(expect.arrayContaining(['user3', 'user4']));
+    });
+
+    it('should finish when consecutive forfeits leave only one player alive', () => {
+      const roomCode = 'FORFEIT_CONSECUTIVE_FINISH';
+      startPlayingGame(roomCode, [
+        participant('user1', 'Host'),
+        participant('user2', 'Player Two'),
+        participant('user3', 'Player Three'),
+      ]);
+
+      const firstResult = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'disconnect' });
+      expect(firstResult.game.status).toBe('playing');
+      expect(firstResult.game.currentTurnUserId).toBe('user1');
+
+      const secondResult = gameService.forfeitPlayer({ roomCode, userId: 'user2', reason: 'leave_room' });
+      expect(secondResult.ok).toBe(true);
+      expect(secondResult.game.status).toBe('finished');
+      expect(secondResult.game.turnEndsAt).toBeNull();
+      expect(secondResult.game.eliminatedUserIds).toEqual(expect.arrayContaining(['user2', 'user3']));
+      expect(secondResult.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
 
     it('should reject forfeit from non-participants', () => {
