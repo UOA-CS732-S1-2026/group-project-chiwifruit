@@ -26,6 +26,12 @@ function includesPlayer(game, playerId) {
 	return game.participantsOrder.map(String).includes(String(playerId))
 }
 
+function isEliminated(game, playerId) {
+	if (!playerId) return false
+	if (!Array.isArray(game?.eliminatedUserIds)) return false
+	return game.eliminatedUserIds.map(String).includes(String(playerId))
+}
+
 function classifyGame(game, roomCode, playerId) {
 	if (!game || !isSameRoom(game, roomCode)) {
 		return { status: "error", message: "Unable to load game.", game: null }
@@ -33,11 +39,17 @@ function classifyGame(game, roomCode, playerId) {
 	if (!includesPlayer(game, playerId)) {
 		return { status: "error", message: "You are not part of this game.", game: null }
 	}
-	if (ACTIVE_STATUSES.has(String(game.status))) {
-		return { status: "active", message: "", game }
-	}
 	if (game.status === "finished") {
 		return { status: "finished", message: "", game }
+	}
+	// Refresh/close is now defined as leaving the room. If a user re-enters an
+	// active game route after being eliminated/disconnected, do not resurrect the
+	// game UI from history or manual URL navigation.
+	if (isEliminated(game, playerId)) {
+		return { status: "error", message: "You have left this game.", game: null }
+	}
+	if (ACTIVE_STATUSES.has(String(game.status))) {
+		return { status: "active", message: "", game }
 	}
 	return { status: "error", message: "Unable to load game.", game: null }
 }
