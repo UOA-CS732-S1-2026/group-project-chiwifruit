@@ -120,6 +120,9 @@ function initSocket(httpServer, frontendOrigin) {
       if (result.game.status === 'playing') {
         scheduleTurnTimer(code);
       }
+      if (result.game.status === 'familiarizing') {
+        scheduleFamiliarAutoStart(code);
+      }
       if (result.game.status === 'finished') {
         persistFinalScores(code, result.game.scores);
         cleanupGameLater(code);
