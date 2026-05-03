@@ -9,7 +9,6 @@ const {
   markFamiliarReady,
   forceStartPlaying,
   forfeitPlayer,
-  registerFamiliarPadPress,
   getFamiliarizeEndsAt,
   serializeGame,
   registerPadPress,
@@ -18,6 +17,7 @@ const {
   scheduleRoomTimeout,
   cleanupGameLater,
 } = require('../services/gameService');
+const { removeIdentityFromRoom } = require('../services/roomMembershipService');
 
 function initSocket(httpServer, frontendOrigin) {
   const io = new Server(httpServer, {
@@ -84,9 +84,6 @@ function initSocket(httpServer, frontendOrigin) {
         scheduleTurnTimer(roomCode);
         return;
       }
-
-      // If familiarization timed out after players had already left/disconnected,
-      // gameService may correctly finish instead of starting a one-player game.
       if (forced.game.status === 'finished') {
         clearRoomTimeout(roomCode);
         persistFinalScores(roomCode, forced.game.scores);
@@ -95,14 +92,9 @@ function initSocket(httpServer, frontendOrigin) {
     }, ms);
   }
 
-  // NOTE (2026-04-27): Authenticate socket connections using the same JWT as REST.
-  // Reason: game actions (start/press) must be attributed to a specific user and
-  // should not be spoofable by anonymous clients.
   io.use((socket, next) => {
     const token = socket.handshake?.auth?.token;
-    if (!token) {
-      return next(new Error('Missing bearer token'));
-    }
+    if (!token) return next(new Error('Missing bearer token'));
 
     try {
       const payload = jwt.verify(String(token), env.jwtSecret);
@@ -117,15 +109,14 @@ function initSocket(httpServer, frontendOrigin) {
     function handleForfeitInRoom(roomCode, reason) {
       const code = String(roomCode).toUpperCase();
       const userId = socket.user?.sub;
-      if (!userId) return;
+      if (!userId) return null;
 
       const result = forfeitPlayer({ roomCode: code, userId, reason });
-      if (!result.ok) return;
+      if (!result.ok) return null;
 
       io.to(code).emit('game_state', result.game);
-
-      // Reschedule timers if needed.
       clearRoomTimeout(code);
+
       if (result.game.status === 'playing') {
         scheduleTurnTimer(code);
       }
@@ -133,43 +124,42 @@ function initSocket(httpServer, frontendOrigin) {
         persistFinalScores(code, result.game.scores);
         cleanupGameLater(code);
       }
+
+      return result.game;
+    }
+
+    async function handleDisconnectRoom(roomCode) {
+      const code = String(roomCode).toUpperCase();
+      const userId = socket.user?.sub;
+      if (!userId || !code) return;
+
+      // Confirmed MVP rule: refresh / browser close / network disconnect means
+      // leaving the room. This also forfeits any active game in that room.
+      handleForfeitInRoom(code, 'disconnect');
+      await removeIdentityFromRoom({ identity: socket.user, roomCode: code, io });
     }
 
     socket.on('join_room', (payload = {}) => {
       const { roomCode } = payload;
-      if (!roomCode) {
-        return;
-      }
-
+      if (!roomCode) return;
       socket.join(String(roomCode).toUpperCase());
     });
 
     socket.on('leave_room', (payload = {}) => {
       const { roomCode } = payload;
-      if (!roomCode) {
-        return;
-      }
+      if (!roomCode) return;
 
-      // NOTE (2026-04-29): 本项目里 socket leave_room 的语义是“离开比赛=直接判负”。
-      // 所以客户端只有在玩家明确退出比赛/关闭页面时才应该 emit 这个事件。
-      // 仅仅想从房间 participants 列表里移除自己（回首页/离开等待房间）应调用 REST
-      // DELETE /api/rooms/:roomCode，由后端更新 DB 并广播 room_update。
+      // Explicit in-game exit means forfeit the current match, but does not remove
+      // the player from the waiting-room roster. Back Home / tab close handle room cleanup.
       handleForfeitInRoom(roomCode, 'leave_room');
-
       socket.leave(String(roomCode).toUpperCase());
     });
 
-    socket.on('disconnect', () => {
-      // Closing tab / network drop: treat as leaving the match.
-      // Forfeit in any joined game rooms (excluding the socket's private room).
-      try {
-        for (const roomCode of socket.rooms) {
-          if (roomCode === socket.id) continue;
-          handleForfeitInRoom(roomCode, 'disconnect');
-        }
-      } catch {
-        // no-op
-      }
+    socket.on('disconnecting', () => {
+      const joinedRooms = [...socket.rooms].filter((roomCode) => roomCode !== socket.id);
+      joinedRooms.forEach((roomCode) => {
+        handleDisconnectRoom(roomCode).catch(() => null);
+      });
     });
 
     socket.on('game_request_state', (payload = {}, ack) => {
@@ -199,10 +189,6 @@ function initSocket(httpServer, frontendOrigin) {
 
       try {
         const code = String(roomCode).toUpperCase();
-
-        // If there is already an active game, do NOT start a new one.
-        // This commonly happens when the host refreshes the page and the client
-        // re-emits `game_start`.
         const existing = getGame(code);
         if (existing && existing.status !== 'finished') {
           const snapshot = serializeGame(existing);
@@ -217,15 +203,9 @@ function initSocket(httpServer, frontendOrigin) {
           return;
         }
 
-        // NOTE (2026-04-27): Re-check readiness server-side before starting.
-        // Reason: prevent clients from starting games when not everyone is ready.
         const hostId = room.host != null ? String(room.host) : null;
         const nonHostParticipants = room.participants.filter((participant) => {
-          const participantId = participant.user?._id
-            ? String(participant.user._id)
-            : participant.guestId
-              ? String(participant.guestId)
-              : null;
+          const participantId = participant.user?._id ? String(participant.user._id) : participant.guestId ? String(participant.guestId) : null;
           if (!participantId) return true;
           if (!hostId) return true;
           return participantId !== hostId;
@@ -237,20 +217,9 @@ function initSocket(httpServer, frontendOrigin) {
           return;
         }
 
-        // NOTE (2026-05-03): Reset per-round room state at game start.
-        // Reason: avoid stale readiness/scores carrying into the next round and
-        // accidentally allowing immediate re-starts when players are still in-game.
         room.participants.forEach((p) => {
-          const participantId = p.user?._id
-            ? String(p.user._id)
-            : p.guestId
-              ? String(p.guestId)
-              : null;
-
-          if (participantId && hostId && participantId !== hostId) {
-            p.isReady = false;
-          }
-
+          const participantId = p.user?._id ? String(p.user._id) : p.guestId ? String(p.guestId) : null;
+          if (participantId && hostId && participantId !== hostId) p.isReady = false;
           p.correctCount = 0;
         });
         await room.save();
@@ -263,7 +232,6 @@ function initSocket(httpServer, frontendOrigin) {
 
         io.to(code).emit('game_state', result.game);
         if (typeof ack === 'function') ack({ ok: true, game: result.game });
-
         scheduleFamiliarAutoStart(code);
       } catch (error) {
         if (typeof ack === 'function') ack({ ok: false, error: error.message });
@@ -273,7 +241,6 @@ function initSocket(httpServer, frontendOrigin) {
     socket.on('game_familiar_ready', async (payload = {}, ack) => {
       const { roomCode } = payload;
       const userId = socket.user?.sub;
-
       if (!roomCode) {
         if (typeof ack === 'function') ack({ ok: false, error: 'Missing room code.' });
         return;
@@ -289,37 +256,7 @@ function initSocket(httpServer, frontendOrigin) {
       io.to(code).emit('game_state', result.game);
       if (typeof ack === 'function') ack({ ok: true, game: result.game });
 
-      if (result.game.status === 'playing') {
-        scheduleTurnTimer(code);
-      }
-      if (result.game.status === 'finished') {
-        clearRoomTimeout(code);
-        persistFinalScores(code, result.game.scores);
-        cleanupGameLater(code);
-      }
-    });
-
-    socket.on('game_familiar_pad_press', async (payload = {}) => {
-      const { roomCode, padIndex } = payload;
-      const userId = socket.user?.sub;
-
-      if (!roomCode) return;
-      const code = String(roomCode).toUpperCase();
-
-      const result = registerFamiliarPadPress({ roomCode: code, userId, padIndex });
-      if (!result.ok) return;
-
-      socket.to(code).emit('game_pad_sound', {
-        roomCode: code,
-        padIndex: Number(padIndex),
-        userId: String(userId),
-      });
-
-      io.to(code).emit('game_state', result.game);
-
-      if (result.game.status === 'playing') {
-        scheduleTurnTimer(code);
-      }
+      if (result.game.status === 'playing') scheduleTurnTimer(code);
       if (result.game.status === 'finished') {
         clearRoomTimeout(code);
         persistFinalScores(code, result.game.scores);
@@ -330,7 +267,6 @@ function initSocket(httpServer, frontendOrigin) {
     socket.on('game_pad_press', async (payload = {}) => {
       const { roomCode, padIndex } = payload;
       const userId = socket.user?.sub;
-
       if (!roomCode) return;
       const code = String(roomCode).toUpperCase();
 
@@ -340,23 +276,15 @@ function initSocket(httpServer, frontendOrigin) {
         return;
       }
 
-      socket.to(code).emit('game_pad_sound', {
-        roomCode: code,
-        padIndex: Number(padIndex),
-        userId: String(userId),
-      });
+      socket.to(code).emit('game_pad_sound', { roomCode: code, padIndex: Number(padIndex), userId: String(userId) });
       io.to(code).emit('game_state', result.game);
 
-      // Reschedule timeout on any state change.
       clearRoomTimeout(code);
-
       if (result.game.status === 'finished') {
-        // Persist final scores to Mongo for existing /ranking endpoint.
         persistFinalScores(code, result.game.scores);
         cleanupGameLater(code);
         return;
       }
-
       scheduleTurnTimer(code);
     });
   });
@@ -365,14 +293,8 @@ function initSocket(httpServer, frontendOrigin) {
 }
 
 function emitRoomUpdate(io, roomCode, roomState) {
-  if (!io || !roomCode) {
-    return;
-  }
-
+  if (!io || !roomCode) return;
   io.to(String(roomCode).toUpperCase()).emit('room_update', roomState);
 }
 
-module.exports = {
-  initSocket,
-  emitRoomUpdate
-};
+module.exports = { initSocket, emitRoomUpdate };
