@@ -161,11 +161,13 @@ jobs:
             docker start kichain-db
           fi
 
-          if docker ps -a --format '{{.Names}}' | grep -q '^kichain-dev-2$'; then
-            docker stop kichain-dev-2 || true
-            docker rm kichain-dev-2 || true
-          fi
-
+          for CONTAINER in kichain-dev kichain-dev-2; do
+            if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+              docker stop "$CONTAINER" || true
+              docker rm "$CONTAINER" || true
+            fi
+          done
+          
           docker run -d \
             --name kichain-dev-2 \
             --restart unless-stopped \
