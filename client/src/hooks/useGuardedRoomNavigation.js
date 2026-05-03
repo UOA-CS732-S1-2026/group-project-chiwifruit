@@ -4,13 +4,16 @@ import { useNavigate } from "react-router-dom"
 import { getApiErrorMessage, getStoredAuthToken } from "../api/axios"
 import { useGuestMutation } from "./mutations/useAuthMutations"
 import { useCreateRoomMutation, useJoinRoomMutation } from "./mutations/useRoomMutations"
+import { leavePreviousRoomIfNeeded, setCurrentRoomCode } from "../lib/roomLifecycle"
 
-// NOTE (2026-04-29): 统一封装 Landing 的“先确保 guest token，再 create/join room”流程。
-// 这样 LandingPage 不需要关心 auth 细节，避免忘了先拿 token 导致 401。
+// Landing room navigation owns the transition between rooms.
+// Before creating/joining a new room, clean up the previously tracked room so one
+// browser session cannot remain in multiple room participant lists.
 
 export default function useGuardedRoomNavigation() {
 	const navigate = useNavigate()
 	const [actionError, setActionError] = useState("")
+	const [isCleaningRoom, setIsCleaningRoom] = useState(false)
 
 	const guestMutation = useGuestMutation({
 		onError: (error) => {
@@ -30,7 +33,6 @@ export default function useGuardedRoomNavigation() {
 		},
 	})
 
-	// Guard flow shared by create/join: ensure guest session before room API call.
 	const ensureGuestThen = (onReady) => {
 		setActionError("")
 		if (getStoredAuthToken()) {
@@ -47,18 +49,23 @@ export default function useGuardedRoomNavigation() {
 
 	const createRoomGuarded = ({ onSuccess } = {}) => {
 		ensureGuestThen(() => {
-			createRoomMutation.mutate(undefined, {
-				onSuccess: (data) => {
-					// Navigate only after backend confirms room creation.
-					const roomCode = String(data?.roomCode ?? "").trim().toUpperCase()
-					if (!roomCode) {
-						setActionError("Create room failed. Please try again.")
-						return
-					}
-					navigate(`/room/${roomCode}`)
-					onSuccess?.(data)
-				},
-			})
+			setIsCleaningRoom(true)
+			leavePreviousRoomIfNeeded("")
+				.finally(() => {
+					setIsCleaningRoom(false)
+					createRoomMutation.mutate(undefined, {
+						onSuccess: (data) => {
+							const roomCode = String(data?.roomCode ?? "").trim().toUpperCase()
+							if (!roomCode) {
+								setActionError("Create room failed. Please try again.")
+								return
+							}
+							setCurrentRoomCode(roomCode)
+							navigate(`/room/${roomCode}`, { replace: true })
+							onSuccess?.(data)
+						},
+					})
+				})
 		})
 	}
 
@@ -70,21 +77,26 @@ export default function useGuardedRoomNavigation() {
 		}
 
 		ensureGuestThen(() => {
-			joinRoomMutation.mutate(normalizedCode, {
-				onSuccess: (data) => {
-					// Same protection for join: no route change until server accepts code.
-					const resolvedRoomCode = String(data?.roomCode ?? normalizedCode).trim().toUpperCase()
-					navigate(`/room/${resolvedRoomCode}`)
-					onSuccess?.(data)
-				},
-			})
+			setIsCleaningRoom(true)
+			leavePreviousRoomIfNeeded(normalizedCode)
+				.finally(() => {
+					setIsCleaningRoom(false)
+					joinRoomMutation.mutate(normalizedCode, {
+						onSuccess: (data) => {
+							const resolvedRoomCode = String(data?.roomCode ?? normalizedCode).trim().toUpperCase()
+							setCurrentRoomCode(resolvedRoomCode)
+							navigate(`/room/${resolvedRoomCode}`, { replace: true })
+							onSuccess?.(data)
+						},
+					})
+				})
 		})
 	}
 
 	return {
 		actionError,
 		clearActionError: () => setActionError(""),
-		isPending: guestMutation.isPending || createRoomMutation.isPending || joinRoomMutation.isPending,
+		isPending: isCleaningRoom || guestMutation.isPending || createRoomMutation.isPending || joinRoomMutation.isPending,
 		createRoomGuarded,
 		joinRoomGuarded,
 	}
