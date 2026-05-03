@@ -19,16 +19,16 @@ import {
 	useSetReadyMutation,
 } from "../hooks/mutations/useRoomMutations"
 import { useRoomQuery } from "../hooks/queries/useRoomQuery"
-import { getApiErrorMessage, getStoredAuthUser } from "../api/axios"
+import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../api/axios"
 
 import birdIcon from "../assets/icons/bird.svg"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import { emitGameRequestState, emitGameStart, joinSocketRoom, leaveSocketRoom, reconnectSocket } from "../socket/socket"
 
-// NOTE (2026-04-29): Waiting Room 页面同时依赖两类机制：
-// - REST: join/leave room, ready/mode/difficulty 等“房间成员列表/配置”
-// - Socket: 订阅 room_update / game_state 等实时广播，并在游戏开始时自动跳转
-// 重点：离开等待房间请走 REST leaveRoom；socket leave_room 在本项目语义是“离开比赛=判负”。
+// NOTE (2026-04-29): The waiting room relies on two systems:
+// - REST: join/leave room, ready/mode/difficulty — room participants and configuration
+// - Socket: subscribe to room_update / game_state real-time broadcasts and auto-navigate when the game starts
+// Important: use REST leaveRoom to exit the waiting room; socket leave_room means "leave the match = forfeit" in this app.
 
 function BirdIcon({ className, ...props }) {
 	const isActive = Boolean(props["data-active"])
@@ -91,6 +91,13 @@ export default function RoomPage() {
 
 		if (!requestedJoinCode) {
 			setSetupError("Missing room code. Please go back and join/create from landing page.")
+			navigate("/", { replace: true })
+			return
+		}
+
+		const token = getStoredAuthToken()
+		if (!token) {
+			setSetupError("Missing session. Please join from the home page.")
 			navigate("/", { replace: true })
 			return
 		}
@@ -171,6 +178,7 @@ export default function RoomPage() {
 
 	const errorMessage = setupError || (roomQueryError ? getApiErrorMessage(roomQueryError) : "")
 	const isSettingUpRoom = joinRoomMutation.isPending
+	const shouldShowRoomContent = !errorMessage && !isSettingUpRoom && !isRoomLoading && Boolean(roomCode)
 	const user = getStoredAuthUser()
 	const avatarUrl = typeof user?.avatarUrl === "string" ? user.avatarUrl : undefined
 	const loginLabel = typeof user?.username === "string" ? user.username : "Login"
@@ -253,8 +261,8 @@ export default function RoomPage() {
 									navigate("/")
 									return
 								}
-										// NOTE (2026-04-29): 先 REST leaveRoom() 确保从 participants 移除并广播 room_update；
-										// 然后再发 socket leave_room（用于 game-side 的“离开比赛”语义）。
+								// NOTE (2026-04-29): First call REST leaveRoom() to remove the player from participants and broadcast room_update;
+								// then emit socket leave_room (which has the game-side meaning of "leave the match").
 								leaveRoomMutation.mutate(roomCode, {
 									onSuccess: () => {
 										leaveSocketRoom(roomCode)
@@ -279,10 +287,22 @@ export default function RoomPage() {
 					) : null}
 
 					{errorMessage ? (
-						<p className="mt-4 text-center text-sm font-semibold text-destructive">{errorMessage}</p>
+						<div className="mt-4 text-center">
+							<p className="text-sm font-semibold text-destructive">{errorMessage}</p>
+							<Button
+								type="button"
+								variant="outline"
+								className="mt-4 rounded-full px-6 py-2 text-sm font-semibold"
+								onClick={() => navigate("/")}
+							>
+								Back to Home
+							</Button>
+						</div>
 					) : null}
 
-					<div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+					{shouldShowRoomContent ? (
+						<>
+							<div className="mt-6 flex flex-wrap items-center justify-center gap-4">
 						<RoomPill>
 							<span className="text-muted-foreground">Room Code:</span>
 							<span className="text-lg font-bold text-primary">{roomCode}</span>
@@ -385,6 +405,8 @@ export default function RoomPage() {
 							</Button>
 						)}
 					</div>
+					</>
+				) : null}
 				</main>
 			</div>
 		</Background>
