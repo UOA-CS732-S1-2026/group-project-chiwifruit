@@ -25,6 +25,47 @@ function isGameRoute() {
 	return window.location.pathname.toLowerCase().startsWith("/game/")
 }
 
+function normalizeAckResponse(response, fallbackMessage) {
+	if (!response || typeof response !== "object") {
+		return { ok: false, error: fallbackMessage, message: fallbackMessage }
+	}
+
+	const errorMessage =
+		typeof response.error === "string"
+			? response.error
+			: typeof response.message === "string"
+				? response.message
+				: fallbackMessage
+
+	if (response.ok) return response
+	return {
+		...response,
+		error: errorMessage,
+		message: errorMessage,
+	}
+}
+
+function emitWithAckTimeout(socketInstance, eventName, payload, ack, fallbackMessage) {
+	if (typeof ack !== "function") {
+		socketInstance.emit(eventName, payload)
+		return
+	}
+
+	let settled = false
+	const timeoutId = window.setTimeout(() => {
+		if (settled) return
+		settled = true
+		ack({ ok: false, error: fallbackMessage, message: fallbackMessage })
+	}, 5000)
+
+	socketInstance.emit(eventName, payload, (response) => {
+		if (settled) return
+		settled = true
+		window.clearTimeout(timeoutId)
+		ack(normalizeAckResponse(response, fallbackMessage))
+	})
+}
+
 export function getSocket() {
 	if (!socket) {
 		socket = buildSocket()
@@ -68,25 +109,25 @@ export function emitGameStart(roomCode, ack) {
 	// accidentally restart the familiarisation flow from a stale game route.
 	if (isGameRoute()) {
 		if (typeof ack === "function") {
-			ack({ ok: false, error: "Game start must be triggered from the room." })
+			ack({ ok: false, error: "Game start must be triggered from the room.", message: "Game start must be triggered from the room." })
 		}
 		return
 	}
 
 	const s = reconnectSocket()
-	s.emit(SOCKET_EVENTS.GAME_START, { roomCode }, ack)
+	emitWithAckTimeout(s, SOCKET_EVENTS.GAME_START, { roomCode }, ack, "Unable to start game")
 }
 
 export function emitGameRequestState(roomCode, ack) {
 	if (!roomCode) return
 	const s = reconnectSocket()
-	s.emit(SOCKET_EVENTS.GAME_REQUEST_STATE, { roomCode }, ack)
+	emitWithAckTimeout(s, SOCKET_EVENTS.GAME_REQUEST_STATE, { roomCode }, ack, "Unable to load game")
 }
 
 export function emitGameFamiliarReady(roomCode, ack) {
 	if (!roomCode) return
 	const s = reconnectSocket()
-	s.emit(SOCKET_EVENTS.GAME_FAMILIAR_READY, { roomCode }, ack)
+	emitWithAckTimeout(s, SOCKET_EVENTS.GAME_FAMILIAR_READY, { roomCode }, ack, "Unable to update familiarisation state")
 }
 
 export function emitGameFamiliarPadPress(roomCode, padIndex) {
