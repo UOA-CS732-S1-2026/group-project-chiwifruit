@@ -1,4 +1,5 @@
 import { leaveRoom } from "../api/rooms"
+import { leaveSocketRoom } from "../socket/socket"
 
 const CURRENT_ROOM_KEY = "kichain.currentRoomCode"
 
@@ -39,6 +40,7 @@ export async function leaveTrackedRoom({ roomCode, clear = true } = {}) {
 	} catch (error) {
 		return { skipped: false, error }
 	} finally {
+		leaveSocketRoom(normalized)
 		if (clear) clearCurrentRoomCode(normalized)
 	}
 }
