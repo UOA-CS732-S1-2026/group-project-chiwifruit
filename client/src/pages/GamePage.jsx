@@ -55,9 +55,9 @@ export default function GamePage() {
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const lastFamiliarAutoPlayedPadRef = React.useRef({ gameId: null, index: null, at: 0 })
-	// NOTE (2026-04-29): React 18 StrictMode + socket event timing 会导致“熟悉阶段自动播放”
-	// 与远端/本地 pad sound 事件几乎同时触发，从而出现同一个音重复播放。这里用
-	// {gameId, index, at} 做去重，保证单次 pad 只响一次。
+// NOTE (2026-04-29): React 18 StrictMode + socket event timing can cause duplicate familiarization autoplay.
+// Remote and local pad sound events may fire almost simultaneously, causing the same note to play twice.
+// Using {gameId, index, at} for deduplication ensures each pad only plays once.
 	const user = getStoredAuthUser()
 	const headerAvatarUrl = typeof user?.avatarUrl === "string" ? user.avatarUrl : undefined
 	const headerLoginLabel = typeof user?.username === "string" ? user.username : "Login"
@@ -83,6 +83,8 @@ export default function GamePage() {
 	const canStartGame = Boolean(isHost && roomState?.canStartGame)
 	const [socketGame, setSocketGame] = React.useState(null)
 	const [socketError, setSocketError] = React.useState("")
+	const [gameLoadError, setGameLoadError] = React.useState("")
+	const [isGameLoading, setIsGameLoading] = React.useState(true)
 	const [serverOffsetMs, setServerOffsetMs] = React.useState(0)
 	const isSocketDriven = Boolean(socketGame?.gameId)
 	const participantOrder = React.useMemo(
@@ -132,8 +134,8 @@ export default function GamePage() {
 	}, [location.state?.difficulty, roomState?.difficulty, socketGame?.difficulty])
 	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : getPadCountByDifficulty(difficulty)
 	
-	// NOTE (2026-04-29): 音频列表只用 socket 驱动的数据生成（audioSeed + padCount）。
-	// 原因：避免 roomState/location 变化导致重新洗牌，造成玩家两端音频映射不一致。
+// NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
+// This avoids reshuffling when roomState/location changes, which would desync audio mapping between clients.
 	const noteUrls = React.useMemo(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed) return []
 		return pickGameNoteUrls({ 
@@ -145,11 +147,22 @@ export default function GamePage() {
 
 	React.useEffect(() => {
 		if (!roomCode) return
+		if (!currentUserId) {
+			setGameLoadError("Missing session. Please return to home and join again.")
+			setIsGameLoading(false)
+			navigate("/", { replace: true })
+			return
+		}
+
+		let hasReceivedGameState = false
 		setSocketError("")
+		setGameLoadError("")
+		setIsGameLoading(true)
 		joinSocketRoom(roomCode)
 		const socket = reconnectSocket()
 
 		const onGameState = (nextState) => {
+			hasReceivedGameState = true
 			if (typeof nextState?.serverNow === "number") {
 				setServerOffsetMs(nextState.serverNow - Date.now())
 			}
@@ -158,6 +171,10 @@ export default function GamePage() {
 		const onGameError = (payload) => {
 			const message = typeof payload?.message === "string" ? payload.message : "Game error"
 			setSocketError(message)
+			if (!hasReceivedGameState) {
+				setGameLoadError(message)
+				setIsGameLoading(false)
+			}
 		}
 		const onGamePadSound = (payload) => {
 			const sourceUserId = typeof payload?.userId === "string" ? payload.userId : null
@@ -165,7 +182,7 @@ export default function GamePage() {
 			const padIndex = Number(payload?.padIndex)
 			if (!Number.isInteger(padIndex) || padIndex < 0 || padIndex >= noteUrls.length) return
 			playGameNote(noteUrls[padIndex])
-			// NOTE (2026-04-29): 远端 pad sound 已经播放过一次，自动播放 effect 不应再次补播。
+			// NOTE (2026-04-29): The remote pad sound has already played once, so the automatic playback effect should not play again.
 			lastFamiliarAutoPlayedPadRef.current = { gameId: null, index: padIndex, at: Date.now() }
 			setActivePadIndex(padIndex)
 			window.setTimeout(() => setActivePadIndex(null), 180)
@@ -176,7 +193,15 @@ export default function GamePage() {
 		socket.on("game_pad_sound", onGamePadSound)
 
 		emitGameRequestState(roomCode, (response) => {
-			if (response?.ok && response.game) onGameState(response.game)
+			if (response?.ok && response.game) {
+				onGameState(response.game)
+				setIsGameLoading(false)
+				return
+			}
+
+			const message = typeof response?.message === "string" ? response.message : "Unable to load game"
+			setGameLoadError(message)
+			setIsGameLoading(false)
 		})
 
 		return () => {
@@ -184,7 +209,7 @@ export default function GamePage() {
 			socket.off("game_error", onGameError)
 			socket.off("game_pad_sound", onGamePadSound)
 		}
-	}, [currentUserId, noteUrls, roomCode])
+	}, [currentUserId, navigate, noteUrls, roomCode])
 
 	const [phase, setPhase] = React.useState(PHASE.FAMILIARIZE_AUTO)
 	const padThemes = React.useMemo(
@@ -539,7 +564,7 @@ export default function GamePage() {
 		const now = Date.now()
 		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
 		const last = lastFamiliarAutoPlayedPadRef.current
-		// NOTE (2026-04-29): 250ms 窗口内认为是同一次触发（StrictMode/重复渲染/事件抖动）。
+		// NOTE (2026-04-29): Within a 250ms window, treat this as the same trigger (StrictMode/re-render/event jitter).
 		if (last?.gameId === currentGameId && last?.index === activePadIndex && now - Number(last?.at ?? 0) < 250) {
 			return
 		}
@@ -556,7 +581,21 @@ export default function GamePage() {
 		return (
 			<Background>
 				<div className="flex min-h-screen items-center justify-center px-6 text-center">
-					<p className="text-sm font-semibold text-muted-foreground">Connecting to game...</p>
+					{gameLoadError && !isGameLoading ? (
+						<div>
+							<p className="text-sm font-semibold text-destructive">{gameLoadError}</p>
+							<Button
+								type="button"
+								variant="outline"
+								className="mt-4 rounded-full px-6 py-2 text-sm font-semibold"
+								onClick={() => navigate(roomCode ? `/room/${roomCode}` : "/")}
+							>
+								Return
+							</Button>
+						</div>
+					) : (
+						<p className="text-sm font-semibold text-muted-foreground">Connecting to game...</p>
+					)}
 				</div>
 			</Background>
 		)
@@ -590,8 +629,8 @@ export default function GamePage() {
 					navigate(roomCode ? `/room/${roomCode}` : "/")
 				}}
 				onBackToHome={() => {
-					// NOTE (2026-04-29): “回首页”必须先 REST leaveRoom，让其他玩家看到你离开。
-					// socket 的 leave_room 语义是“离开比赛=直接判负”，这里只是离开房间名单。
+						// NOTE (2026-04-29): When returning to home, call REST leaveRoom first so other players see you left.
+						// socket leave_room means "leave the match = forfeit"; here we only want to leave the room roster.
 					setIsResultsModalOpen(false)
 					if (!roomCode) {
 						navigate("/")
