@@ -1,23 +1,23 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { register } from "../api/auth";
-import { setStoredAuthSession, getApiErrorMessage } from "../api/axios";
+import { useState } from "react"
+import { useNavigate, Link } from "react-router-dom"
+import { register } from "../api/auth"
+import { setStoredAuthSession, getApiErrorMessage } from "../api/axios"
 
 export default function RegisterPage() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
 
     if (!username.trim() || !password.trim()) {
-      setError("Username and password are required");
-      return;
+      setError("Username and password are required")
+      return
     }
 
     try {
@@ -25,16 +25,16 @@ export default function RegisterPage() {
       const data = await register({
         username: username.trim(),
         password,
-      });
+      })
 
-      setStoredAuthSession(data);
-      navigate("/");
+      setStoredAuthSession(data)
+      navigate("/")
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getApiErrorMessage(err))
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
@@ -86,5 +86,5 @@ export default function RegisterPage() {
         </p>
       </form>
     </div>
-  );
+  )
 }
