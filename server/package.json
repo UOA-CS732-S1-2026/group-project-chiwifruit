@@ -9,8 +9,9 @@
     "start": "NODE_OPTIONS='--no-deprecation' node src/server.js",
     "check": "node --check src/server.js",
     "smoke": "node scripts/smoke-health.js",
-    "ci": "npm run check && npm run smoke",
-    "test": "jest --runInBand"
+    "ci": "npm run check && npm test && npm run smoke",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage"
   },
   "dependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",

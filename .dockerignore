@@ -1,14 +1,25 @@
 .git
 .gitignore
+.github
+
 node_modules
 client/node_modules
 server/node_modules
+
 npm-debug.log*
 
 .env
+.env.*
 **/.env
+**/.env.*
+!**/.env.example
 
 .DS_Store
-dist
+
 coverage
-npm-debug.log
+**/coverage
+.nyc_output
+
+client/dist
+server/test
+**/*.test.js

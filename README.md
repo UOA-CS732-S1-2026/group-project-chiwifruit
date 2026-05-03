@@ -1,7 +1,8 @@
 # Group Project Chiwifruit
 
 [![CI/CD](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml)
-
+![Backend tests](https://img.shields.io/badge/backend_tests-Jest%20%2B%20Supertest-blue)
+![API coverage](https://img.shields.io/badge/API%20coverage-auth%20%7C%20rooms%20%7C%20game%20state-green)
 
 Full-stack workspace for the Sound Chain game project.
 
@@ -35,26 +36,53 @@ The root [package.json](package.json) is configured as an npm workspace and can 
 - `npm run build` builds frontend
 - `npm run start` starts backend in non-dev mode
 
+## Testing and Coverage
+
+Backend tests are written with Jest and Supertest. They cover:
+- Auth API contract tests
+- Room API contract tests, including happy paths and key error paths
+- Core game-state unit tests for turn progression, elimination, timeout, and forfeit edge cases
+- Token service unit tests
+- Focused socket helper tests
+
+Run all backend tests:
+
+```bash
+npm test --workspace=server
+```
+
+Run backend tests with coverage:
+
+```bash
+npm run test:coverage --workspace=server
+```
+
+The coverage report is generated locally under:
+
+```text
+server/coverage/lcov-report/index.html
+```
+
+The CI pipeline runs the backend Jest suite as part of the server validation gate.
 
 ## GitHub Actions CI (PR Gate for `dev` and `main`)
 
-This repository now includes a workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that runs on:
+This repository includes a workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that runs on:
 - Pull requests targeting `dev` or `main`
 - Direct pushes to `dev` or `main`
 
-The CI pipeline runs in a GitHub-hosted Ubuntu runner (no Docker required for CI) and executes:
+The CI pipeline runs in a GitHub-hosted Ubuntu runner and executes:
 - Frontend integrity checks: `npm run lint` + `npm run build`
-- Backend integrity check: `node --check src/server.js`
+- Backend syntax check: `node --check src/server.js`
+- Backend Jest test suite: API, service, and focused socket helper tests
 - Backend smoke test: starts the Express app in-process and verifies `GET /health` returns `{ status: "ok" }`
+- Docker image build validation
 
-### Why no Docker in CI right now?
+### Why no full Docker-based test pipeline right now?
 
-Given your current goal (fast failure on obviously broken code), GitHub Actions runners are the simplest and most maintainable default:
-- Faster setup and execution for JS workspace checks
-- Fewer moving parts than building containers during every PR
-- Good signal for code integrity/lint/build/smoke without requiring external services
+The CI currently runs code validation directly on GitHub Actions runners, then separately validates that the Docker image can be built. This keeps PR feedback fast while still catching container packaging issues.
 
-You can add a Docker image build job later when you want to validate container packaging too.
+You can extend this later with a containerized test job if production parity becomes more important.
 
 ### Required GitHub repo settings (one-time)
 
@@ -65,7 +93,7 @@ To make CI truly block merges to `dev` and `main`, enable branch protection rule
 3. Enable:
    - **Require a pull request before merging**
    - **Require status checks to pass before merging**
-4. In status checks, select the job **`validate`** from this workflow.
+4. In status checks, select the jobs **`validate`** and **`docker-build`** from this workflow.
 5. Repeat the same rule for `dev`.
 
 Optional hardening:
@@ -99,7 +127,6 @@ npm run dev
 6. Verify services:
 - Frontend: `http://localhost:5173`
 - Backend health endpoint: `http://localhost:3000/health`
-
 
 ## Local Docker Development Environment
 
@@ -165,6 +192,8 @@ From the project root:
 docker build -t kichain-dev:local .
 ```
 
+The Docker build context excludes local dependencies, test files, coverage output, Git metadata, and environment files through [.dockerignore](.dockerignore).
+
 ### 5. Start the app container
 
 ```bash
@@ -224,9 +253,13 @@ If you need a clean MongoDB container:
 docker stop kichain-db
 docker rm kichain-db
 ```
+
+Then start MongoDB again:
+
 ```bash
 docker run -d \
   --name kichain-db \
   --network kichain-net \
   -p 27017:27017 \
+  mongo:latest
 ```

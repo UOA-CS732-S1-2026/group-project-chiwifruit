@@ -233,6 +233,17 @@ function endTurnAdvance(game) {
   }
 }
 
+function finishIfOnlyOneAlive(game) {
+  const alive = game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(id));
+  if (alive.length <= 1) {
+    game.status = 'finished';
+    game.turnEndsAt = null;
+    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId: alive[0] ?? null };
+    return true;
+  }
+  return false;
+}
+
 function forfeitPlayer({ roomCode, userId, reason }) {
   const game = getGame(roomCode);
   if (!game) return { ok: false, error: 'No active game.' };
@@ -248,6 +259,8 @@ function forfeitPlayer({ roomCode, userId, reason }) {
     return { ok: true, game: serializeGame(game) };
   }
 
+  const currentUserId = game.participantsOrder[game.currentTurnIndex];
+
   game.eliminatedUserIds.add(participantId);
   game.lastEvent = {
     type: 'player_eliminated',
@@ -256,10 +269,8 @@ function forfeitPlayer({ roomCode, userId, reason }) {
     reason: reason || 'left_game',
   };
 
-  // If the player leaves during playing and it was their turn, advance immediately.
   if (game.status === 'playing') {
-    const currentUserId = game.participantsOrder[game.currentTurnIndex];
-    if (String(currentUserId) === participantId) {
+    if (!finishIfOnlyOneAlive(game) && String(currentUserId) === participantId) {
       endTurnAdvance(game);
     }
   }
