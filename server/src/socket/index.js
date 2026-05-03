@@ -228,10 +228,20 @@ function initSocket(httpServer, frontendOrigin) {
           return;
         }
 
-        // NOTE (2026-04-27): Reset scores at game start.
-        // Reason: `participants.correctCount` is used for ranking/results; we want
-        // a clean slate per game.
+        // NOTE (2026-05-03): Reset per-round room state at game start.
+        // Reason: avoid stale readiness/scores carrying into the next round and
+        // accidentally allowing immediate re-starts when players are still in-game.
         room.participants.forEach((p) => {
+          const participantId = p.user?._id
+            ? String(p.user._id)
+            : p.guestId
+              ? String(p.guestId)
+              : null;
+
+          if (participantId && hostId && participantId !== hostId) {
+            p.isReady = false;
+          }
+
           p.correctCount = 0;
         });
         await room.save();
