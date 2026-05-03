@@ -82,6 +82,15 @@ function initSocket(httpServer, frontendOrigin) {
       io.to(roomCode).emit('game_state', forced.game);
       if (forced.game.status === 'playing') {
         scheduleTurnTimer(roomCode);
+        return;
+      }
+
+      // If familiarization timed out after players had already left/disconnected,
+      // gameService may correctly finish instead of starting a one-player game.
+      if (forced.game.status === 'finished') {
+        clearRoomTimeout(roomCode);
+        persistFinalScores(roomCode, forced.game.scores);
+        cleanupGameLater(roomCode);
       }
     }, ms);
   }
@@ -191,16 +200,16 @@ function initSocket(httpServer, frontendOrigin) {
       try {
         const code = String(roomCode).toUpperCase();
 
-    // If there is already an active game, do NOT start a new one.
-    // This commonly happens when the host refreshes the page and the client
-    // re-emits `game_start`.
-    const existing = getGame(code);
-    if (existing && existing.status !== 'finished') {
-      const snapshot = serializeGame(existing);
-      io.to(code).emit('game_state', snapshot);
-      if (typeof ack === 'function') ack({ ok: false, error: 'Game already in progress.', game: snapshot });
-      return;
-    }
+        // If there is already an active game, do NOT start a new one.
+        // This commonly happens when the host refreshes the page and the client
+        // re-emits `game_start`.
+        const existing = getGame(code);
+        if (existing && existing.status !== 'finished') {
+          const snapshot = serializeGame(existing);
+          io.to(code).emit('game_state', snapshot);
+          if (typeof ack === 'function') ack({ ok: false, error: 'Game already in progress.', game: snapshot });
+          return;
+        }
 
         const room = await Room.findOne({ roomCode: code }).populate('participants.user', 'username');
         if (!room) {
@@ -283,6 +292,11 @@ function initSocket(httpServer, frontendOrigin) {
       if (result.game.status === 'playing') {
         scheduleTurnTimer(code);
       }
+      if (result.game.status === 'finished') {
+        clearRoomTimeout(code);
+        persistFinalScores(code, result.game.scores);
+        cleanupGameLater(code);
+      }
     });
 
     socket.on('game_familiar_pad_press', async (payload = {}) => {
@@ -305,6 +319,11 @@ function initSocket(httpServer, frontendOrigin) {
 
       if (result.game.status === 'playing') {
         scheduleTurnTimer(code);
+      }
+      if (result.game.status === 'finished') {
+        clearRoomTimeout(code);
+        persistFinalScores(code, result.game.scores);
+        cleanupGameLater(code);
       }
     });
 
