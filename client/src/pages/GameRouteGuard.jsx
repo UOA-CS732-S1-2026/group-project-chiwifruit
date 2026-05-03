@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useLocation, useNavigate, useParams } from "react-router-dom"
 
 import Background from "../components/Common/Background"
 import { Button } from "../components/ui/button"
@@ -20,6 +20,17 @@ function getGameRouteStatus(game) {
 	if (ACTIVE_GAME_STATUSES.has(status)) return "active"
 	if (status === "finished") return "ended"
 	return "error"
+}
+
+function isSameRoomGame(game, roomCode) {
+	const stateRoomCode = String(game?.roomCode ?? "").trim().toUpperCase()
+	return Boolean(stateRoomCode) && stateRoomCode === String(roomCode).toUpperCase()
+}
+
+function isCurrentUserInGame(game, currentUserId) {
+	if (!currentUserId) return false
+	if (!Array.isArray(game?.participantsOrder)) return true
+	return game.participantsOrder.map((id) => String(id)).includes(String(currentUserId))
 }
 
 function TerminalGameRouteState({ title, message, roomCode }) {
@@ -58,16 +69,33 @@ function TerminalGameRouteState({ title, message, roomCode }) {
 
 export default function GameRouteGuard() {
 	const navigate = useNavigate()
+	const location = useLocation()
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const currentUserId = getStoredAuthUser()?.id ? String(getStoredAuthUser().id) : null
+	const startedGame = location.state?.startedGame
+	const startedGameIdRef = React.useRef(null)
 	const settledRef = React.useRef(false)
 	const [routeState, setRouteState] = React.useState({ status: "loading", message: "" })
 
 	React.useEffect(() => {
 		settledRef.current = false
 		setRouteState({ status: "loading", message: "" })
+		startedGameIdRef.current = null
 	}, [roomCode])
+
+	React.useEffect(() => {
+		if (!roomCode) return
+		if (!currentUserId) return
+		if (!startedGame) return
+		if (!isSameRoomGame(startedGame, roomCode)) return
+		if (!isCurrentUserInGame(startedGame, currentUserId)) return
+		if (getGameRouteStatus(startedGame) !== "active") return
+
+		startedGameIdRef.current = String(startedGame.gameId)
+		settledRef.current = true
+		setRouteState({ status: "active", message: "" })
+	}, [currentUserId, roomCode, startedGame])
 
 	React.useEffect(() => {
 		if (!roomCode) {
@@ -91,18 +119,14 @@ export default function GameRouteGuard() {
 		}
 
 		const classifyGame = (game) => {
-			const stateRoomCode = String(game?.roomCode ?? "").trim().toUpperCase()
-			if (!stateRoomCode || stateRoomCode !== roomCode) {
+			if (!isSameRoomGame(game, roomCode)) {
 				finish({ status: "error", message: "Unable to load game." })
 				return
 			}
 
-			if (Array.isArray(game?.participantsOrder)) {
-				const participantIds = game.participantsOrder.map((id) => String(id))
-				if (!participantIds.includes(String(currentUserId))) {
-					finish({ status: "error", message: "You are not part of this game." })
-					return
-				}
+			if (!isCurrentUserInGame(game, currentUserId)) {
+				finish({ status: "error", message: "You are not part of this game." })
+				return
 			}
 
 			const routeStatus = getGameRouteStatus(game)
@@ -110,6 +134,18 @@ export default function GameRouteGuard() {
 				finish({ status: "active", message: "" })
 				return
 			}
+
+			// If this route was entered immediately after a successful game_start ack,
+			// ignore stale finished snapshots from the previous round. A fresh active
+			// game_state for startedGameId will arrive through the same socket channel.
+			if (
+				routeStatus === "ended" &&
+				startedGameIdRef.current &&
+				String(game?.gameId ?? "") !== startedGameIdRef.current
+			) {
+				return
+			}
+
 			if (routeStatus === "ended") {
 				finish({ status: "ended", message: "This game has already ended." })
 				return
