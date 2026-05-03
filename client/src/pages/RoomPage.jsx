@@ -23,27 +23,12 @@ import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../ap
 
 import birdIcon from "../assets/icons/bird.svg"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
+import { clearCurrentRoomCode, setCurrentRoomCode } from "../lib/roomLifecycle"
 import { emitGameRequestState, emitGameStart, joinSocketRoom, leaveSocketRoom, reconnectSocket } from "../socket/socket"
-
-// NOTE (2026-04-29): The waiting room relies on two systems:
-// - REST: join/leave room, ready/mode/difficulty — room participants and configuration
-// - Socket: subscribe to room_update / game_state real-time broadcasts and auto-navigate when the game starts
-// Important: use REST leaveRoom to exit the waiting room; socket leave_room means "leave the match = forfeit" in this app.
 
 function BirdIcon({ className, ...props }) {
 	const isActive = Boolean(props["data-active"])
-
-	return (
-		<img
-			src={birdIcon}
-			alt=""
-			aria-hidden="true"
-			className={"size-4 " + (className ?? "")}
-			style={{
-				filter: isActive ? "brightness(0) invert(1)" : "none",
-			}}
-		/>
-	)
+	return <img src={birdIcon} alt="" aria-hidden="true" className={"size-4 " + (className ?? "")} style={{ filter: isActive ? "brightness(0) invert(1)" : "none" }} />
 }
 
 function getSocketResponseMessage(response, fallback) {
@@ -55,7 +40,6 @@ function getSocketResponseMessage(response, fallback) {
 export default function RoomPage() {
 	const navigate = useNavigate()
 	const { roomCode: roomCodeParam = "" } = useParams()
-	// Background music is enabled on Landing + Room pages.
 	useBackgroundMusic()
 
 	const normalizedParamCode = String(roomCodeParam).trim().toUpperCase()
@@ -63,29 +47,27 @@ export default function RoomPage() {
 	const [roomCode, setRoomCode] = useState("")
 	const [setupError, setSetupError] = useState("")
 	const [isStartingGame, setIsStartingGame] = useState(false)
-
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
 
 	useEffect(() => {
 		startedSetupRef.current = false
 		setSetupError("")
+		setRoomCode("")
 	}, [normalizedParamCode])
 
 	const joinRoomMutation = useJoinRoomMutation({
 		onSuccess: (data) => {
+			const joinedCode = String(data?.roomCode ?? requestedJoinCode).trim().toUpperCase()
 			setSetupError("")
-			setRoomCode(String(data?.roomCode ?? requestedJoinCode))
+			setRoomCode(joinedCode)
+			setCurrentRoomCode(joinedCode)
 		},
-		onError: (error) => {
-			setSetupError(getApiErrorMessage(error))
-		},
+		onError: (error) => setSetupError(getApiErrorMessage(error)),
 	})
 
 	const leaveRoomMutation = useLeaveRoomMutation({
-		onError: (error) => {
-			setSetupError(getApiErrorMessage(error))
-		},
+		onError: (error) => setSetupError(getApiErrorMessage(error)),
 	})
 
 	const selectModeMutation = useSelectModeMutation()
@@ -102,8 +84,7 @@ export default function RoomPage() {
 			return
 		}
 
-		const token = getStoredAuthToken()
-		if (!token) {
+		if (!getStoredAuthToken()) {
 			setSetupError("Missing session. Please join from the home page.")
 			navigate("/", { replace: true })
 			return
@@ -112,11 +93,7 @@ export default function RoomPage() {
 		joinRoomMutation.mutate(requestedJoinCode)
 	}, [joinRoomMutation, navigate, requestedJoinCode])
 
-	const { data: roomState, isLoading: isRoomLoading, error: roomQueryError } = useRoomQuery(
-		roomCode,
-		Boolean(roomCode),
-	)
-
+	const { data: roomState, isLoading: isRoomLoading, error: roomQueryError } = useRoomQuery(roomCode, Boolean(roomCode))
 	const mode = roomState?.mode ?? "bird"
 	const difficulty = roomState?.difficulty ?? "easy"
 
@@ -142,64 +119,49 @@ export default function RoomPage() {
 				isReady: Boolean(participant.isReady),
 			}
 		})
-
 		const maxCount = roomState?.maxParticipantCount ?? 6
-		const emptySlots = Array.from({ length: Math.max(0, maxCount - mapped.length) }, (_, index) => ({
-			id: `empty-${index + 1}`,
-			isEmpty: true,
-		}))
-
+		const emptySlots = Array.from({ length: Math.max(0, maxCount - mapped.length) }, (_, index) => ({ id: `empty-${index + 1}`, isEmpty: true }))
 		return [...mapped, ...emptySlots]
 	}, [hostUserId, identity?.sub, roomState?.maxParticipantCount, roomState?.participants])
 
 	const nonEmptyPlayers = players.filter((player) => !player.isEmpty)
 	const totalPlayers = roomState?.maxParticipantCount ?? players.length
-
-	const currentUserPlayer = nonEmptyPlayers.find(
-		(player) => Boolean(identity?.sub) && String(player.id) === identity.sub,
-	)
+	const currentUserPlayer = nonEmptyPlayers.find((player) => Boolean(identity?.sub) && String(player.id) === identity.sub)
 	const currentUserReady = Boolean(currentUserPlayer?.isReady)
-
 	const canStartGame = Boolean(isHost && roomState?.canStartGame)
 
 	const handleStartGame = () => {
-		if (!isHost) return
-		if (!canStartGame) return
-		if (isStartingGame) return
-
+		if (!isHost || !canStartGame || isStartingGame) return
 		setSetupError("")
 		setIsStartingGame(true)
-		// NOTE (2026-05-03): Wait for the server game_start acknowledgement before
-		// entering /game. Navigating first lets GameRouteGuard request state while the
-		// previous finished game is still in memory, which can wrongly show "Game ended"
-		// to the host even though a new game is starting.
 		emitGameStart(roomCode, (response) => {
 			setIsStartingGame(false)
-
 			if (response?.ok && response.game) {
 				hasNavigatedToGameRef.current = true
-				navigate(`/game/${roomCode}`, {
-					state: {
-						difficulty,
-						soundMode: mode,
-						roomCode,
-						startedGame: response.game,
-					},
-				})
+				navigate(`/game/${roomCode}`, { state: { difficulty, soundMode: mode, roomCode, startedGame: response.game } })
 				return
 			}
-
 			setSetupError(getSocketResponseMessage(response, "Unable to start game."))
+		})
+	}
+
+	const handleLeaveRoom = () => {
+		if (!roomCode) {
+			navigate("/", { replace: true })
+			return
+		}
+		leaveRoomMutation.mutate(roomCode, {
+			onSuccess: () => {
+				clearCurrentRoomCode(roomCode)
+				leaveSocketRoom(roomCode)
+				navigate("/", { replace: true })
+			},
 		})
 	}
 
 	const handleCopyCode = async () => {
 		if (!roomCode) return
-		try {
-			await navigator.clipboard.writeText(roomCode)
-		} catch {
-			// no-op: clipboard can fail without user gesture / permissions
-		}
+		try { await navigator.clipboard.writeText(roomCode) } catch { /* no-op */ }
 	}
 
 	const handleReady = () => {
@@ -219,23 +181,15 @@ export default function RoomPage() {
 		joinSocketRoom(roomCode)
 	}, [roomCode])
 
-	useEffect(() => {
-		hasNavigatedToGameRef.current = false
-	}, [roomCode])
+	useEffect(() => { hasNavigatedToGameRef.current = false }, [roomCode])
 
 	useEffect(() => {
 		if (!roomCode) return
 		const socket = reconnectSocket()
-
 		const maybeNavigateToGame = (gameState) => {
 			const stateRoomCode = String(gameState?.roomCode ?? "").trim().toUpperCase()
 			if (!stateRoomCode || stateRoomCode !== String(roomCode).toUpperCase()) return
-			if (!gameState?.gameId) return
-			if (gameState?.status === "finished") return
-
-			// Only navigate players who are actually part of this server-side game.
-			// This prevents late joiners (or non-participants) from being forced into
-			// an in-progress game without ever clicking Skip during familiarization.
+			if (!gameState?.gameId || gameState?.status === "finished") return
 			if (!identity?.sub) return
 			if (Array.isArray(gameState?.participantsOrder)) {
 				const participantIds = gameState.participantsOrder.map((id) => String(id))
@@ -245,32 +199,16 @@ export default function RoomPage() {
 				const eliminatedIds = gameState.eliminatedUserIds.map((id) => String(id))
 				if (eliminatedIds.includes(String(identity.sub))) return
 			}
-
 			if (hasNavigatedToGameRef.current) return
 			hasNavigatedToGameRef.current = true
-			navigate(`/game/${roomCode}`)
+			navigate(`/game/${roomCode}`, { replace: true })
 		}
-
-		const requestStateOnce = () => {
-			emitGameRequestState(roomCode, (response) => {
-				if (response?.ok && response.game) maybeNavigateToGame(response.game)
-			})
-		}
-
-		const onGameState = (gameState) => {
-			maybeNavigateToGame(gameState)
-		}
-		const onConnect = () => {
-			requestStateOnce()
-		}
-
+		const requestStateOnce = () => emitGameRequestState(roomCode, (response) => { if (response?.ok && response.game) maybeNavigateToGame(response.game) })
+		const onGameState = (gameState) => maybeNavigateToGame(gameState)
+		const onConnect = () => requestStateOnce()
 		socket.on("game_state", onGameState)
 		socket.on("connect", onConnect)
-
-		// If the game started before this client joined the socket room,
-		// request current state once as a fallback.
 		requestStateOnce()
-
 		return () => {
 			socket.off("game_state", onGameState)
 			socket.off("connect", onConnect)
@@ -285,25 +223,7 @@ export default function RoomPage() {
 					<div className="flex items-center gap-3">
 						<SoundToggleButton />
 						<LoginButton avatarUrl={avatarUrl} label={loginLabel} />
-						<Button
-							type="button"
-							onClick={() => {
-								if (!roomCode) {
-									navigate("/")
-									return
-								}
-								// NOTE (2026-04-29): First call REST leaveRoom() to remove the player from participants and broadcast room_update;
-								// then emit socket leave_room (which has the game-side meaning of "leave the match").
-								leaveRoomMutation.mutate(roomCode, {
-									onSuccess: () => {
-										leaveSocketRoom(roomCode)
-										navigate("/")
-									},
-								})
-							}}
-							variant="outline"
-							className="rounded-full bg-card px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm hover:bg-muted"
-						>
+						<Button type="button" onClick={handleLeaveRoom} variant="outline" className="rounded-full bg-card px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm hover:bg-muted">
 							<LogOut className="size-4" />
 							Leave Room
 						</Button>
@@ -312,132 +232,35 @@ export default function RoomPage() {
 
 				<main className="mx-auto max-w-6xl px-6 pb-12">
 					<h1 className="text-center text-4xl font-bold text-foreground md:text-5xl">Waiting Room</h1>
-
-					{isSettingUpRoom || isRoomLoading ? (
-						<p className="mt-4 text-center text-sm font-medium text-muted-foreground">Loading room...</p>
-					) : null}
-
+					{isSettingUpRoom || isRoomLoading ? <p className="mt-4 text-center text-sm font-medium text-muted-foreground">Loading room...</p> : null}
 					{errorMessage ? (
 						<div className="mt-4 text-center">
 							<p className="text-sm font-semibold text-destructive">{errorMessage}</p>
-							<Button
-								type="button"
-								variant="outline"
-								className="mt-4 rounded-full px-6 py-2 text-sm font-semibold"
-								onClick={() => navigate("/")}
-							>
-								Back to Home
-							</Button>
+							<Button type="button" variant="outline" className="mt-4 rounded-full px-6 py-2 text-sm font-semibold" onClick={() => navigate("/", { replace: true })}>Back to Home</Button>
 						</div>
 					) : null}
 
 					{shouldShowRoomContent ? (
 						<>
 							<div className="mt-6 flex flex-wrap items-center justify-center gap-4">
-						<RoomPill>
-							<span className="text-muted-foreground">Room Code:</span>
-							<span className="text-lg font-bold text-primary">{roomCode}</span>
-							<button
-								type="button"
-								onClick={handleCopyCode}
-								className="text-muted-foreground hover:text-foreground"
-								aria-label="Copy room code"
-								title="Copy room code"
-							>
-								<Copy className="size-4" />
-							</button>
-						</RoomPill>
-						<RoomPill className="border-primary/20 bg-primary/10 text-primary">
-							<Users className="size-4" />
-							{nonEmptyPlayers.length} / {totalPlayers} Players
-						</RoomPill>
-					</div>
-
-					<div className="mt-8 flex flex-col items-center gap-6">
-						<RoomSectionLabel isHost={isHost} />
-
-						<div className="flex flex-wrap items-start justify-center gap-8">
-							<div className="space-y-3 text-center">
-								<p className="text-xs font-semibold uppercase text-muted-foreground">Sound Mode</p>
-								<SegmentedSelection
-									value={mode}
-									disabled={!isHost}
-									onChange={(next) => {
-										if (!roomCode) return
-										selectModeMutation.mutate({ roomCode, mode: next })
-									}}
-									options={[
-										{ value: "bird", label: "Kiwi", Icon: BirdIcon },
-										{ value: "piano", label: "Piano", Icon: Music },
-									]}
-								/>
+								<RoomPill><span className="text-muted-foreground">Room Code:</span><span className="text-lg font-bold text-primary">{roomCode}</span><button type="button" onClick={handleCopyCode} className="text-muted-foreground hover:text-foreground" aria-label="Copy room code" title="Copy room code"><Copy className="size-4" /></button></RoomPill>
+								<RoomPill className="border-primary/20 bg-primary/10 text-primary"><Users className="size-4" />{nonEmptyPlayers.length} / {totalPlayers} Players</RoomPill>
 							</div>
 
-							<div className="space-y-3 text-center">
-								<p className="text-xs font-semibold uppercase text-muted-foreground">Difficulty</p>
-								<SegmentedSelection
-									value={difficulty}
-									disabled={!isHost}
-									onChange={(next) => {
-										if (!roomCode) return
-										selectDifficultyMutation.mutate({ roomCode, difficulty: next })
-									}}
-									options={[
-										{ value: "easy", label: "Easy", Icon: CircleDot },
-										{ value: "medium", label: "Normal", Icon: Zap },
-										{ value: "hard", label: "Hard", Icon: Flame },
-									]}
-								/>
+							<div className="mt-8 flex flex-col items-center gap-6">
+								<RoomSectionLabel isHost={isHost} />
+								<div className="flex flex-wrap items-start justify-center gap-8">
+									<div className="space-y-3 text-center"><p className="text-xs font-semibold uppercase text-muted-foreground">Sound Mode</p><SegmentedSelection value={mode} disabled={!isHost} onChange={(next) => { if (roomCode) selectModeMutation.mutate({ roomCode, mode: next }) }} options={[{ value: "bird", label: "Kiwi", Icon: BirdIcon }, { value: "piano", label: "Piano", Icon: Music }]} /></div>
+									<div className="space-y-3 text-center"><p className="text-xs font-semibold uppercase text-muted-foreground">Difficulty</p><SegmentedSelection value={difficulty} disabled={!isHost} onChange={(next) => { if (roomCode) selectDifficultyMutation.mutate({ roomCode, difficulty: next }) }} options={[{ value: "easy", label: "Easy", Icon: CircleDot }, { value: "medium", label: "Normal", Icon: Zap }, { value: "hard", label: "Hard", Icon: Flame }]} /></div>
+								</div>
 							</div>
-						</div>
-					</div>
 
-					<div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-						{players.map((player) => (
-							<PlayerSlotCard
-								key={player.id}
-								player={player}
-								isCurrentUser={!player.isEmpty && Boolean(identity?.sub) && String(player.id) === identity.sub}
-							/>
-						))}
-					</div>
-
-					<div className="mt-10 flex justify-center">
-						{isHost ? (
-							<Button
-								type="button"
-								onClick={handleStartGame}
-								disabled={!canStartGame || isStartingGame}
-								className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"
-							>
-								<Play className="size-4 fill-current" />
-								{isStartingGame ? "Starting..." : "Start Game"}
-							</Button>
-						) : (
-							<Button
-								type="button"
-								onClick={handleReady}
-								disabled={setReadyMutation.isPending}
-								variant={currentUserReady ? "default" : "outline"}
-								className={
-									currentUserReady
-										? "h-12 rounded-full px-12 text-base font-semibold ready-gradient-theme ready-shadow-theme"
-										: "h-12 rounded-full px-12 text-base font-semibold shadow-lg"
-								}
-							>
-								{currentUserReady ? (
-									<>
-										<Check className="size-4" />
-										Ready!
-									</>
-								) : (
-									"Click to Ready"
-								)}
-							</Button>
-						)}
-					</div>
-					</>
-				) : null}
+							<div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">{players.map((player) => <PlayerSlotCard key={player.id} player={player} isCurrentUser={!player.isEmpty && Boolean(identity?.sub) && String(player.id) === identity.sub} />)}</div>
+							<div className="mt-10 flex justify-center">
+								{isHost ? <Button type="button" onClick={handleStartGame} disabled={!canStartGame || isStartingGame} className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"><Play className="size-4 fill-current" />{isStartingGame ? "Starting..." : "Start Game"}</Button> : <Button type="button" onClick={handleReady} disabled={setReadyMutation.isPending} variant={currentUserReady ? "default" : "outline"} className={currentUserReady ? "h-12 rounded-full px-12 text-base font-semibold ready-gradient-theme ready-shadow-theme" : "h-12 rounded-full px-12 text-base font-semibold shadow-lg"}>{currentUserReady ? <><Check className="size-4" />Ready!</> : "Click to Ready"}</Button>}
+							</div>
+						</>
+					) : null}
 				</main>
 			</div>
 		</Background>
