@@ -5,6 +5,8 @@ import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
 import { useState } from "react"
+import AuthModal from "../components/AuthComponent/AuthModal"
+import { getStoredAuthUser } from "../api/axios"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
@@ -13,7 +15,9 @@ import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
 // If no token exists, create a guest session first (obtain token), then call the room API.
 
 export default function LandingPage() {
-
+    const [showAuthModal, setShowAuthModal] = useState(
+    () => !getStoredAuthUser(),
+  )
 	// For local development, the build version is set to "local". In dev/prod, 
 	// it should be set to the actual build version via the VITE_BUILD_VERSION environment variable.
 	const buildVersion = import.meta.env.VITE_BUILD_VERSION || "local"
@@ -53,6 +57,8 @@ export default function LandingPage() {
 	]
 
 	return (
+	  <>
+        <AuthModal open={showAuthModal} onClose={() => setShowAuthModal(false)} />
 		<Background>
 
 			{/* Display the build version in the top-left corner for debugging purposes. */}
@@ -163,5 +169,6 @@ export default function LandingPage() {
 				</div>
 			</section>
 		</Background>
+	 </>
 	)
 }
