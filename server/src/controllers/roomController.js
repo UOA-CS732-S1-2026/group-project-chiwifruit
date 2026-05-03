@@ -216,6 +216,10 @@ async function selectMode(req, res) {
   }
 
   room.mode = mode;
+  // Reset all participants' ready status when mode changes
+  room.participants.forEach(participant => {
+    participant.isReady = false;
+  });
   await room.save();
 
   const roomState = await getRoomState(room.roomCode);
@@ -245,6 +249,10 @@ async function selectDifficulty(req, res) {
   }
 
   room.difficulty = difficulty;
+  // Reset all participants' ready status when difficulty changes
+  room.participants.forEach(participant => {
+    participant.isReady = false;
+  });
   await room.save();
 
   const roomState = await getRoomState(room.roomCode);
@@ -371,5 +379,6 @@ module.exports = {
   selectMode,
   selectDifficulty,
   submitRoundResult,
-  getRanking
+  getRanking,
+  getRoomState
 };
