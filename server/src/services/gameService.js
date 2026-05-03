@@ -39,6 +39,10 @@ function cleanupGameLater(roomCode) {
   }, GAME_TTL_MS);
 }
 
+function getAliveUserIds(game) {
+  return game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(String(id)));
+}
+
 function serializeGame(game) {
   return {
     // NOTE (2026-04-28): `serverNow` and `startedAt` are included so clients can
@@ -112,7 +116,29 @@ function startGame({ room, requestedByUserId }) {
   return { ok: true, game: serializeGame(game) };
 }
 
+function finishIfOnlyOneAlive(game) {
+  const alive = getAliveUserIds(game);
+  if (alive.length <= 1) {
+    game.status = 'finished';
+    game.turnEndsAt = null;
+    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId: alive[0] ?? null };
+    return true;
+  }
+  return false;
+}
+
 function startPlaying(game) {
+  const alive = getAliveUserIds(game);
+
+  // NOTE (2026-05-03): Starting from familiarization must still respect the same
+  // winner condition as active play. If a player disconnected/forfeited during
+  // familiarization and only one player is left, do not create a one-player
+  // `playing` game.
+  if (alive.length <= 1) {
+    finishIfOnlyOneAlive(game);
+    return;
+  }
+
   game.status = 'playing';
   game.familiarReadyUserIds = [];
 
@@ -146,7 +172,9 @@ function forceStartPlaying({ roomCode, reason }) {
   }
 
   startPlaying(game);
-  game.lastEvent = { type: 'game_started', at: Date.now(), reason: reason || 'familiar_timeout' };
+  if (game.status === 'playing') {
+    game.lastEvent = { type: 'game_started', at: Date.now(), reason: reason || 'familiar_timeout' };
+  }
   return { ok: true, game: serializeGame(game) };
 }
 
@@ -170,11 +198,16 @@ function markFamiliarReady({ roomCode, userId }) {
     return { ok: false, error: 'Not a game participant.' };
   }
 
+  if (game.eliminatedUserIds.has(participantId)) {
+    return { ok: false, error: 'Player has been eliminated.' };
+  }
+
   if (!game.familiarReadyUserIds.includes(participantId)) {
     game.familiarReadyUserIds.push(participantId);
   }
 
-  const allReady = game.participantsOrder.every((id) => game.familiarReadyUserIds.includes(id));
+  const alive = getAliveUserIds(game);
+  const allReady = alive.length > 1 && alive.every((id) => game.familiarReadyUserIds.includes(id));
   if (allReady) {
     startPlaying(game);
   } else {
@@ -198,6 +231,10 @@ function registerFamiliarPadPress({ roomCode, userId, padIndex }) {
     return { ok: false, error: 'Not a game participant.' };
   }
 
+  if (game.eliminatedUserIds.has(participantId)) {
+    return { ok: false, error: 'Player has been eliminated.' };
+  }
+
   if (isParticipantReady(game, participantId)) {
     return { ok: false, error: 'Player is waiting for the game to start.' };
   }
@@ -212,7 +249,7 @@ function registerFamiliarPadPress({ roomCode, userId, padIndex }) {
 }
 
 function endTurnAdvance(game) {
-  const alive = game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(id));
+  const alive = getAliveUserIds(game);
   if (alive.length <= 1) {
     game.status = 'finished';
     game.turnEndsAt = null;
@@ -231,17 +268,6 @@ function endTurnAdvance(game) {
       return;
     }
   }
-}
-
-function finishIfOnlyOneAlive(game) {
-  const alive = game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(id));
-  if (alive.length <= 1) {
-    game.status = 'finished';
-    game.turnEndsAt = null;
-    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId: alive[0] ?? null };
-    return true;
-  }
-  return false;
 }
 
 function forfeitPlayer({ roomCode, userId, reason }) {
@@ -268,6 +294,10 @@ function forfeitPlayer({ roomCode, userId, reason }) {
     userId: participantId,
     reason: reason || 'left_game',
   };
+
+  if (game.status === 'familiarizing') {
+    finishIfOnlyOneAlive(game);
+  }
 
   if (game.status === 'playing') {
     if (!finishIfOnlyOneAlive(game) && String(currentUserId) === participantId) {
