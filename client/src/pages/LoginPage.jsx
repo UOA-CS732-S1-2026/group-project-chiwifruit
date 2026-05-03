@@ -1,26 +1,26 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { login } from "../api/auth";
-import { setStoredAuthSession, getApiErrorMessage } from "../api/axios";
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { login } from "../api/auth"
+import { setStoredAuthSession, getApiErrorMessage } from "../api/axios"
 
 export default function LoginPage() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
+    event.preventDefault()
 
     try {
-      const data = await login({ username, password });
-      setStoredAuthSession(data);
-      navigate("/");
+      const data = await login({ username, password })
+      setStoredAuthSession(data)
+      navigate("/")
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getApiErrorMessage(err))
     }
-  };
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -49,5 +49,5 @@ export default function LoginPage() {
         </button>
       </form>
     </div>
-  );
+  )
 }
