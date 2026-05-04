@@ -80,6 +80,12 @@ function initSocket(httpServer, frontendOrigin) {
       if (!forced.ok) return;
 
       io.to(roomCode).emit('game_state', forced.game);
+      if (forced.game.status === 'finished') {
+        clearRoomTimeout(roomCode);
+        persistFinalScores(roomCode, forced.game.scores);
+        cleanupGameLater(roomCode);
+        return;
+      }
       if (forced.game.status === 'playing') {
         scheduleTurnTimer(roomCode);
       }
@@ -119,6 +125,9 @@ function initSocket(httpServer, frontendOrigin) {
       clearRoomTimeout(code);
       if (result.game.status === 'playing') {
         scheduleTurnTimer(code);
+      }
+      if (result.game.status === 'familiarizing') {
+        scheduleFamiliarAutoStart(code);
       }
       if (result.game.status === 'finished') {
         persistFinalScores(code, result.game.scores);

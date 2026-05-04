@@ -113,8 +113,13 @@ function startGame({ room, requestedByUserId }) {
 }
 
 function startPlaying(game) {
-  game.status = 'playing';
   game.familiarReadyUserIds = [];
+
+  if (finishIfOnlyOneAlive(game)) {
+    return;
+  }
+
+  game.status = 'playing';
 
   // Pick the first alive participant to start.
   const firstAliveIndex = (() => {
@@ -146,12 +151,18 @@ function forceStartPlaying({ roomCode, reason }) {
   }
 
   startPlaying(game);
-  game.lastEvent = { type: 'game_started', at: Date.now(), reason: reason || 'familiar_timeout' };
+  if (game.status === 'playing') {
+    game.lastEvent = { type: 'game_started', at: Date.now(), reason: reason || 'familiar_timeout' };
+  }
   return { ok: true, game: serializeGame(game) };
 }
 
 function getFamiliarizeEndsAt(game) {
   return Number(game.startedAt) + Number(game.padCount) * FAMILIARIZE_AUTOPLAY_MS + FAMILIARIZE_FREE_PLAY_MS;
+}
+
+function getAliveParticipantIds(game) {
+  return game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(String(id)));
 }
 
 function isParticipantReady(game, userId) {
@@ -174,7 +185,8 @@ function markFamiliarReady({ roomCode, userId }) {
     game.familiarReadyUserIds.push(participantId);
   }
 
-  const allReady = game.participantsOrder.every((id) => game.familiarReadyUserIds.includes(id));
+  const aliveParticipantIds = getAliveParticipantIds(game);
+  const allReady = aliveParticipantIds.length > 0 && aliveParticipantIds.every((id) => game.familiarReadyUserIds.includes(id));
   if (allReady) {
     startPlaying(game);
   } else {
@@ -212,7 +224,7 @@ function registerFamiliarPadPress({ roomCode, userId, padIndex }) {
 }
 
 function endTurnAdvance(game) {
-  const alive = game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(id));
+  const alive = getAliveParticipantIds(game);
   if (alive.length <= 1) {
     game.status = 'finished';
     game.turnEndsAt = null;
@@ -234,7 +246,7 @@ function endTurnAdvance(game) {
 }
 
 function finishIfOnlyOneAlive(game) {
-  const alive = game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(id));
+  const alive = getAliveParticipantIds(game);
   if (alive.length <= 1) {
     game.status = 'finished';
     game.turnEndsAt = null;
@@ -269,10 +281,12 @@ function forfeitPlayer({ roomCode, userId, reason }) {
     reason: reason || 'left_game',
   };
 
-  if (game.status === 'playing') {
-    if (!finishIfOnlyOneAlive(game) && String(currentUserId) === participantId) {
-      endTurnAdvance(game);
-    }
+  if (finishIfOnlyOneAlive(game)) {
+    return { ok: true, game: serializeGame(game) };
+  }
+
+  if (game.status === 'playing' && String(currentUserId) === participantId) {
+    endTurnAdvance(game);
   }
 
   return { ok: true, game: serializeGame(game) };
