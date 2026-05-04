@@ -608,8 +608,10 @@ export default function GamePage() {
 				onCancel={() => setIsExitModalOpen(false)}
 				onConfirm={() => {
 					setIsExitModalOpen(false)
+					// Exit Game is defined as leaving the room entirely.
+					// The socket leave_room event now handles both forfeit and room cleanup.
 					if (roomCode) leaveSocketRoom(roomCode)
-					navigate(roomCode ? `/room/${roomCode}` : "/")
+					navigate("/")
 				}}
 			/>
 			<YoureOutModal

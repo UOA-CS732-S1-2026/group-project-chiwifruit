@@ -159,9 +159,10 @@ function initSocket(httpServer, frontendOrigin) {
       socket.leave(String(roomCode).toUpperCase());
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnecting', () => {
       // Closing tab / network drop: treat as leaving the match.
-      // Forfeit in any joined game rooms (excluding the socket's private room).
+      // Use `disconnecting` so joined rooms are still available before Socket.IO
+      // removes this socket from them.
       try {
         for (const roomCode of socket.rooms) {
           if (roomCode === socket.id) continue;

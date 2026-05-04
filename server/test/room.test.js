@@ -155,6 +155,30 @@ describe('Room API', () => {
       expect(room.save).not.toHaveBeenCalled();
     });
 
+    it('should not duplicate participant when the existing participant is populated', async () => {
+      const room = buildRoom({
+        participants: [
+          {
+            user: { _id: 'userId123', username: 'Host' },
+            isReady: false,
+            correctCount: 0,
+          },
+        ],
+      });
+
+      Room.findOne.mockResolvedValueOnce(room);
+      mockRoomState(room);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', token)
+        .send({ joinRoomCode: 'ABC' })
+        .expect(200);
+
+      expect(room.participants).toHaveLength(1);
+      expect(room.save).not.toHaveBeenCalled();
+    });
+
     it('should reject joining a full room', async () => {
       const room = buildRoom({
         participants: Array.from({ length: 6 }, (_, index) => guestParticipant(`guest-${index}`, `Guest ${index}`)),
