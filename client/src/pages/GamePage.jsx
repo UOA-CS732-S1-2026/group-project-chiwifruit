@@ -87,16 +87,31 @@ export default function GamePage() {
 	const [isGameLoading, setIsGameLoading] = React.useState(true)
 	const [serverOffsetMs, setServerOffsetMs] = React.useState(0)
 	const isSocketDriven = Boolean(socketGame?.gameId)
-	const participantOrder = React.useMemo(
-		() => (Array.isArray(socketGame?.participantsOrder) ? socketGame.participantsOrder.map(String) : []),
-		[socketGame?.participantsOrder],
+	const gamePlayers = React.useMemo(
+		() => (Array.isArray(socketGame?.players) ? socketGame.players : []),
+		[socketGame?.players],
 	)
-	const isCurrentUserParticipant = Boolean(currentUserId) && participantOrder.includes(String(currentUserId))
+	const participantOrder = React.useMemo(
+		() => {
+			if (Array.isArray(socketGame?.participantsOrder) && socketGame.participantsOrder.length > 0) {
+				return socketGame.participantsOrder.map(String)
+			}
+			return gamePlayers.map((player) => String(player.userId))
+		},
+		[socketGame?.participantsOrder, gamePlayers],
+	)
+	const currentGamePlayer = React.useMemo(() => {
+		if (!currentUserId) return null
+		return gamePlayers.find((player) => String(player.userId) === String(currentUserId)) ?? null
+	}, [currentUserId, gamePlayers])
+	const isCurrentUserActive = Boolean(currentGamePlayer && !currentGamePlayer.isEliminated && !currentGamePlayer.leftDuringGame)
+	const isCurrentUserOut = Boolean(currentGamePlayer && (currentGamePlayer.isEliminated || currentGamePlayer.leftDuringGame))
+	const isCurrentUserMissing = Boolean(socketGame && !currentGamePlayer)
 	const waitingUserIds = React.useMemo(
 		() => (Array.isArray(socketGame?.familiarReadyUserIds) ? socketGame.familiarReadyUserIds.map(String) : []),
 		[socketGame?.familiarReadyUserIds],
 	)
-	const isCurrentUserWaiting = Boolean(isCurrentUserParticipant) && waitingUserIds.includes(String(currentUserId))
+	const isCurrentUserWaiting = Boolean(isCurrentUserActive) && waitingUserIds.includes(String(currentUserId))
 
 	React.useEffect(() => {
 		// Browser limitation: we cannot show a custom React modal on refresh/close.
@@ -259,9 +274,8 @@ export default function GamePage() {
 		setInputCount(Number(socketGame.inputIndex ?? 0) || 0)
 		setCurrentTurnIndex(Number(socketGame.currentTurnIndex ?? 0) || 0)
 
-		const eliminated = Array.isArray(socketGame.eliminatedUserIds) ? socketGame.eliminatedUserIds : []
-		const isEliminated = Boolean(currentUserId) && eliminated.includes(currentUserId)
-		setIsSpectating(isEliminated)
+		const isOut = Boolean(currentGamePlayer && (currentGamePlayer.isEliminated || currentGamePlayer.leftDuringGame))
+		setIsSpectating(isOut || Boolean(socketGame && !currentGamePlayer))
 
 		if (socketGame.status === "finished") {
 			setIsOutModalOpen(false)
@@ -270,9 +284,9 @@ export default function GamePage() {
 			return
 		}
 
-		if (isEliminated) setIsOutModalOpen(true)
+		if (isOut) setIsOutModalOpen(true)
 		if (socketGame.status === "playing") setPhase(PHASE.PLAYING)
-	}, [currentUserId, socketGame])
+	}, [currentGamePlayer, socketGame])
 
 	React.useEffect(() => {
 		if (!isSocketDriven) return
@@ -325,39 +339,26 @@ export default function GamePage() {
 	}, [serverOffsetMs, socketGame?.status, socketGame?.turnEndsAt])
 
 	const players = React.useMemo(() => {
-		const participants = Array.isArray(roomState?.participants) ? roomState.participants : []
-		if (participants.length === 0) {
-			return [
-				{
-					id: currentUserId ?? "me",
-					name: `${headerLoginLabel} (You)`,
-					avatarUrl: headerAvatarUrl,
-					score: 0,
-					side: "left",
-				},
-			]
+		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
+		if (gamePlayerList.length === 0) {
+			return []
 		}
 
-		// Important: order must match the server-authoritative participantsOrder so that
-		// currentTurnIndex highlights the correct player.
-		const participantById = new Map(participants.map((participant) => [String(participant.userId), participant]))
-		const orderedIds = participantOrder.length > 0 ? participantOrder : participants.map((p) => String(p.userId))
+		const playerById = new Map(gamePlayerList.map((player) => [String(player.userId), player]))
+		const orderedIds = participantOrder.length > 0 ? participantOrder : gamePlayerList.map((player) => String(player.userId))
 
 		const mapped = orderedIds
-			.map((participantId) => {
-				const participant = participantById.get(String(participantId))
-				if (!participant) return null
-				const isCurrentUser = Boolean(currentUserId) && String(participantId) === currentUserId
-				const backendAvatarUrl = typeof participant.avatarUrl === "string" ? participant.avatarUrl : undefined
-				const scoreFromSocket =
-					socketGame?.scores && String(participantId) in socketGame.scores
-						? Number(socketGame.scores[String(participantId)])
-						: null
+			.map((playerId) => {
+				const player = playerById.get(String(playerId))
+				if (!player) return null
+				const isCurrentUser = Boolean(currentUserId) && String(playerId) === currentUserId
 				return {
-					id: String(participantId),
-					name: isCurrentUser ? `${participant.username} (You)` : participant.username,
-					avatarUrl: backendAvatarUrl ?? (isCurrentUser ? headerAvatarUrl : undefined),
-					score: (Number.isFinite(scoreFromSocket) ? scoreFromSocket : Number(participant.correctCount ?? 0)) || 0,
+					id: String(playerId),
+					name: isCurrentUser ? `${player.username} (You)` : player.username,
+					avatarUrl: player.avatarUrl || (isCurrentUser ? headerAvatarUrl : undefined),
+					score: Number(player.score ?? 0) || 0,
+					isEliminated: Boolean(player.isEliminated),
+					leftDuringGame: Boolean(player.leftDuringGame),
 				}
 			})
 			.filter(Boolean)
@@ -367,10 +368,33 @@ export default function GamePage() {
 			...player,
 			side: index < leftCount ? "left" : "right",
 		}))
-	}, [currentUserId, headerAvatarUrl, headerLoginLabel, participantOrder, roomState?.participants, socketGame?.scores])
+	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder])
 
 	const { data: rankingData } = useRankingQuery(roomCode, Boolean(roomCode) && isResultsModalOpen)
 	const resultsPlayers = React.useMemo(() => {
+		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
+		if (gamePlayerList.length > 0) {
+			const orderedIds = participantOrder.length > 0 ? participantOrder : gamePlayerList.map((player) => String(player.userId))
+			const normalized = orderedIds
+				.map((playerId) => {
+					const player = gamePlayerList.find((candidate) => String(candidate.userId) === String(playerId))
+					if (!player) return null
+					const isCurrentUser = Boolean(currentUserId) && String(player.userId) === currentUserId
+					return {
+						id: String(player.userId),
+						name: isCurrentUser ? `${player.username} (You)` : player.username,
+						avatarUrl: player.avatarUrl || (isCurrentUser ? headerAvatarUrl : undefined),
+						score: Number(player.score ?? 0) || 0,
+					}
+				})
+				.filter(Boolean)
+			return normalized.sort((a, b) => {
+				const scoreDiff = Number(b.score) - Number(a.score)
+				if (scoreDiff !== 0) return scoreDiff
+				return orderedIds.indexOf(a.id) - orderedIds.indexOf(b.id)
+			})
+		}
+
 		const entries = Array.isArray(rankingData?.ranking) ? rankingData.ranking : []
 		if (entries.length === 0) return players
 		return entries.map((entry) => {
@@ -384,7 +408,7 @@ export default function GamePage() {
 				avatarUrl: backendAvatarUrl ?? (isCurrentUser ? headerAvatarUrl : undefined),
 			}
 		})
-	}, [currentUserId, headerAvatarUrl, players, rankingData?.ranking])
+	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder, players, rankingData?.ranking])
 
 	React.useEffect(() => {
 		if (socketGame?.status) return
@@ -504,7 +528,7 @@ export default function GamePage() {
 				</div>
 			</div>
 
-			{phase === PHASE.FAMILIARIZE_FREE && isCurrentUserParticipant ? (
+			{phase === PHASE.FAMILIARIZE_FREE && isCurrentUserActive ? (
 				<button
 					type="button"
 					onClick={() => {
@@ -521,7 +545,7 @@ export default function GamePage() {
 	) : null
 
 	const handlePadPress = (index) => {
-		if (isSocketDriven && !isCurrentUserParticipant) return
+		if (isSocketDriven && !isCurrentUserActive) return
 		if (phase === PHASE.FAMILIARIZE_AUTO) return
 		if (phase === PHASE.FAMILIARIZE_WAITING) return
 		if (phase === PHASE.PLAYING && isSpectating) return
@@ -552,6 +576,7 @@ export default function GamePage() {
 		phase === PHASE.FAMILIARIZE_WAITING ||
 		(phase === PHASE.PLAYING && Boolean(isSpectating)) ||
 		(phase === PHASE.FAMILIARIZE_FREE && isCurrentUserWaiting) ||
+		(isSocketDriven && !isCurrentUserActive) ||
 		(phase === PHASE.PLAYING &&
 			socketGame?.status === "playing" &&
 			(Boolean(!currentUserId) || (socketGame.currentTurnUserId && currentUserId !== socketGame.currentTurnUserId)))
