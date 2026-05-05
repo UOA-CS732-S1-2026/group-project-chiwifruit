@@ -2,17 +2,13 @@ const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
 const { buildAvatarUrl } = require('./authController');
-
-const MAX_ROOM_PARTICIPANTS = 6;
-const MIN_PARTICIPANTS_TO_START = 2;
-
-function getParticipantSelector(identity) {
-  if (identity.isGuest) {
-    return (participant) => participant.guestId === identity.sub;
-  }
-
-  return (participant) => String(participant.user) === String(identity.sub);
-}
+const {
+  MAX_ROOM_PARTICIPANTS,
+  MIN_PARTICIPANTS_TO_START,
+  getParticipantSelector,
+  getRoomState,
+  removeParticipantFromRoom,
+} = require('../services/roomStateService');
 
 function createParticipant(identity) {
   if (identity.isGuest) {
@@ -140,47 +136,6 @@ async function setCandidateReady(req, res) {
   return res.json({ message: 'Readiness updated', roomCode: room.roomCode, isReady: participant.isReady });
 }
 
-async function getRoomState(roomCode) {
-  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() }).populate(
-    'participants.user',
-    'username'
-  );
-  if (!room) {
-    return null;
-  }
-
-	const hostId = room.host != null ? String(room.host) : null;
-	const nonHostParticipants = room.participants.filter((participant) => {
-		const participantId = participant.user?._id ? String(participant.user._id) : participant.guestId ? String(participant.guestId) : null;
-		if (!participantId) return true;
-		if (!hostId) return true;
-		return participantId !== hostId;
-	});
-
-	const everyoneReady = nonHostParticipants.length > 0 && nonHostParticipants.every((p) => p.isReady);
-	const canStartGame = room.participants.length >= MIN_PARTICIPANTS_TO_START && everyoneReady;
-
-  return {
-    roomCode: room.roomCode,
-    hostId,
-    mode: room.mode,
-    difficulty: room.difficulty,
-    participantCount: room.participants.length,
-    maxParticipantCount: MAX_ROOM_PARTICIPANTS,
-    minParticipantsToStart: MIN_PARTICIPANTS_TO_START,
-    everyoneReady,
-    canStartGame,
-    participants: room.participants.map((participant) => ({
-      userId: participant.user?._id || participant.guestId,
-      username: participant.user?.username || participant.guestName,
-      isGuest: Boolean(participant.guestId),
-      correctCount: participant.correctCount || 0,
-      isReady: participant.isReady,
-      avatarUrl: participant.user ? buildAvatarUrl(participant.user._id.toString()) : buildAvatarUrl(participant.guestId)
-    }))
-  };
-}
-
 async function checkIfCandidateIsReady(req, res) {
   const { roomCode } = req.params;
 
@@ -273,44 +228,20 @@ async function leaveRoom(req, res) {
   // socket 的 leave_room 在本项目中被定义为“离开比赛=判负”，语义不同。
   const { roomCode } = req.params;
   const identity = req.user;
-
-  const room = await Room.findOne({ roomCode: String(roomCode).toUpperCase() });
-  if (!room) {
-    return res.status(404).json({ message: 'Room not found' });
+  const result = await removeParticipantFromRoom({ roomCode, identity });
+  if (!result.ok) {
+    return res.status(result.status).json({ message: result.error });
   }
 
-  const participantIndex = room.participants.findIndex(getParticipantSelector(identity));
-  if (participantIndex === -1) {
-    return res.status(403).json({ message: 'Join the room first before leaving' });
+  if (result.roomState) {
+    emitRoomUpdate(req.app.get('io'), result.roomCode, result.roomState);
   }
 
-  const leavingParticipant = room.participants[participantIndex];
-  room.participants.splice(participantIndex, 1);
-
-  // NOTE (2026-04-29): host 离开时转移 host，避免房间进入“无人能开始游戏”的死状态。
-  const leavingId = leavingParticipant?.user ? String(leavingParticipant.user) : leavingParticipant?.guestId ? String(leavingParticipant.guestId) : null;
-  if (leavingId && String(room.host) === leavingId) {
-    const next = room.participants[0];
-    const nextHostId = next?.user?._id || next?.user || next?.guestId || null;
-    if (nextHostId) {
-      room.host = nextHostId;
-    }
+  if (result.deleted) {
+    return res.json({ message: 'Left room', roomCode: result.roomCode, deleted: true });
   }
 
-  if (room.participants.length === 0) {
-    // NOTE (2026-04-29): 房间没人时直接删除，避免遗留无效房间码。
-    await Room.deleteOne({ _id: room._id });
-    return res.json({ message: 'Left room', roomCode: String(roomCode).toUpperCase(), deleted: true });
-  }
-
-  await room.save();
-
-  const roomState = await getRoomState(room.roomCode);
-  if (roomState) {
-    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
-  }
-
-  return res.json({ message: 'Left room', roomCode: room.roomCode, hostId: roomState?.hostId ?? null });
+  return res.json({ message: 'Left room', roomCode: result.roomCode, hostId: result.hostId });
 }
 
 async function submitRoundResult(req, res) {
