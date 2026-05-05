@@ -19,6 +19,14 @@ const {
   cleanupGameLater,
 } = require('../services/gameService');
 
+function getParticipantId(participant) {
+  if (participant?.user?._id) return String(participant.user._id);
+  if (participant?.user && typeof participant.user !== 'object') return String(participant.user);
+  if (participant?.guestId) return String(participant.guestId);
+  if (participant?.userId) return String(participant.userId);
+  return null;
+}
+
 function initSocket(httpServer, frontendOrigin) {
   const io = new Server(httpServer, {
     cors: {
@@ -27,13 +35,17 @@ function initSocket(httpServer, frontendOrigin) {
     }
   });
 
-  async function persistFinalScores(roomCode, scores) {
+  async function persistFinalScores(roomCode, gameSnapshotOrScores) {
     try {
       const room = await Room.findOne({ roomCode });
       if (!room) return;
 
+      const scores = Array.isArray(gameSnapshotOrScores?.players)
+        ? Object.fromEntries(gameSnapshotOrScores.players.map((player) => [String(player.userId), Number(player.score) || 0]))
+        : gameSnapshotOrScores;
+
       room.participants.forEach((p) => {
-        const participantId = p.user ? String(p.user) : p.guestId ? String(p.guestId) : null;
+        const participantId = getParticipantId(p);
         if (!participantId) return;
         p.correctCount = Number(scores?.[participantId]) || 0;
       });
@@ -58,7 +70,7 @@ function initSocket(httpServer, frontendOrigin) {
 
       if (updated.status === 'finished') {
         clearRoomTimeout(roomCode);
-        persistFinalScores(roomCode, updated.scores);
+        persistFinalScores(roomCode, updated);
         cleanupGameLater(roomCode);
         return;
       }
@@ -82,7 +94,7 @@ function initSocket(httpServer, frontendOrigin) {
       io.to(roomCode).emit('game_state', forced.game);
       if (forced.game.status === 'finished') {
         clearRoomTimeout(roomCode);
-        persistFinalScores(roomCode, forced.game.scores);
+        persistFinalScores(roomCode, forced.game);
         cleanupGameLater(roomCode);
         return;
       }
@@ -130,7 +142,7 @@ function initSocket(httpServer, frontendOrigin) {
         scheduleFamiliarAutoStart(code);
       }
       if (result.game.status === 'finished') {
-        persistFinalScores(code, result.game.scores);
+        persistFinalScores(code, result.game);
         cleanupGameLater(code);
       }
     }
@@ -150,10 +162,8 @@ function initSocket(httpServer, frontendOrigin) {
         return;
       }
 
-      // NOTE (2026-04-29): 本项目里 socket leave_room 的语义是“离开比赛=直接判负”。
-      // 所以客户端只有在玩家明确退出比赛/关闭页面时才应该 emit 这个事件。
-      // 仅仅想从房间 participants 列表里移除自己（回首页/离开等待房间）应调用 REST
-      // DELETE /api/rooms/:roomCode，由后端更新 DB 并广播 room_update。
+      // Socket leave_room means leaving the active game only; room roster cleanup
+      // remains the REST DELETE /api/rooms/:roomCode responsibility.
       handleForfeitInRoom(roomCode, 'leave_room');
 
       socket.leave(String(roomCode).toUpperCase());
@@ -201,18 +211,18 @@ function initSocket(httpServer, frontendOrigin) {
       try {
         const code = String(roomCode).toUpperCase();
 
-    // If there is already an active game, do NOT start a new one.
-    // This commonly happens when the host refreshes the page and the client
-    // re-emits `game_start`.
-    const existing = getGame(code);
-    if (existing && existing.status !== 'finished') {
-      const snapshot = serializeGame(existing);
-      io.to(code).emit('game_state', snapshot);
-      if (typeof ack === 'function') ack({ ok: false, error: 'Game already in progress.', game: snapshot });
-      return;
-    }
+        // If there is already an active game, do NOT start a new one.
+        // This commonly happens when the host refreshes the page and the client
+        // re-emits `game_start`.
+        const existing = getGame(code);
+        if (existing && existing.status !== 'finished') {
+          const snapshot = serializeGame(existing);
+          io.to(code).emit('game_state', snapshot);
+          if (typeof ack === 'function') ack({ ok: false, error: 'Game already in progress.', game: snapshot });
+          return;
+        }
 
-        const room = await Room.findOne({ roomCode: code }).populate('participants.user', 'username');
+        const room = await Room.findOne({ roomCode: code }).populate('participants.user', 'username avatarUrl');
         if (!room) {
           if (typeof ack === 'function') ack({ ok: false, error: 'Room not found.' });
           return;
@@ -222,11 +232,7 @@ function initSocket(httpServer, frontendOrigin) {
         // Reason: prevent clients from starting games when not everyone is ready.
         const hostId = room.host != null ? String(room.host) : null;
         const nonHostParticipants = room.participants.filter((participant) => {
-          const participantId = participant.user?._id
-            ? String(participant.user._id)
-            : participant.guestId
-              ? String(participant.guestId)
-              : null;
+          const participantId = getParticipantId(participant);
           if (!participantId) return true;
           if (!hostId) return true;
           return participantId !== hostId;
@@ -238,15 +244,10 @@ function initSocket(httpServer, frontendOrigin) {
           return;
         }
 
-        // NOTE (2026-05-03): Reset per-round room state at game start.
-        // Reason: avoid stale readiness/scores carrying into the next round and
-        // accidentally allowing immediate re-starts when players are still in-game.
+        // NOTE (2026-05-03): Reset only waiting-room round fields at game start.
+        // Active-game history now lives in game.players, not room.participants.
         room.participants.forEach((p) => {
-          const participantId = p.user?._id
-            ? String(p.user._id)
-            : p.guestId
-              ? String(p.guestId)
-              : null;
+          const participantId = getParticipantId(p);
 
           if (participantId && hostId && participantId !== hostId) {
             p.isReady = false;
@@ -343,7 +344,7 @@ function initSocket(httpServer, frontendOrigin) {
 
       if (result.game.status === 'finished') {
         // Persist final scores to Mongo for existing /ranking endpoint.
-        persistFinalScores(code, result.game.scores);
+        persistFinalScores(code, result.game);
         cleanupGameLater(code);
         return;
       }
