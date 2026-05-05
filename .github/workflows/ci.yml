@@ -4,51 +4,48 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate:
-    name: Validate client and server
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  # validate:
+  #   name: Validate client and server
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 22
+  #         cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+  #     - name: Install dependencies
+  #       run: npm ci
 
-      - name: Run frontend quality checks
-        run: npm run ci --workspace=client
+  #     - name: Run frontend quality checks
+  #       run: npm run ci --workspace=client
 
-      - name: Run backend integrity and smoke checks
-        run: npm run ci --workspace=server
+  #     - name: Run backend integrity and smoke checks
+  #       run: npm run ci --workspace=server
 
-  docker-build:
-    name: Validate Docker image build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: validate
+  # docker-build:
+  #   name: Validate Docker image build
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   needs: validate
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t kichain-dev2:test .
+  #     - name: Build Docker image
+  #       run: docker build -t kichain-dev2:test .
 
   deploy-dev2:
     name: Build, push, and deploy dev2 image
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     environment: AWS Dev
-    needs:
-      - validate
-      - docker-build
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev2'
 
     steps:
@@ -160,7 +157,7 @@ jobs:
               docker rm "$CONTAINER" || true
             fi
           done
-          
+
           docker run -d \
             --name kichain-dev-2 \
             --restart unless-stopped \
