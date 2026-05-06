@@ -123,12 +123,12 @@ describe('socket: familiarizing-phase forfeit timer orchestration', () => {
     });
   });
 
-  describe('disconnect forfeit during familiarizing', () => {
+  describe('disconnecting forfeit during familiarizing', () => {
     it('re-arms the familiarization timer when multiple alive players remain', () => {
       gameService.forfeitPlayer.mockReturnValue({ ok: true, game: { status: 'familiarizing', scores: {} } });
 
       const socket = connectSocket(io, 'user3', 'ROOM1');
-      getHandler(socket, 'disconnect')();
+      getHandler(socket, 'disconnecting')();
 
       expect(gameService.clearRoomTimeout).toHaveBeenCalledWith('ROOM1');
       expect(gameService.scheduleRoomTimeout).toHaveBeenCalledWith('ROOM1', expect.any(Function), expect.any(Number));
@@ -142,7 +142,7 @@ describe('socket: familiarizing-phase forfeit timer orchestration', () => {
       });
 
       const socket = connectSocket(io, 'user3', 'ROOM1');
-      getHandler(socket, 'disconnect')();
+      getHandler(socket, 'disconnecting')();
 
       expect(gameService.cleanupGameLater).toHaveBeenCalledWith('ROOM1');
       expect(gameService.scheduleRoomTimeout).not.toHaveBeenCalled();

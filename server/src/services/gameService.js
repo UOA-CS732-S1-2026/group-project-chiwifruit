@@ -58,6 +58,23 @@ function buildPlayerSnapshot(participant) {
   };
 }
 
+function getPlayerByUserId(game, userId) {
+  return game.players.find((player) => String(player.userId) === String(userId)) ?? null;
+}
+
+function markPlayerEliminated(game, userId, reason, { leftDuringGame = false } = {}) {
+  const participantId = String(userId);
+  const player = getPlayerByUserId(game, participantId);
+
+  if (player) {
+    player.isEliminated = true;
+    player.eliminationReason = reason;
+    player.leftDuringGame = Boolean(leftDuringGame);
+  }
+
+  game.eliminatedUserIds.add(participantId);
+}
+
 function serializeGame(game) {
   return {
     // NOTE (2026-04-28): `serverNow` and `startedAt` are included so clients can
@@ -292,7 +309,7 @@ function forfeitPlayer({ roomCode, userId, reason }) {
     return { ok: false, error: 'Not a game participant.' };
   }
 
-  const player = game.players.find((p) => String(p.userId) === participantId);
+  const player = getPlayerByUserId(game, participantId);
   if (!player) {
     return { ok: false, error: 'Not a game participant.' };
   }
@@ -306,10 +323,7 @@ function forfeitPlayer({ roomCode, userId, reason }) {
   const normalizedReason = reason || 'left_game';
   const leftDuringGame = ['disconnect', 'leave_room', 'left_game'].includes(normalizedReason);
 
-  player.isEliminated = true;
-  player.eliminationReason = normalizedReason;
-  player.leftDuringGame = leftDuringGame;
-  game.eliminatedUserIds.add(participantId);
+  markPlayerEliminated(game, participantId, normalizedReason, { leftDuringGame });
   game.lastEvent = {
     type: 'player_eliminated',
     at: Date.now(),
@@ -347,7 +361,7 @@ function registerPadPress({ roomCode, userId, padIndex }) {
   if (game.inputIndex < game.sequence.length) {
     const expected = game.sequence[game.inputIndex];
     if (index !== expected) {
-      game.eliminatedUserIds.add(currentUserId);
+      markPlayerEliminated(game, currentUserId, 'wrong_note');
       game.lastEvent = {
         type: 'player_eliminated',
         at: Date.now(),
@@ -384,7 +398,7 @@ function registerTurnTimeout(roomCode) {
 
   const currentUserId = game.participantsOrder[game.currentTurnIndex];
   if (currentUserId) {
-    game.eliminatedUserIds.add(currentUserId);
+    markPlayerEliminated(game, currentUserId, 'timeout');
     game.lastEvent = {
       type: 'player_eliminated',
       at: Date.now(),
