@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { ArrowLeft, ChevronsRight } from "lucide-react"
-import { useLocation, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 
 import Background from "../components/Common/Background"
 import ExitGameModal from "../components/Game/ExitGameModal"
@@ -28,7 +28,7 @@ import {
 import { pickGameNoteUrls, playGameNote } from "../lib/gameAudio"
 
 import logo from "../assets/branding/logo.png"
-import { buildPadThemeSetByPadCount, getPadCountByDifficulty } from "../lib/gamePadPalette"
+import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
 
 const PHASE = {
 	FAMILIARIZE_AUTO: "familiarize:auto",
@@ -53,7 +53,6 @@ function coerceDifficulty(value) {
 
 export default function GamePage() {
 	const navigate = useNavigate()
-	const location = useLocation()
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const lastFamiliarAutoPlayedPadRef = React.useRef({ gameId: null, index: null, at: 0 })
@@ -132,14 +131,14 @@ export default function GamePage() {
 		navigate("/", { replace: true })
 	}, [navigate, roomCode])
 
-	const difficulty = React.useMemo(() => {
-		if (socketGame?.difficulty) return coerceDifficulty(socketGame.difficulty)
-		return coerceDifficulty(location.state?.difficulty)
-	}, [location.state?.difficulty, socketGame?.difficulty])
-	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : getPadCountByDifficulty(difficulty)
+	const difficulty = React.useMemo(
+		() => coerceDifficulty(socketGame?.difficulty),
+		[socketGame?.difficulty],
+	)
+	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : 0
 	
 // NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
-// This avoids reshuffling when route fallback data changes, which would desync audio mapping between clients.
+// This avoids reshuffling from any non-authoritative client fallback state.
 	const noteUrls = React.useMemo(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed) return []
 		return pickGameNoteUrls({ 
@@ -437,62 +436,6 @@ export default function GamePage() {
 		setIsOutModalOpen(true)
 		setToastMessage("You're out! You can keep spectating.")
 	}, [currentTurnIndex, isOutModalOpen, isSpectating, phase, socketGame?.status, turnSeconds])
-
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_AUTO) return
-
-		setToastMessage("Familiarize yourself with the notes!")
-		setAutoPlayIndex(0)
-
-		const intervalId = window.setInterval(() => {
-			setAutoPlayIndex((previous) => {
-				const next = previous + 1
-				if (next >= padCount) {
-					window.clearInterval(intervalId)
-					setPhase(PHASE.FAMILIARIZE_FREE)
-					setActivePadIndex(null)
-					return Math.max(0, padCount - 1)
-				}
-				return next
-			})
-		}, 900)
-
-		return () => window.clearInterval(intervalId)
-	}, [isSocketDriven, padCount, phase])
-
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_AUTO) return
-		setActivePadIndex(autoPlayIndex)
-	}, [autoPlayIndex, isSocketDriven, phase])
-
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_FREE) return
-		setToastMessage("Familiarize yourself with the notes!")
-		setFreePlaySeconds(20)
-
-		const intervalId = window.setInterval(() => {
-			setFreePlaySeconds((previous) => {
-				return Math.max(0, previous - 1)
-			})
-		}, 1000)
-
-		return () => window.clearInterval(intervalId)
-	}, [isSocketDriven, phase])
-
-	React.useEffect(() => {
-		if (phase !== PHASE.PLAYING) return
-		if (socketGame?.status === "playing") return
-		setTurnSeconds(20)
-
-		const intervalId = window.setInterval(() => {
-			setTurnSeconds((previous) => Math.max(0, previous - 1))
-		}, 1000)
-
-		return () => window.clearInterval(intervalId)
-	}, [currentTurnIndex, phase, socketGame?.status])
 
 	const isFamiliarize =
 		phase === PHASE.FAMILIARIZE_AUTO || phase === PHASE.FAMILIARIZE_FREE || phase === PHASE.FAMILIARIZE_WAITING
