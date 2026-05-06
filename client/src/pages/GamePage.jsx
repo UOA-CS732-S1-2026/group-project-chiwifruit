@@ -7,7 +7,7 @@ import Background from "../components/Common/Background"
 import ExitGameModal from "../components/Game/ExitGameModal"
 import GamePlayerCard from "../components/Game/GamePlayerCard"
 import GameResultsModal from "../components/Game/GameResultsModal"
-import GameToast from "../components/Game/GameToast"
+import GameStatusBroadcast from "../components/Game/GameStatusBroadcast"
 import GameWheel from "../components/Game/GameWheel"
 import YoureOutModal from "../components/Game/YoureOutModal"
 import LoginButton from "../components/AuthComponent/LoginButton"
@@ -743,7 +743,21 @@ export default function GamePage() {
 					</div>
 				</div>
 
-				<GameToast message={toastMessage} className="mt-8" />
+				<GameStatusBroadcast
+					phase={phase}
+					players={players}
+					currentTurnIndex={currentTurnIndex}
+					turnSeconds={turnSeconds}
+					inputCount={inputCount}
+					requiredInputCount={requiredInputCount}
+					sequenceLength={sequence.length}
+					autoPlayIndex={autoPlayIndex}
+					padCount={padCount}
+					freePlaySeconds={freePlaySeconds}
+					isSpectating={isSpectating}
+					fallbackMessage={toastMessage}
+					className="mt-8"
+				/>
 			</div>
 		</Background>
 	)

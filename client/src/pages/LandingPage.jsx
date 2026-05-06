@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import AuthModal from "../components/AuthComponent/AuthModal";
-import { getStoredAuthUser } from "../api/axios";
 import JoinRoomModal from "../components/Landing/JoinRoomModal";
+import ErrorToast from "../components/ui/ErrorToast";
 import useBackgroundMusic from "../hooks/useBackgroundMusic";
 import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation";
 
@@ -22,9 +22,7 @@ import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation";
 // 若当前没有 token，会先创建 guest session（拿到 token）再调用房间 API。
 
 export default function LandingPage() {
-  const [showAuthModal, setShowAuthModal] = useState(
-    () => !getStoredAuthUser(),
-  );
+  const [showAuthModal, setShowAuthModal] = useState(false);
   // For local development, the build version is set to "local". In dev/prod,
   // it should be set to the actual build version via the VITE_BUILD_VERSION environment variable.
   const buildVersion = import.meta.env.VITE_BUILD_VERSION || "local";
@@ -75,7 +73,9 @@ export default function LandingPage() {
           build: {buildVersion}
         </div>
 
-        <LandingTopBar />
+        <ErrorToast message={actionError} onDismiss={clearActionError} />
+
+        <LandingTopBar onAuthClick={() => setShowAuthModal(true)} />
 
         <JoinRoomModal
           open={joinModalOpen}
@@ -141,11 +141,6 @@ export default function LandingPage() {
                 </Button>
               </div>
 
-              {actionError ? (
-                <p className="text-sm font-medium text-destructive">
-                  {actionError}
-                </p>
-              ) : null}
             </div>
 
             <div className="relative flex items-center justify-center lg:justify-end lg:pr-2">
