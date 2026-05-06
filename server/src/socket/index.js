@@ -332,12 +332,6 @@ function initSocket(httpServer, frontendOrigin) {
       const result = registerFamiliarPadPress({ roomCode: code, userId, padIndex });
       if (!result.ok) return;
 
-      socket.to(code).emit('game_pad_sound', {
-        roomCode: code,
-        padIndex: Number(padIndex),
-        userId: String(userId),
-      });
-
       io.to(code).emit('game_state', result.game);
 
       if (result.game.status === 'playing') {

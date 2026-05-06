@@ -180,6 +180,7 @@ export default function GamePage() {
 			}
 		}
 		const onGamePadSound = (payload) => {
+			if (socketGame?.status !== "playing") return
 			const sourceUserId = typeof payload?.userId === "string" ? payload.userId : null
 			if (sourceUserId && currentUserId && sourceUserId === currentUserId) return
 			const padIndex = Number(payload?.padIndex)
@@ -222,7 +223,7 @@ export default function GamePage() {
 			socket.off("game_error", onGameError)
 			socket.off("game_pad_sound", onGamePadSound)
 		}
-	}, [currentUserId, navigate, noteUrls, roomCode])
+	}, [currentUserId, navigate, noteUrls, roomCode, socketGame?.status])
 
 	const [phase, setPhase] = React.useState(PHASE.FAMILIARIZE_AUTO)
 	const padThemes = React.useMemo(
