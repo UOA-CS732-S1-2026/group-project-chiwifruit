@@ -14,7 +14,6 @@ import LoginButton from "../components/AuthComponent/LoginButton"
 import { Button } from "../components/ui/button"
 import { getStoredAuthUser } from "../api/axios"
 import { leaveRoom } from "../api/rooms"
-import { useRoomQuery } from "../hooks/queries/useRoomQuery"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useSoundStore from "../store/useSoundStore"
 import {
@@ -22,7 +21,6 @@ import {
 	emitGameFamiliarReady,
 	emitGamePadPress,
 	emitGameRequestState,
-	emitGameStart,
 	joinSocketRoom,
 	leaveSocketRoom,
 	reconnectSocket,
@@ -42,6 +40,10 @@ const PHASE = {
 const FAMILIARIZE_AUTOPLAY_MS = 900
 const FREE_PLAY_MS = 20_000
 // const COUNTDOWN_MS = 5_000
+
+function shouldExitToLanding(message) {
+	return message === "You are no longer part of this game." || message === "No active game."
+}
 
 function coerceDifficulty(value) {
 	if (value === "easy") return "easy"
@@ -78,10 +80,6 @@ export default function GamePage() {
 		setMuted(false)
 	}, [muted, setMuted])
 
-	const { data: roomState } = useRoomQuery(roomCode, Boolean(roomCode))
-	const hostId = roomState?.hostId ? String(roomState.hostId) : null
-	const isHost = Boolean(currentUserId) && Boolean(hostId) && currentUserId === hostId
-	const canStartGame = Boolean(isHost && roomState?.canStartGame)
 	const [socketGame, setSocketGame] = React.useState(null)
 	const [socketError, setSocketError] = React.useState("")
 	const [gameLoadError, setGameLoadError] = React.useState("")
@@ -114,8 +112,8 @@ export default function GamePage() {
 
 	React.useEffect(() => {
 		// Browser limitation: we cannot show a custom React modal on refresh/close.
-		// Use the native beforeunload confirmation for hosts during an active game.
-		if (!isHost) return
+		// Use the native beforeunload confirmation for any in-game player during an active game.
+		if (!isCurrentUserActive) return
 		if (!isSocketDriven) return
 		if (!socketGame?.status || socketGame.status === "finished") return
 
@@ -127,14 +125,7 @@ export default function GamePage() {
 		}
 		window.addEventListener("beforeunload", onBeforeUnload)
 		return () => window.removeEventListener("beforeunload", onBeforeUnload)
-	}, [isHost, isSocketDriven, socketGame?.status])
-
-	React.useEffect(() => {
-		if (!roomCode) return
-		if (!canStartGame) return
-		if (socketGame?.status) return
-		emitGameStart(roomCode)
-	}, [canStartGame, roomCode, socketGame?.status])
+	}, [isCurrentUserActive, isSocketDriven, socketGame?.status])
 
 	React.useEffect(() => {
 		if (roomCode) return
@@ -143,13 +134,12 @@ export default function GamePage() {
 
 	const difficulty = React.useMemo(() => {
 		if (socketGame?.difficulty) return coerceDifficulty(socketGame.difficulty)
-		if (roomState?.difficulty) return coerceDifficulty(roomState.difficulty)
 		return coerceDifficulty(location.state?.difficulty)
-	}, [location.state?.difficulty, roomState?.difficulty, socketGame?.difficulty])
+	}, [location.state?.difficulty, socketGame?.difficulty])
 	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : getPadCountByDifficulty(difficulty)
 	
 // NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
-// This avoids reshuffling when roomState/location changes, which would desync audio mapping between clients.
+// This avoids reshuffling when route fallback data changes, which would desync audio mapping between clients.
 	const noteUrls = React.useMemo(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed) return []
 		return pickGameNoteUrls({ 
@@ -213,7 +203,17 @@ export default function GamePage() {
 				return
 			}
 
-			const message = typeof response?.message === "string" ? response.message : "Unable to load game"
+				const message = typeof response?.error === "string"
+					? response.error
+					: typeof response?.message === "string"
+						? response.message
+						: "Unable to load game"
+				if (shouldExitToLanding(message)) {
+					leaveSocketRoom(roomCode)
+					navigate("/", { replace: true })
+					return
+				}
+
 			setGameLoadError(message)
 			setIsGameLoading(false)
 		})

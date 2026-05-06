@@ -2,6 +2,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const Room = require('../models/Room');
+const { removeParticipantFromRoom } = require('../services/roomStateService');
 const {
   TURN_MS,
   getGame,
@@ -111,13 +112,28 @@ function initSocket(httpServer, frontendOrigin) {
   });
 
   io.on('connection', (socket) => {
-    function handleForfeitInRoom(roomCode, reason) {
+    async function handleForfeitInRoom(roomCode, reason) {
       const code = String(roomCode).toUpperCase();
       const userId = socket.user?.sub;
       if (!userId) return;
 
       const result = forfeitPlayer({ roomCode: code, userId, reason });
       if (!result.ok) return;
+
+      if (reason === 'disconnect' || reason === 'leave_room') {
+        try {
+          const removal = await removeParticipantFromRoom({
+            roomCode: code,
+            identity: socket.user,
+          });
+
+          if (removal?.ok) {
+            emitRoomUpdate(io, code, removal.roomState ?? null);
+          }
+        } catch {
+          // best-effort room cleanup
+        }
+      }
 
       io.to(code).emit('game_state', result.game);
 
@@ -144,7 +160,7 @@ function initSocket(httpServer, frontendOrigin) {
       socket.join(String(roomCode).toUpperCase());
     });
 
-    socket.on('leave_room', (payload = {}) => {
+    socket.on('leave_room', async (payload = {}) => {
       const { roomCode } = payload;
       if (!roomCode) {
         return;
@@ -154,7 +170,7 @@ function initSocket(httpServer, frontendOrigin) {
       // 所以客户端只有在玩家明确退出比赛/关闭页面时才应该 emit 这个事件。
       // 仅仅想从房间 participants 列表里移除自己（回首页/离开等待房间）应调用 REST
       // DELETE /api/rooms/:roomCode，由后端更新 DB 并广播 room_update。
-      handleForfeitInRoom(roomCode, 'leave_room');
+      await handleForfeitInRoom(roomCode, 'leave_room');
 
       socket.leave(String(roomCode).toUpperCase());
     });
@@ -166,7 +182,7 @@ function initSocket(httpServer, frontendOrigin) {
       try {
         for (const roomCode of socket.rooms) {
           if (roomCode === socket.id) continue;
-          handleForfeitInRoom(roomCode, 'disconnect');
+          void handleForfeitInRoom(roomCode, 'disconnect');
         }
       } catch {
         // no-op
@@ -180,9 +196,20 @@ function initSocket(httpServer, frontendOrigin) {
         return;
       }
 
-      const internal = getGame(roomCode);
+      const code = String(roomCode).toUpperCase();
+      const internal = getGame(code);
       if (!internal) {
         if (typeof ack === 'function') ack({ ok: false, error: 'No active game.' });
+        return;
+      }
+
+      const userId = socket.user?.sub ? String(socket.user.sub) : null;
+      const player = userId
+        ? internal.players.find((candidate) => String(candidate.userId) === userId)
+        : null;
+
+      if (!player || player.leftDuringGame) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'You are no longer part of this game.' });
         return;
       }
 
