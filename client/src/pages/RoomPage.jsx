@@ -11,6 +11,7 @@ import SegmentedSelection from "../components/Room/SegmentedSelection"
 import PlayerSlotCard from "../components/Room/PlayerSlotCard"
 import { Button } from "../components/ui/button"
 import SoundToggleButton from "../components/ui/SoundToggleButton"
+import { useRoomSocketUpdates } from "../hooks/useSocketListeners"
 import {
 	useJoinRoomMutation,
 	useLeaveRoomMutation,
@@ -111,6 +112,7 @@ export default function RoomPage() {
 		roomCode,
 		Boolean(roomCode),
 	)
+	useRoomSocketUpdates(roomCode)
 
 	const mode = roomState?.mode ?? "bird"
 	const difficulty = roomState?.difficulty ?? "easy"
