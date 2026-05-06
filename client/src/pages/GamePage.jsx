@@ -14,7 +14,7 @@ import LoginButton from "../components/AuthComponent/LoginButton"
 import { Button } from "../components/ui/button"
 import { getStoredAuthUser } from "../api/axios"
 import { leaveRoom } from "../api/rooms"
-import { useRankingQuery, useRoomQuery } from "../hooks/queries/useRoomQuery"
+import { useRoomQuery } from "../hooks/queries/useRoomQuery"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useSoundStore from "../store/useSoundStore"
 import {
@@ -55,6 +55,7 @@ export default function GamePage() {
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const lastFamiliarAutoPlayedPadRef = React.useRef({ gameId: null, index: null, at: 0 })
+	const acknowledgedOutGameIdRef = React.useRef(null)
 // NOTE (2026-04-29): React 18 StrictMode + socket event timing can cause duplicate familiarization autoplay.
 // Remote and local pad sound events may fire almost simultaneously, causing the same note to play twice.
 // Using {gameId, index, at} for deduplication ensures each pad only plays once.
@@ -105,8 +106,6 @@ export default function GamePage() {
 		return gamePlayers.find((player) => String(player.userId) === String(currentUserId)) ?? null
 	}, [currentUserId, gamePlayers])
 	const isCurrentUserActive = Boolean(currentGamePlayer && !currentGamePlayer.isEliminated && !currentGamePlayer.leftDuringGame)
-	const isCurrentUserOut = Boolean(currentGamePlayer && (currentGamePlayer.isEliminated || currentGamePlayer.leftDuringGame))
-	const isCurrentUserMissing = Boolean(socketGame && !currentGamePlayer)
 	const waitingUserIds = React.useMemo(
 		() => (Array.isArray(socketGame?.familiarReadyUserIds) ? socketGame.familiarReadyUserIds.map(String) : []),
 		[socketGame?.familiarReadyUserIds],
@@ -270,6 +269,11 @@ export default function GamePage() {
 
 	React.useEffect(() => {
 		if (!socketGame) return
+		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
+		if (acknowledgedOutGameIdRef.current !== currentGameId) {
+			acknowledgedOutGameIdRef.current = null
+		}
+
 		setSequence(Array.isArray(socketGame.sequence) ? socketGame.sequence : [])
 		setInputCount(Number(socketGame.inputIndex ?? 0) || 0)
 		setCurrentTurnIndex(Number(socketGame.currentTurnIndex ?? 0) || 0)
@@ -284,7 +288,10 @@ export default function GamePage() {
 			return
 		}
 
-		if (isOut) setIsOutModalOpen(true)
+		if (isOut && currentGameId && acknowledgedOutGameIdRef.current !== currentGameId) {
+			acknowledgedOutGameIdRef.current = currentGameId
+			setIsOutModalOpen(true)
+		}
 		if (socketGame.status === "playing") setPhase(PHASE.PLAYING)
 	}, [currentGamePlayer, socketGame])
 
@@ -370,7 +377,6 @@ export default function GamePage() {
 		}))
 	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder])
 
-	const { data: rankingData } = useRankingQuery(roomCode, Boolean(roomCode) && isResultsModalOpen)
 	const resultsPlayers = React.useMemo(() => {
 		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
 		if (gamePlayerList.length > 0) {
@@ -395,23 +401,12 @@ export default function GamePage() {
 			})
 		}
 
-		const entries = Array.isArray(rankingData?.ranking) ? rankingData.ranking : []
-		if (entries.length === 0) return players
-		return entries.map((entry) => {
-			const entryId = String(entry.userId)
-			const isCurrentUser = Boolean(currentUserId) && entryId === currentUserId
-			const backendAvatarUrl = typeof entry.avatarUrl === "string" ? entry.avatarUrl : undefined
-			return {
-				id: entryId,
-				name: isCurrentUser ? `${entry.username} (You)` : entry.username,
-				score: Number(entry.correctCount ?? 0) || 0,
-				avatarUrl: backendAvatarUrl ?? (isCurrentUser ? headerAvatarUrl : undefined),
-			}
-		})
-	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder, players, rankingData?.ranking])
+		return players
+	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder, players])
 
 	React.useEffect(() => {
 		if (socketGame?.status) return
+		acknowledgedOutGameIdRef.current = null
 		setSequence([])
 		setInputCount(0)
 		setPhase(PHASE.FAMILIARIZE_AUTO)
@@ -571,6 +566,21 @@ export default function GamePage() {
 		}
 	}
 
+	const exitRoomAndGameToHome = React.useCallback(() => {
+		if (!roomCode) {
+			navigate("/")
+			return
+		}
+
+		Promise.resolve()
+			.then(() => leaveRoom(roomCode))
+			.catch(() => null)
+			.finally(() => {
+				leaveSocketRoom(roomCode)
+				navigate("/")
+			})
+	}, [navigate, roomCode])
+
 	const padsDisabled =
 		phase === PHASE.FAMILIARIZE_AUTO ||
 		phase === PHASE.FAMILIARIZE_WAITING ||
@@ -633,16 +643,22 @@ export default function GamePage() {
 				onCancel={() => setIsExitModalOpen(false)}
 				onConfirm={() => {
 					setIsExitModalOpen(false)
-					// Exit Game is defined as leaving the room entirely.
-					// The socket leave_room event now handles both forfeit and room cleanup （No, misleading, not yet success but it is expected）.
-					if (roomCode) leaveSocketRoom(roomCode)
-					navigate("/")
+					// Exit Game leaves both the current match and the room roster.
+					exitRoomAndGameToHome()
 				}}
 			/>
 			<YoureOutModal
 				open={isOutModalOpen}
-				onKeepSpectating={() => setIsOutModalOpen(false)}
+				onKeepSpectating={() => {
+					if (socketGame?.gameId) {
+						acknowledgedOutGameIdRef.current = String(socketGame.gameId)
+					}
+					setIsOutModalOpen(false)
+				}}
 				onBackToWaitingRoom={() => {
+					if (socketGame?.gameId) {
+						acknowledgedOutGameIdRef.current = String(socketGame.gameId)
+					}
 					setIsOutModalOpen(false)
 					navigate(roomCode ? `/room/${roomCode}` : "/")
 				}}
@@ -656,20 +672,9 @@ export default function GamePage() {
 					navigate(roomCode ? `/room/${roomCode}` : "/")
 				}}
 				onBackToHome={() => {
-						// NOTE (2026-04-29): When returning to home, call REST leaveRoom first so other players see you left.
-						// socket leave_room means "leave the match = forfeit"; here we only want to leave the room roster.
+						// Returning home leaves both the room roster and the current match.
 					setIsResultsModalOpen(false)
-					if (!roomCode) {
-						navigate("/")
-						return
-					}
-					Promise.resolve()
-						.then(() => leaveRoom(roomCode))
-						.catch(() => null)
-						.finally(() => {
-							leaveSocketRoom(roomCode)
-							navigate("/")
-						})
+					exitRoomAndGameToHome()
 				}}
 			/>
 			<div className="mx-auto w-full max-w-[90rem] px-4 pb-14 pt-6 md:px-6 lg:px-8">

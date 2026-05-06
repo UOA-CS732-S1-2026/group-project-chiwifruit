@@ -327,6 +327,11 @@ describe('gameService state machine', () => {
       expect(result.ok).toBe(true);
       expect(result.game.status).toBe('finished');
       expect(result.game.eliminatedUserIds).toContain('user2');
+      expect(result.game.players.find((player) => player.userId === 'user2')).toMatchObject({
+        isEliminated: true,
+        eliminationReason: 'wrong_note',
+        leftDuringGame: false,
+      });
       expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
   });
@@ -339,6 +344,11 @@ describe('gameService state machine', () => {
       const result = gameService.registerTurnTimeout(roomCode);
 
       expect(result.eliminatedUserIds).toContain('user1');
+      expect(result.players.find((player) => player.userId === 'user1')).toMatchObject({
+        isEliminated: true,
+        eliminationReason: 'timeout',
+        leftDuringGame: false,
+      });
       expect(result.status).toBe('finished');
       expect(result.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user2' });
     });
