@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import LoginPage from './pages/LoginPage'
 import GamePage from './pages/GamePage'
 import LandingPage from './pages/LandingPage'
 import RoomPage from './pages/RoomPage'

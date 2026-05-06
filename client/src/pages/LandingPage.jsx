@@ -3,8 +3,9 @@ import bigLogo from "../assets/branding/biglogo.png"
 import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
-import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
-import { useState } from "react"
+import { CircleAlert, Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy, Users } from "lucide-react"
+import { useEffect, useState } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
@@ -21,15 +22,23 @@ export default function LandingPage() {
 	// Background music is enabled on Landing + Room pages.
 	useBackgroundMusic()
 
+	const location = useLocation()
+	const navigate = useNavigate()
 	// Controls the Join Room modal triggered by "Join with Code".
 	const [joinModalOpen, setJoinModalOpen] = useState(false)
-	const {
-		actionError,
-		clearActionError,
-		isPending,
-		createRoomGuarded,
-		joinRoomGuarded,
-	} = useGuardedRoomNavigation()
+	const [errorMessage, setErrorMessage] = useState(location.state?.errorMessage ?? "")
+	const errorSplitToken = "new room instead."
+	const errorLineOne = errorMessage.includes(errorSplitToken)
+		? errorMessage.replace(errorSplitToken, "").trim()
+		: ""
+
+	useEffect(() => {
+		const nextMessage = location.state?.errorMessage ?? ""
+		if (!nextMessage) return
+		setErrorMessage(nextMessage)
+		const timer = window.setTimeout(() => setErrorMessage(""), 5000)
+		return () => window.clearTimeout(timer)
+	}, [location.state?.errorMessage])
 
 	const guideItems = [
 		{
@@ -61,6 +70,24 @@ export default function LandingPage() {
 			</div>
 
 			<LandingTopBar />
+
+			{errorMessage ? (
+				<div className="absolute left-1/2 top-0 z-30 flex w-[min(640px,calc(100%-2rem))] -translate-x-1/2 items-start gap-3 rounded-2xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-base font-semibold text-[#b91c1c] shadow-[0px_10px_24px_rgba(185,28,28,0.14)]">
+					<span className="flex size-8 items-center justify-center rounded-full bg-white shadow-sm">
+						<CircleAlert className="size-5 text-[#e11d48]" />
+					</span>
+					<span className="leading-relaxed">
+						{errorLineOne ? (
+							<>
+								{errorLineOne}
+								<span className="block">{errorSplitToken}</span>
+							</>
+						) : (
+							errorMessage
+						)}
+					</span>
+				</div>
+			) : null}
 
 			<JoinRoomModal
 				open={joinModalOpen}
@@ -99,6 +126,11 @@ export default function LandingPage() {
 							Test your memory in this multiplayer sound chain game. Listen to the sequence,
 							repeat it perfectly, and add your own beat. One mistake and you&apos;re out!
 						</p>
+
+						<div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-primary shadow-sm">
+							<Users className="size-4" />
+							<span>Perfect for 2 to 6 players per room</span>
+						</div>
 
 						<div className="flex flex-wrap items-center gap-3 pt-1">
 							<Button
