@@ -2,6 +2,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const Room = require('../models/Room');
+const { removeParticipantFromRoom } = require('../services/roomStateService');
 const {
   TURN_MS,
   getGame,
@@ -111,17 +112,22 @@ function initSocket(httpServer, frontendOrigin) {
   });
 
   io.on('connection', (socket) => {
-    function handleForfeitInRoom(roomCode, reason) {
+    async function handleForfeitInRoom(roomCode, reason) {
       const code = String(roomCode).toUpperCase();
       const userId = socket.user?.sub;
       if (!userId) return;
+      const existingGame = getGame(code);
+      const shouldCleanupRoomRoster =
+        (reason === 'disconnect' || reason === 'leave_room') &&
+        existingGame &&
+        existingGame.status !== 'finished';
 
       const result = forfeitPlayer({ roomCode: code, userId, reason });
       if (!result.ok) return;
 
       io.to(code).emit('game_state', result.game);
 
-      // Reschedule timers if needed.
+      // Reschedule timers immediately after the authoritative game update.
       clearRoomTimeout(code);
       if (result.game.status === 'playing') {
         scheduleTurnTimer(code);
@@ -132,6 +138,21 @@ function initSocket(httpServer, frontendOrigin) {
       if (result.game.status === 'finished') {
         persistFinalScores(code, result.game.scores);
         cleanupGameLater(code);
+      }
+
+      if (shouldCleanupRoomRoster) {
+        void removeParticipantFromRoom({
+          roomCode: code,
+          identity: socket.user,
+        })
+          .then((removal) => {
+            if (removal?.ok) {
+              emitRoomUpdate(io, code, removal.roomState ?? null);
+            }
+          })
+          .catch(() => {
+            // best-effort room cleanup
+          });
       }
     }
 
@@ -144,7 +165,7 @@ function initSocket(httpServer, frontendOrigin) {
       socket.join(String(roomCode).toUpperCase());
     });
 
-    socket.on('leave_room', (payload = {}) => {
+    socket.on('leave_room', async (payload = {}) => {
       const { roomCode } = payload;
       if (!roomCode) {
         return;
@@ -154,7 +175,7 @@ function initSocket(httpServer, frontendOrigin) {
       // 所以客户端只有在玩家明确退出比赛/关闭页面时才应该 emit 这个事件。
       // 仅仅想从房间 participants 列表里移除自己（回首页/离开等待房间）应调用 REST
       // DELETE /api/rooms/:roomCode，由后端更新 DB 并广播 room_update。
-      handleForfeitInRoom(roomCode, 'leave_room');
+      await handleForfeitInRoom(roomCode, 'leave_room');
 
       socket.leave(String(roomCode).toUpperCase());
     });
@@ -166,7 +187,7 @@ function initSocket(httpServer, frontendOrigin) {
       try {
         for (const roomCode of socket.rooms) {
           if (roomCode === socket.id) continue;
-          handleForfeitInRoom(roomCode, 'disconnect');
+          void handleForfeitInRoom(roomCode, 'disconnect');
         }
       } catch {
         // no-op
@@ -176,13 +197,24 @@ function initSocket(httpServer, frontendOrigin) {
     socket.on('game_request_state', (payload = {}, ack) => {
       const { roomCode } = payload;
       if (!roomCode) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'Missing room code.' });
+        if (typeof ack === 'function') ack({ ok: false, errorCode: 'MISSING_ROOM_CODE', error: 'Missing room code.' });
         return;
       }
 
-      const internal = getGame(roomCode);
+      const code = String(roomCode).toUpperCase();
+      const internal = getGame(code);
       if (!internal) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'No active game.' });
+        if (typeof ack === 'function') ack({ ok: false, errorCode: 'NO_ACTIVE_GAME', error: 'No active game.' });
+        return;
+      }
+
+      const userId = socket.user?.sub ? String(socket.user.sub) : null;
+      const player = userId
+        ? internal.players.find((candidate) => String(candidate.userId) === userId)
+        : null;
+
+      if (!player || player.leftDuringGame) {
+        if (typeof ack === 'function') ack({ ok: false, errorCode: 'GAME_NOT_PARTICIPANT', error: 'You are no longer part of this game.' });
         return;
       }
 
@@ -304,12 +336,6 @@ function initSocket(httpServer, frontendOrigin) {
 
       const result = registerFamiliarPadPress({ roomCode: code, userId, padIndex });
       if (!result.ok) return;
-
-      socket.to(code).emit('game_pad_sound', {
-        roomCode: code,
-        padIndex: Number(padIndex),
-        userId: String(userId),
-      });
 
       io.to(code).emit('game_state', result.game);
 

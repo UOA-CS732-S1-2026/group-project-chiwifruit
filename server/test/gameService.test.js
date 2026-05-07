@@ -70,6 +70,24 @@ describe('gameService state machine', () => {
         participantsOrder: ['user1', 'user2'],
       });
       expect(result.game.scores).toEqual({ user1: 0, user2: 0 });
+      expect(result.game.players).toEqual([
+        expect.objectContaining({ userId: 'user1', username: 'Host', score: 0, isEliminated: false, leftDuringGame: false }),
+        expect.objectContaining({ userId: 'user2', username: 'Player Two', score: 0, isEliminated: false, leftDuringGame: false }),
+      ]);
+    });
+
+    it('should snapshot room participants into game.players without mutating room participants', () => {
+      const roomCode = 'START_SNAPSHOT_ROOM';
+      const activeRoom = room({ roomCode, participants: [participant('user1', 'Host'), participant('user2', 'Player Two')] });
+      const originalParticipants = JSON.parse(JSON.stringify(activeRoom.participants));
+
+      const result = gameService.startGame({ room: activeRoom, requestedByUserId: 'user1' });
+
+      expect(result.ok).toBe(true);
+      expect(activeRoom.participants).toEqual(originalParticipants);
+      expect(result.game.players).toHaveLength(2);
+      expect(result.game.players[0].userId).toBe('user1');
+      expect(result.game.players[1].userId).toBe('user2');
     });
   });
 
@@ -175,7 +193,31 @@ describe('gameService state machine', () => {
       expect(result.ok).toBe(true);
       expect(result.game.status).toBe('familiarizing');
       expect(result.game.eliminatedUserIds).toContain('user3');
+      expect(result.game.players.find((p) => p.userId === 'user3')).toMatchObject({
+        isEliminated: true,
+        leftDuringGame: true,
+        eliminationReason: 'disconnect',
+      });
       expect(result.game.lastEvent).toMatchObject({ type: 'player_eliminated', userId: 'user3', reason: 'disconnect' });
+    });
+
+    it('should not mutate room participants when a player forfeits during familiarization', () => {
+      const roomCode = 'FAMILIAR_FORFEIT_ROOM_INTACT';
+      const activeRoom = room({
+        roomCode,
+        participants: [
+          participant('user1', 'Host'),
+          participant('user2', 'Player Two'),
+          participant('user3', 'Player Three'),
+        ],
+      });
+      const originalParticipants = JSON.parse(JSON.stringify(activeRoom.participants));
+
+      gameService.startGame({ room: activeRoom, requestedByUserId: 'user1' });
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(activeRoom.participants).toEqual(originalParticipants);
     });
 
     it('should not force-start into playing when only one player is alive', () => {
@@ -285,6 +327,11 @@ describe('gameService state machine', () => {
       expect(result.ok).toBe(true);
       expect(result.game.status).toBe('finished');
       expect(result.game.eliminatedUserIds).toContain('user2');
+      expect(result.game.players.find((player) => player.userId === 'user2')).toMatchObject({
+        isEliminated: true,
+        eliminationReason: 'wrong_note',
+        leftDuringGame: false,
+      });
       expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
   });
@@ -297,6 +344,11 @@ describe('gameService state machine', () => {
       const result = gameService.registerTurnTimeout(roomCode);
 
       expect(result.eliminatedUserIds).toContain('user1');
+      expect(result.players.find((player) => player.userId === 'user1')).toMatchObject({
+        isEliminated: true,
+        eliminationReason: 'timeout',
+        leftDuringGame: false,
+      });
       expect(result.status).toBe('finished');
       expect(result.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user2' });
     });

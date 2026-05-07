@@ -11,6 +11,7 @@ import SegmentedSelection from "../components/Room/SegmentedSelection"
 import PlayerSlotCard from "../components/Room/PlayerSlotCard"
 import { Button } from "../components/ui/button"
 import SoundToggleButton from "../components/ui/SoundToggleButton"
+import { useRoomSocketUpdates } from "../hooks/useSocketListeners"
 import {
 	useJoinRoomMutation,
 	useLeaveRoomMutation,
@@ -56,6 +57,7 @@ export default function RoomPage() {
 	const requestedJoinCode = normalizedParamCode === "NEW" ? "" : normalizedParamCode
 	const [roomCode, setRoomCode] = useState("")
 	const [setupError, setSetupError] = useState("")
+	const [isStartingGame, setIsStartingGame] = useState(false)
 
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
@@ -63,6 +65,7 @@ export default function RoomPage() {
 	useEffect(() => {
 		startedSetupRef.current = false
 		setSetupError("")
+		setIsStartingGame(false)
 	}, [normalizedParamCode])
 
 	const joinRoomMutation = useJoinRoomMutation({
@@ -109,6 +112,7 @@ export default function RoomPage() {
 		roomCode,
 		Boolean(roomCode),
 	)
+	useRoomSocketUpdates(roomCode)
 
 	const mode = roomState?.mode ?? "bird"
 	const difficulty = roomState?.difficulty ?? "easy"
@@ -156,8 +160,20 @@ export default function RoomPage() {
 	const handleStartGame = () => {
 		if (!isHost) return
 		if (!canStartGame) return
-		emitGameStart(roomCode)
-		navigate(`/game/${roomCode}`, { state: { difficulty, soundMode: mode, roomCode } })
+		if (isStartingGame) return
+
+		setSetupError("")
+		setIsStartingGame(true)
+		emitGameStart(roomCode, (response) => {
+			setIsStartingGame(false)
+			if (!response?.ok || !response?.game) {
+				const message = typeof response?.error === "string" ? response.error : "Unable to start game"
+				setSetupError(message)
+				return
+			}
+
+			navigate(`/game/${roomCode}`, { state: { difficulty, soundMode: mode, roomCode } })
+		})
 	}
 
 	const canStartGame = Boolean(isHost && roomState?.canStartGame)
@@ -376,11 +392,11 @@ export default function RoomPage() {
 							<Button
 								type="button"
 								onClick={handleStartGame}
-								disabled={!canStartGame}
+								disabled={!canStartGame || isStartingGame}
 								className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"
 							>
 								<Play className="size-4 fill-current" />
-								Start Game
+								{isStartingGame ? "Starting..." : "Start Game"}
 							</Button>
 						) : (
 							<Button

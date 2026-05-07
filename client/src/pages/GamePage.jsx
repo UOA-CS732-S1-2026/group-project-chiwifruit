@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { ArrowLeft, ChevronsRight } from "lucide-react"
-import { useLocation, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 
 import Background from "../components/Common/Background"
 import ExitGameModal from "../components/Game/ExitGameModal"
@@ -14,7 +14,6 @@ import LoginButton from "../components/AuthComponent/LoginButton"
 import { Button } from "../components/ui/button"
 import { getStoredAuthUser } from "../api/axios"
 import { leaveRoom } from "../api/rooms"
-import { useRankingQuery, useRoomQuery } from "../hooks/queries/useRoomQuery"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useSoundStore from "../store/useSoundStore"
 import {
@@ -22,7 +21,6 @@ import {
 	emitGameFamiliarReady,
 	emitGamePadPress,
 	emitGameRequestState,
-	emitGameStart,
 	joinSocketRoom,
 	leaveSocketRoom,
 	reconnectSocket,
@@ -30,7 +28,7 @@ import {
 import { pickGameNoteUrls, playGameNote } from "../lib/gameAudio"
 
 import logo from "../assets/branding/logo.png"
-import { buildPadThemeSetByPadCount, getPadCountByDifficulty } from "../lib/gamePadPalette"
+import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
 
 const PHASE = {
 	FAMILIARIZE_AUTO: "familiarize:auto",
@@ -43,6 +41,10 @@ const FAMILIARIZE_AUTOPLAY_MS = 900
 const FREE_PLAY_MS = 20_000
 // const COUNTDOWN_MS = 5_000
 
+function shouldExitToLanding(errorCode) {
+	return errorCode === "GAME_NOT_PARTICIPANT" || errorCode === "NO_ACTIVE_GAME"
+}
+
 function coerceDifficulty(value) {
 	if (value === "easy") return "easy"
 	if (value === "hard") return "hard"
@@ -51,10 +53,10 @@ function coerceDifficulty(value) {
 
 export default function GamePage() {
 	const navigate = useNavigate()
-	const location = useLocation()
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const lastFamiliarAutoPlayedPadRef = React.useRef({ gameId: null, index: null, at: 0 })
+	const acknowledgedOutGameIdRef = React.useRef(null)
 // NOTE (2026-04-29): React 18 StrictMode + socket event timing can cause duplicate familiarization autoplay.
 // Remote and local pad sound events may fire almost simultaneously, causing the same note to play twice.
 // Using {gameId, index, at} for deduplication ensures each pad only plays once.
@@ -77,31 +79,40 @@ export default function GamePage() {
 		setMuted(false)
 	}, [muted, setMuted])
 
-	const { data: roomState } = useRoomQuery(roomCode, Boolean(roomCode))
-	const hostId = roomState?.hostId ? String(roomState.hostId) : null
-	const isHost = Boolean(currentUserId) && Boolean(hostId) && currentUserId === hostId
-	const canStartGame = Boolean(isHost && roomState?.canStartGame)
 	const [socketGame, setSocketGame] = React.useState(null)
 	const [socketError, setSocketError] = React.useState("")
 	const [gameLoadError, setGameLoadError] = React.useState("")
 	const [isGameLoading, setIsGameLoading] = React.useState(true)
 	const [serverOffsetMs, setServerOffsetMs] = React.useState(0)
 	const isSocketDriven = Boolean(socketGame?.gameId)
-	const participantOrder = React.useMemo(
-		() => (Array.isArray(socketGame?.participantsOrder) ? socketGame.participantsOrder.map(String) : []),
-		[socketGame?.participantsOrder],
+	const gamePlayers = React.useMemo(
+		() => (Array.isArray(socketGame?.players) ? socketGame.players : []),
+		[socketGame?.players],
 	)
-	const isCurrentUserParticipant = Boolean(currentUserId) && participantOrder.includes(String(currentUserId))
+	const participantOrder = React.useMemo(
+		() => {
+			if (Array.isArray(socketGame?.participantsOrder) && socketGame.participantsOrder.length > 0) {
+				return socketGame.participantsOrder.map(String)
+			}
+			return gamePlayers.map((player) => String(player.userId))
+		},
+		[socketGame?.participantsOrder, gamePlayers],
+	)
+	const currentGamePlayer = React.useMemo(() => {
+		if (!currentUserId) return null
+		return gamePlayers.find((player) => String(player.userId) === String(currentUserId)) ?? null
+	}, [currentUserId, gamePlayers])
+	const isCurrentUserActive = Boolean(currentGamePlayer && !currentGamePlayer.isEliminated && !currentGamePlayer.leftDuringGame)
 	const waitingUserIds = React.useMemo(
 		() => (Array.isArray(socketGame?.familiarReadyUserIds) ? socketGame.familiarReadyUserIds.map(String) : []),
 		[socketGame?.familiarReadyUserIds],
 	)
-	const isCurrentUserWaiting = Boolean(isCurrentUserParticipant) && waitingUserIds.includes(String(currentUserId))
+	const isCurrentUserWaiting = Boolean(isCurrentUserActive) && waitingUserIds.includes(String(currentUserId))
 
 	React.useEffect(() => {
 		// Browser limitation: we cannot show a custom React modal on refresh/close.
-		// Use the native beforeunload confirmation for hosts during an active game.
-		if (!isHost) return
+		// Use the native beforeunload confirmation for any in-game player during an active game.
+		if (!isCurrentUserActive) return
 		if (!isSocketDriven) return
 		if (!socketGame?.status || socketGame.status === "finished") return
 
@@ -113,29 +124,21 @@ export default function GamePage() {
 		}
 		window.addEventListener("beforeunload", onBeforeUnload)
 		return () => window.removeEventListener("beforeunload", onBeforeUnload)
-	}, [isHost, isSocketDriven, socketGame?.status])
-
-	React.useEffect(() => {
-		if (!roomCode) return
-		if (!canStartGame) return
-		if (socketGame?.status) return
-		emitGameStart(roomCode)
-	}, [canStartGame, roomCode, socketGame?.status])
+	}, [isCurrentUserActive, isSocketDriven, socketGame?.status])
 
 	React.useEffect(() => {
 		if (roomCode) return
 		navigate("/", { replace: true })
 	}, [navigate, roomCode])
 
-	const difficulty = React.useMemo(() => {
-		if (socketGame?.difficulty) return coerceDifficulty(socketGame.difficulty)
-		if (roomState?.difficulty) return coerceDifficulty(roomState.difficulty)
-		return coerceDifficulty(location.state?.difficulty)
-	}, [location.state?.difficulty, roomState?.difficulty, socketGame?.difficulty])
-	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : getPadCountByDifficulty(difficulty)
+	const difficulty = React.useMemo(
+		() => coerceDifficulty(socketGame?.difficulty),
+		[socketGame?.difficulty],
+	)
+	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : 0
 	
 // NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
-// This avoids reshuffling when roomState/location changes, which would desync audio mapping between clients.
+// This avoids reshuffling from any non-authoritative client fallback state.
 	const noteUrls = React.useMemo(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed) return []
 		return pickGameNoteUrls({ 
@@ -177,6 +180,7 @@ export default function GamePage() {
 			}
 		}
 		const onGamePadSound = (payload) => {
+			if (socketGame?.status !== "playing") return
 			const sourceUserId = typeof payload?.userId === "string" ? payload.userId : null
 			if (sourceUserId && currentUserId && sourceUserId === currentUserId) return
 			const padIndex = Number(payload?.padIndex)
@@ -199,7 +203,18 @@ export default function GamePage() {
 				return
 			}
 
-			const message = typeof response?.message === "string" ? response.message : "Unable to load game"
+			const errorCode = typeof response?.errorCode === "string" ? response.errorCode : ""
+				const message = typeof response?.error === "string"
+					? response.error
+					: typeof response?.message === "string"
+						? response.message
+						: "Unable to load game"
+				if (shouldExitToLanding(errorCode)) {
+					leaveSocketRoom(roomCode)
+					navigate("/", { replace: true })
+					return
+				}
+
 			setGameLoadError(message)
 			setIsGameLoading(false)
 		})
@@ -209,7 +224,7 @@ export default function GamePage() {
 			socket.off("game_error", onGameError)
 			socket.off("game_pad_sound", onGamePadSound)
 		}
-	}, [currentUserId, navigate, noteUrls, roomCode])
+	}, [currentUserId, navigate, noteUrls, roomCode, socketGame?.status])
 
 	const [phase, setPhase] = React.useState(PHASE.FAMILIARIZE_AUTO)
 	const padThemes = React.useMemo(
@@ -255,13 +270,17 @@ export default function GamePage() {
 
 	React.useEffect(() => {
 		if (!socketGame) return
+		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
+		if (acknowledgedOutGameIdRef.current !== currentGameId) {
+			acknowledgedOutGameIdRef.current = null
+		}
+
 		setSequence(Array.isArray(socketGame.sequence) ? socketGame.sequence : [])
 		setInputCount(Number(socketGame.inputIndex ?? 0) || 0)
 		setCurrentTurnIndex(Number(socketGame.currentTurnIndex ?? 0) || 0)
 
-		const eliminated = Array.isArray(socketGame.eliminatedUserIds) ? socketGame.eliminatedUserIds : []
-		const isEliminated = Boolean(currentUserId) && eliminated.includes(currentUserId)
-		setIsSpectating(isEliminated)
+		const isOut = Boolean(currentGamePlayer && (currentGamePlayer.isEliminated || currentGamePlayer.leftDuringGame))
+		setIsSpectating(isOut || Boolean(socketGame && !currentGamePlayer))
 
 		if (socketGame.status === "finished") {
 			setIsOutModalOpen(false)
@@ -270,9 +289,12 @@ export default function GamePage() {
 			return
 		}
 
-		if (isEliminated) setIsOutModalOpen(true)
+		if (isOut && currentGameId && acknowledgedOutGameIdRef.current !== currentGameId) {
+			acknowledgedOutGameIdRef.current = currentGameId
+			setIsOutModalOpen(true)
+		}
 		if (socketGame.status === "playing") setPhase(PHASE.PLAYING)
-	}, [currentUserId, socketGame])
+	}, [currentGamePlayer, socketGame])
 
 	React.useEffect(() => {
 		if (!isSocketDriven) return
@@ -325,39 +347,26 @@ export default function GamePage() {
 	}, [serverOffsetMs, socketGame?.status, socketGame?.turnEndsAt])
 
 	const players = React.useMemo(() => {
-		const participants = Array.isArray(roomState?.participants) ? roomState.participants : []
-		if (participants.length === 0) {
-			return [
-				{
-					id: currentUserId ?? "me",
-					name: `${headerLoginLabel} (You)`,
-					avatarUrl: headerAvatarUrl,
-					score: 0,
-					side: "left",
-				},
-			]
+		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
+		if (gamePlayerList.length === 0) {
+			return []
 		}
 
-		// Important: order must match the server-authoritative participantsOrder so that
-		// currentTurnIndex highlights the correct player.
-		const participantById = new Map(participants.map((participant) => [String(participant.userId), participant]))
-		const orderedIds = participantOrder.length > 0 ? participantOrder : participants.map((p) => String(p.userId))
+		const playerById = new Map(gamePlayerList.map((player) => [String(player.userId), player]))
+		const orderedIds = participantOrder.length > 0 ? participantOrder : gamePlayerList.map((player) => String(player.userId))
 
 		const mapped = orderedIds
-			.map((participantId) => {
-				const participant = participantById.get(String(participantId))
-				if (!participant) return null
-				const isCurrentUser = Boolean(currentUserId) && String(participantId) === currentUserId
-				const backendAvatarUrl = typeof participant.avatarUrl === "string" ? participant.avatarUrl : undefined
-				const scoreFromSocket =
-					socketGame?.scores && String(participantId) in socketGame.scores
-						? Number(socketGame.scores[String(participantId)])
-						: null
+			.map((playerId) => {
+				const player = playerById.get(String(playerId))
+				if (!player) return null
+				const isCurrentUser = Boolean(currentUserId) && String(playerId) === currentUserId
 				return {
-					id: String(participantId),
-					name: isCurrentUser ? `${participant.username} (You)` : participant.username,
-					avatarUrl: backendAvatarUrl ?? (isCurrentUser ? headerAvatarUrl : undefined),
-					score: (Number.isFinite(scoreFromSocket) ? scoreFromSocket : Number(participant.correctCount ?? 0)) || 0,
+					id: String(playerId),
+					name: isCurrentUser ? `${player.username} (You)` : player.username,
+					avatarUrl: player.avatarUrl || (isCurrentUser ? headerAvatarUrl : undefined),
+					score: Number(player.score ?? 0) || 0,
+					isEliminated: Boolean(player.isEliminated),
+					leftDuringGame: Boolean(player.leftDuringGame),
 				}
 			})
 			.filter(Boolean)
@@ -367,27 +376,38 @@ export default function GamePage() {
 			...player,
 			side: index < leftCount ? "left" : "right",
 		}))
-	}, [currentUserId, headerAvatarUrl, headerLoginLabel, participantOrder, roomState?.participants, socketGame?.scores])
+	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder])
 
-	const { data: rankingData } = useRankingQuery(roomCode, Boolean(roomCode) && isResultsModalOpen)
 	const resultsPlayers = React.useMemo(() => {
-		const entries = Array.isArray(rankingData?.ranking) ? rankingData.ranking : []
-		if (entries.length === 0) return players
-		return entries.map((entry) => {
-			const entryId = String(entry.userId)
-			const isCurrentUser = Boolean(currentUserId) && entryId === currentUserId
-			const backendAvatarUrl = typeof entry.avatarUrl === "string" ? entry.avatarUrl : undefined
-			return {
-				id: entryId,
-				name: isCurrentUser ? `${entry.username} (You)` : entry.username,
-				score: Number(entry.correctCount ?? 0) || 0,
-				avatarUrl: backendAvatarUrl ?? (isCurrentUser ? headerAvatarUrl : undefined),
-			}
-		})
-	}, [currentUserId, headerAvatarUrl, players, rankingData?.ranking])
+		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
+		if (gamePlayerList.length > 0) {
+			const orderedIds = participantOrder.length > 0 ? participantOrder : gamePlayerList.map((player) => String(player.userId))
+			const normalized = orderedIds
+				.map((playerId) => {
+					const player = gamePlayerList.find((candidate) => String(candidate.userId) === String(playerId))
+					if (!player) return null
+					const isCurrentUser = Boolean(currentUserId) && String(player.userId) === currentUserId
+					return {
+						id: String(player.userId),
+						name: isCurrentUser ? `${player.username} (You)` : player.username,
+						avatarUrl: player.avatarUrl || (isCurrentUser ? headerAvatarUrl : undefined),
+						score: Number(player.score ?? 0) || 0,
+					}
+				})
+				.filter(Boolean)
+			return normalized.sort((a, b) => {
+				const scoreDiff = Number(b.score) - Number(a.score)
+				if (scoreDiff !== 0) return scoreDiff
+				return orderedIds.indexOf(a.id) - orderedIds.indexOf(b.id)
+			})
+		}
+
+		return players
+	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder, players])
 
 	React.useEffect(() => {
 		if (socketGame?.status) return
+		acknowledgedOutGameIdRef.current = null
 		setSequence([])
 		setInputCount(0)
 		setPhase(PHASE.FAMILIARIZE_AUTO)
@@ -419,62 +439,6 @@ export default function GamePage() {
 		setToastMessage("You're out! You can keep spectating.")
 	}, [currentTurnIndex, isOutModalOpen, isSpectating, phase, socketGame?.status, turnSeconds])
 
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_AUTO) return
-
-		setToastMessage("Familiarize yourself with the notes!")
-		setAutoPlayIndex(0)
-
-		const intervalId = window.setInterval(() => {
-			setAutoPlayIndex((previous) => {
-				const next = previous + 1
-				if (next >= padCount) {
-					window.clearInterval(intervalId)
-					setPhase(PHASE.FAMILIARIZE_FREE)
-					setActivePadIndex(null)
-					return Math.max(0, padCount - 1)
-				}
-				return next
-			})
-		}, 900)
-
-		return () => window.clearInterval(intervalId)
-	}, [isSocketDriven, padCount, phase])
-
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_AUTO) return
-		setActivePadIndex(autoPlayIndex)
-	}, [autoPlayIndex, isSocketDriven, phase])
-
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_FREE) return
-		setToastMessage("Familiarize yourself with the notes!")
-		setFreePlaySeconds(20)
-
-		const intervalId = window.setInterval(() => {
-			setFreePlaySeconds((previous) => {
-				return Math.max(0, previous - 1)
-			})
-		}, 1000)
-
-		return () => window.clearInterval(intervalId)
-	}, [isSocketDriven, phase])
-
-	React.useEffect(() => {
-		if (phase !== PHASE.PLAYING) return
-		if (socketGame?.status === "playing") return
-		setTurnSeconds(20)
-
-		const intervalId = window.setInterval(() => {
-			setTurnSeconds((previous) => Math.max(0, previous - 1))
-		}, 1000)
-
-		return () => window.clearInterval(intervalId)
-	}, [currentTurnIndex, phase, socketGame?.status])
-
 	const isFamiliarize =
 		phase === PHASE.FAMILIARIZE_AUTO || phase === PHASE.FAMILIARIZE_FREE || phase === PHASE.FAMILIARIZE_WAITING
 
@@ -504,7 +468,7 @@ export default function GamePage() {
 				</div>
 			</div>
 
-			{phase === PHASE.FAMILIARIZE_FREE && isCurrentUserParticipant ? (
+			{phase === PHASE.FAMILIARIZE_FREE && isCurrentUserActive ? (
 				<button
 					type="button"
 					onClick={() => {
@@ -521,7 +485,7 @@ export default function GamePage() {
 	) : null
 
 	const handlePadPress = (index) => {
-		if (isSocketDriven && !isCurrentUserParticipant) return
+		if (isSocketDriven && !isCurrentUserActive) return
 		if (phase === PHASE.FAMILIARIZE_AUTO) return
 		if (phase === PHASE.FAMILIARIZE_WAITING) return
 		if (phase === PHASE.PLAYING && isSpectating) return
@@ -547,11 +511,27 @@ export default function GamePage() {
 		}
 	}
 
+	const exitRoomAndGameToHome = React.useCallback(() => {
+		if (!roomCode) {
+			navigate("/")
+			return
+		}
+
+		Promise.resolve()
+			.then(() => leaveRoom(roomCode))
+			.catch(() => null)
+			.finally(() => {
+				leaveSocketRoom(roomCode)
+				navigate("/")
+			})
+	}, [navigate, roomCode])
+
 	const padsDisabled =
 		phase === PHASE.FAMILIARIZE_AUTO ||
 		phase === PHASE.FAMILIARIZE_WAITING ||
 		(phase === PHASE.PLAYING && Boolean(isSpectating)) ||
 		(phase === PHASE.FAMILIARIZE_FREE && isCurrentUserWaiting) ||
+		(isSocketDriven && !isCurrentUserActive) ||
 		(phase === PHASE.PLAYING &&
 			socketGame?.status === "playing" &&
 			(Boolean(!currentUserId) || (socketGame.currentTurnUserId && currentUserId !== socketGame.currentTurnUserId)))
@@ -608,16 +588,22 @@ export default function GamePage() {
 				onCancel={() => setIsExitModalOpen(false)}
 				onConfirm={() => {
 					setIsExitModalOpen(false)
-					// Exit Game is defined as leaving the room entirely.
-					// The socket leave_room event now handles both forfeit and room cleanup （No, misleading, not yet success but it is expected）.
-					if (roomCode) leaveSocketRoom(roomCode)
-					navigate("/")
+					// Exit Game leaves both the current match and the room roster.
+					exitRoomAndGameToHome()
 				}}
 			/>
 			<YoureOutModal
 				open={isOutModalOpen}
-				onKeepSpectating={() => setIsOutModalOpen(false)}
+				onKeepSpectating={() => {
+					if (socketGame?.gameId) {
+						acknowledgedOutGameIdRef.current = String(socketGame.gameId)
+					}
+					setIsOutModalOpen(false)
+				}}
 				onBackToWaitingRoom={() => {
+					if (socketGame?.gameId) {
+						acknowledgedOutGameIdRef.current = String(socketGame.gameId)
+					}
 					setIsOutModalOpen(false)
 					navigate(roomCode ? `/room/${roomCode}` : "/")
 				}}
@@ -631,20 +617,9 @@ export default function GamePage() {
 					navigate(roomCode ? `/room/${roomCode}` : "/")
 				}}
 				onBackToHome={() => {
-						// NOTE (2026-04-29): When returning to home, call REST leaveRoom first so other players see you left.
-						// socket leave_room means "leave the match = forfeit"; here we only want to leave the room roster.
+						// Returning home leaves both the room roster and the current match.
 					setIsResultsModalOpen(false)
-					if (!roomCode) {
-						navigate("/")
-						return
-					}
-					Promise.resolve()
-						.then(() => leaveRoom(roomCode))
-						.catch(() => null)
-						.finally(() => {
-							leaveSocketRoom(roomCode)
-							navigate("/")
-						})
+					exitRoomAndGameToHome()
 				}}
 			/>
 			<div className="mx-auto w-full max-w-[90rem] px-4 pb-14 pt-6 md:px-6 lg:px-8">
