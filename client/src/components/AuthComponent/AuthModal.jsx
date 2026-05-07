@@ -36,7 +36,7 @@ export default function AuthModal({ onBackToHome }) {
 	}
 
 	return (
-		<section className="relative min-h-screen px-5 py-16">
+		<section className="fixed inset-0 z-50 overflow-y-auto bg-background px-5 py-16">
 			<button
 				type="button"
 				onClick={onBackToHome}
