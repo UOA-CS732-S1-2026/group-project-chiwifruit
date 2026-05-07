@@ -44,7 +44,7 @@ function participantIdOf(participant) {
   return participant.user?._id ? String(participant.user._id) : participant.guestId ? String(participant.guestId) : null;
 }
 
-function buildPlayerSnapshot(participant) {
+function buildPlayerSnapshot(participant, initialOrder) {
   const userId = participantIdOf(participant);
   return {
     userId,
@@ -55,6 +55,8 @@ function buildPlayerSnapshot(participant) {
     isEliminated: false,
     eliminationReason: null,
     leftDuringGame: false,
+    initialOrder,
+    failureLength: 0,
   };
 }
 
@@ -70,6 +72,7 @@ function markPlayerEliminated(game, userId, reason, { leftDuringGame = false } =
     player.isEliminated = true;
     player.eliminationReason = reason;
     player.leftDuringGame = Boolean(leftDuringGame);
+    player.failureLength = game.sequence.length;
   }
 
   game.eliminatedUserIds.add(participantId);
@@ -114,8 +117,8 @@ function startGame({ room, requestedByUserId }) {
   }
 
   const players = room.participants
-    .map((participant) => {
-      const snapshot = buildPlayerSnapshot(participant);
+    .map((participant, index) => {
+      const snapshot = buildPlayerSnapshot(participant, index + 1);
       return snapshot.userId ? snapshot : null;
     })
     .filter(Boolean);
@@ -293,7 +296,17 @@ function finishIfOnlyOneAlive(game) {
   if (alive.length <= 1) {
     game.status = 'finished';
     game.turnEndsAt = null;
-    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId: alive[0] ?? null };
+    const winnerUserId = alive[0] ?? null;
+    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId };
+
+    // Set winner's failureLength to 0
+    if (winnerUserId) {
+      const winnerPlayer = getPlayerByUserId(game, winnerUserId);
+      if (winnerPlayer) {
+        winnerPlayer.failureLength = 0;
+      }
+    }
+
     return true;
   }
   return false;

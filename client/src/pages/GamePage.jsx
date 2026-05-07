@@ -16,6 +16,7 @@ import { getStoredAuthUser } from "../api/axios"
 import { leaveRoom } from "../api/rooms"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useSoundStore from "../store/useSoundStore"
+import { useRankingQuery } from "../hooks/queries/useRoomQuery"
 import {
 	emitGameFamiliarPadPress,
 	emitGameFamiliarReady,
@@ -267,6 +268,7 @@ export default function GamePage() {
 	const [isOutModalOpen, setIsOutModalOpen] = React.useState(false)
 	const [isResultsModalOpen, setIsResultsModalOpen] = React.useState(false)
 	const [isSpectating, setIsSpectating] = React.useState(false)
+	const rankingQuery = useRankingQuery(roomCode, isResultsModalOpen)
 
 	React.useEffect(() => {
 		if (!socketGame) return
@@ -610,7 +612,7 @@ export default function GamePage() {
 			/>
 			<GameResultsModal
 				open={isResultsModalOpen}
-				players={resultsPlayers}
+				ranking={rankingQuery.data?.ranking}
 				onClose={() => setIsResultsModalOpen(false)}
 				onBackToRoom={() => {
 					setIsResultsModalOpen(false)

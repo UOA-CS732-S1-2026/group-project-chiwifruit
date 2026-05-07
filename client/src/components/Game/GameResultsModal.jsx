@@ -101,11 +101,11 @@ function ResultsRow({
 	)
 }
 
-export default function GameResultsModal({ open, players, onBackToRoom, onBackToHome, onClose }) {
+export default function GameResultsModal({ open, ranking, onBackToRoom, onBackToHome, onClose }) {
 	const sortedPlayers = React.useMemo(() => {
-		const safePlayers = Array.isArray(players) ? players : []
-		return [...safePlayers].sort((a, b) => (b?.score ?? 0) - (a?.score ?? 0))
-	}, [players])
+		const safePlayers = Array.isArray(ranking) ? ranking : []
+		return [...safePlayers].sort((a, b) => (b?.correctCount ?? 0) - (a?.correctCount ?? 0))
+	}, [ranking])
 
 	return (
 		<BaseModal
@@ -129,10 +129,10 @@ export default function GameResultsModal({ open, players, onBackToRoom, onBackTo
 						const variant = index === 0 ? "winner" : index <= 2 ? "podium" : "normal"
 						return (
 							<ResultsRow
-								key={player.id ?? `${player.name}-${index}`}
+								key={player.userId ?? `${player.username}-${index}`}
 								index={index}
-								name={player.name}
-								points={player.score ?? 0}
+								name={player.username}
+								points={player.correctCount ?? 0}
 								avatarUrl={player.avatarUrl}
 								isOnline
 								variant={variant}
