@@ -1,5 +1,8 @@
 import { cn } from "../../lib/utils"
 
+// NOTE (2026-04-29): GameWheel 只负责渲染/布局与点击事件。
+// 视觉主题（颜色/阴影/高亮）通过 CSS variables 注入，避免在 JS 里写死样式逻辑。
+
 export default function GameWheel({
 	pads,
 	activePadIndex = null,
@@ -25,6 +28,7 @@ export default function GameWheel({
 					<button
 						key={`${pad.base}-${index}`}
 						type="button"
+						data-skip-click-sfx="true"
 						disabled={disabled}
 						onClick={() => onPadPress?.(index)}
 						className={cn(

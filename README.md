@@ -1,5 +1,9 @@
 # Group Project Chiwifruit
 
+[![CI/CD](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml)
+![Backend tests](https://img.shields.io/badge/backend_tests-Jest%20%2B%20Supertest-blue)
+![API coverage](https://img.shields.io/badge/API%20coverage-auth%20%7C%20rooms%20%7C%20game%20state-green)
+
 Full-stack workspace for the Sound Chain game project.
 
 This repository contains:
@@ -32,26 +36,53 @@ The root [package.json](package.json) is configured as an npm workspace and can 
 - `npm run build` builds frontend
 - `npm run start` starts backend in non-dev mode
 
+## Testing and Coverage
+
+Backend tests are written with Jest and Supertest. They cover:
+- Auth API contract tests
+- Room API contract tests, including happy paths and key error paths
+- Core game-state unit tests for turn progression, elimination, timeout, and forfeit edge cases
+- Token service unit tests
+- Focused socket helper tests
+
+Run all backend tests:
+
+```bash
+npm test --workspace=server
+```
+
+Run backend tests with coverage:
+
+```bash
+npm run test:coverage --workspace=server
+```
+
+The coverage report is generated locally under:
+
+```text
+server/coverage/lcov-report/index.html
+```
+
+The CI pipeline runs the backend Jest suite as part of the server validation gate.
 
 ## GitHub Actions CI (PR Gate for `dev` and `main`)
 
-This repository now includes a workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that runs on:
+This repository includes a workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that runs on:
 - Pull requests targeting `dev` or `main`
 - Direct pushes to `dev` or `main`
 
-The CI pipeline runs in a GitHub-hosted Ubuntu runner (no Docker required for CI) and executes:
+The CI pipeline runs in a GitHub-hosted Ubuntu runner and executes:
 - Frontend integrity checks: `npm run lint` + `npm run build`
-- Backend integrity check: `node --check src/server.js`
+- Backend syntax check: `node --check src/server.js`
+- Backend Jest test suite: API, service, and focused socket helper tests
 - Backend smoke test: starts the Express app in-process and verifies `GET /health` returns `{ status: "ok" }`
+- Docker image build validation
 
-### Why no Docker in CI right now?
+### Why no full Docker-based test pipeline right now?
 
-Given your current goal (fast failure on obviously broken code), GitHub Actions runners are the simplest and most maintainable default:
-- Faster setup and execution for JS workspace checks
-- Fewer moving parts than building containers during every PR
-- Good signal for code integrity/lint/build/smoke without requiring external services
+The CI currently runs code validation directly on GitHub Actions runners, then separately validates that the Docker image can be built. This keeps PR feedback fast while still catching container packaging issues.
 
-You can add a Docker image build job later when you want to validate container packaging too.
+You can extend this later with a containerized test job if production parity becomes more important.
 
 ### Required GitHub repo settings (one-time)
 
@@ -62,7 +93,7 @@ To make CI truly block merges to `dev` and `main`, enable branch protection rule
 3. Enable:
    - **Require a pull request before merging**
    - **Require status checks to pass before merging**
-4. In status checks, select the job **`validate`** from this workflow.
+4. In status checks, select the jobs **`validate`** and **`docker-build`** from this workflow.
 5. Repeat the same rule for `dev`.
 
 Optional hardening:
@@ -97,126 +128,138 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Backend health endpoint: `http://localhost:3000/health`
 
-## Run Locally with Docker (Client + Server + MongoDB)
+## Local Docker Development Environment
 
-To reduce local setup friction, this repo includes:
-- A single app image that runs both frontend and backend in one container
-- A local MongoDB container managed by Docker Compose
+This project can be run locally using Docker with two containers:
 
-### Why this base image?
+- `kichain-db`: MongoDB container
+- `kichain-dev-local`: application container running both the Vite client and Express server
 
-The Dockerfile uses `node:20-bookworm-slim` (Debian-based) instead of Alpine:
-- Better compatibility with Node packages that may rely on native binaries
-- Lower technical debt/risk versus musl/glibc edge cases on Alpine
-- Still relatively lightweight (`slim`) for local iteration
+The app container connects to MongoDB through a shared Docker network.
 
-### 1) Prepare environment files
-
-From the repo root:
+### 1. Create a Docker network
 
 ```bash
-cp server/.env.example server/.env
-cp client/.env.example client/.env
+docker network create kichain-net
 ```
 
-Then update values in `server/.env` (MongoDB/AWS/JWT) and `client/.env` if needed.
+If the network already exists, Docker may show an error. This is fine and can be ignored.
 
-### 2) Start everything with Docker Compose (recommended)
+### 2. Start MongoDB
 
 ```bash
-docker compose -f docker-compose.local.yml up --build
+docker run -d \
+  --name kichain-db \
+  --network kichain-net \
+  -p 27017:27017 \
+  mongo:latest
 ```
 
-This starts:
-- `sound-chain-app` (frontend + backend)
-- `kichain-db` (MongoDB on port `27017`)
+This starts a MongoDB container named kichain-db.
 
-> Why this now works reliably: inside Docker, `localhost` means "this container", not "another container".  
-> So the backend must use `mongodb` (the Compose service name) instead of `localhost` for MongoDB.  
-> `docker-compose.local.yml` now forces `MONGODB_URI=mongodb://mongodb:27017/kichain-db` for the app service.
+### 3. Configure environment variables
 
-### 3) Verify locally
-
-- Frontend (Vite UI): `http://localhost:5173`
-- Backend root info: `http://localhost:3000`
-- Backend health: `http://localhost:3000/health`
-- Backend API docs: `http://localhost:3000/api-docs`
-
-### 4) Stop services
+Create or update server/.env:
 
 ```bash
-docker compose -f docker-compose.local.yml down
+PORT=3000
+FRONTEND_ORIGIN=http://localhost:5173
+MONGODB_URI=mongodb://kichain-db:27017/kichain-db
+JWT_SECRET=local_dev_secret_change_later
+JWT_EXPIRES_IN=1d
+AWS_REGION=ap-southeast-2
+AWS_ACCESS_KEY_ID=dummy
+AWS_SECRET_ACCESS_KEY=dummy
+AWS_S3_BUCKET=dummy
 ```
 
-If you want to remove the MongoDB data volume too:
+Create or update client/.env:
 
 ```bash
-docker compose -f docker-compose.local.yml down -v
+VITE_API_URL=http://localhost:3000/api
+VITE_SOCKET_URL=http://localhost:3000
+VITE_APP_NAME=KiChain
+VITE_APP_ENV=development
 ```
 
-### Alternative: app container only (without Compose)
+Note: When the backend runs inside a Docker container, localhost does not refer to the MongoDB container. The backend should connect to MongoDB using the container name kichain-db on the shared Docker network.
+
+### 4. Build the app image
+
+From the project root:
 
 ```bash
-docker build -t sound-chain-local .
+docker build -t kichain-dev:local .
 ```
 
-Run only the app container (assumes MongoDB is available separately):
+The Docker build context excludes local dependencies, test files, coverage output, Git metadata, and environment files through [.dockerignore](.dockerignore).
+
+### 5. Start the app container
 
 ```bash
-docker run --rm -it \
-  -p 3000:3000 \
+docker run --rm \
+  --name kichain-dev-local \
+  --network kichain-net \
+  --env-file docker.local.env \
   -p 5173:5173 \
-  -v "$(pwd)/server/.env:/app/server/.env:ro" \
-  -v "$(pwd)/client/.env:/app/client/.env:ro" \
-  sound-chain-local
+  -p 3000:3000 \
+  kichain-dev:local
 ```
 
-### Notes
+The app will be available at:
 
-- This container is optimized for local development only (not production deployment).
-- The backend is served on `localhost:3000`, but the playable frontend app is on `localhost:5173`.
-- `localhost:3000` now returns a JSON status response, and API docs are available at `/api-docs`.
-- This setup is local-first. For ECS/EC2 later, this can evolve into separate frontend/backend images and environment-specific Compose/task definitions.
+`http://localhost:5173`
 
-## Environment Variables
+### 6. Check running containers
 
-### Backend
+In another terminal:
 
-See [server/.env.example](server/.env.example).
+```bash
+docker ps
+```
 
-Important defaults:
-- `PORT=3000`
-- `FRONTEND_ORIGIN=http://localhost:5173`
-- `MONGODB_URI=mongodb://localhost:27017/kichain-db`
+You should see both containers running:
 
-### Frontend
+```bash
+kichain-db
+kichain-dev-local
+```
 
-See [client/.env.example](client/.env.example).
+### 7. Stop the containers
 
-Important defaults:
-- `VITE_API_URL=http://localhost:3000/api`
-- `VITE_SOCKET_URL=http://localhost:3000`
+To stop the app container:
 
-## Dataset Note
+```bash
+docker stop kichain-dev-local
+```
 
-The CSV at repository root is a reference metadata file for bird audio samples.
+To stop MongoDB:
 
-Fields include:
-- `fileName`
-- `species`
-- `source`
-- `location`
-- `recordedAt`
-- `pageTitle`
-- `notes`
+```bash
+docker stop kichain-db
+```
 
-Planned usage:
-- Audio files in AWS S3
-- Metadata persisted in MongoDB
+To remove the MongoDB container if needed:
 
-## Troubleshooting
+```bash
+docker rm kichain-db
+```
 
-- If backend fails on startup, verify MongoDB is running and `MONGODB_URI` is valid in `server/.env`.
-- If frontend cannot call backend, verify `VITE_API_URL` and `VITE_SOCKET_URL` in `client/.env`.
-- If S3-related endpoints fail, replace placeholder AWS values in `server/.env` with real credentials and bucket settings.
-- If `localhost:3000` is unreachable in Docker mode, run `docker compose -f docker-compose.local.yml logs app` and verify backend connects to `mongodb://mongodb:27017/kichain-db` (not `localhost`).
+### 8. Reset local MongoDB container
+
+If you need a clean MongoDB container:
+
+```bash
+docker stop kichain-db
+docker rm kichain-db
+```
+
+Then start MongoDB again:
+
+```bash
+docker run -d \
+  --name kichain-db \
+  --network kichain-net \
+  -p 27017:27017 \
+  mongo:latest
+```

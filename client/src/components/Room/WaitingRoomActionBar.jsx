@@ -6,6 +6,7 @@ export default function WaitingRoomActionBar({
 	isHost,
 	canStartGame,
 	currentUserReady,
+	isReadyPending,
 	onStartGame,
 	onReady,
 }) {
@@ -28,6 +29,7 @@ export default function WaitingRoomActionBar({
 				<Button
 					type="button"
 					onClick={onReady}
+					disabled={isReadyPending}
 					variant={currentUserReady ? "default" : "outline"}
 					className={
 						currentUserReady

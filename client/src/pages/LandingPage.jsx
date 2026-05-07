@@ -7,24 +7,32 @@ import { Button } from "../components/ui/button"
 import ErrorToast from "../components/ui/ErrorToast"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
-import useJoinRoomMutation, {
-	isRoomFullError,
-	ROOM_FULL_ERROR_MESSAGE,
-} from "../hooks/mutations/useJoinRoomMutation"
+import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
+
+// NOTE (2026-04-29): Landing 的 create/join 操作走“guarded”流程：
+// 若当前没有 token，会先创建 guest session（拿到 token）再调用房间 API。
 
 export default function LandingPage() {
+
+	// For local development, the build version is set to "local". In dev/prod,
+	// it should be set to the actual build version via the VITE_BUILD_VERSION environment variable.
+	const buildVersion = import.meta.env.VITE_BUILD_VERSION || "local"
+
 	// Background music is enabled on Landing + Room pages.
 	useBackgroundMusic()
 
-	const navigate = useNavigate()
-	const { joinRoom } = useJoinRoomMutation()
 	// Controls the Join Room modal triggered by "Join with Code".
 	const [joinModalOpen, setJoinModalOpen] = useState(false)
 	const [authOpen, setAuthOpen] = useState(false)
-	const [joinErrorMessage, setJoinErrorMessage] = useState("")
+	const {
+		actionError,
+		clearActionError,
+		isPending,
+		createRoomGuarded,
+		joinRoomGuarded,
+	} = useGuardedRoomNavigation()
 
 	const guideItems = [
 		{
@@ -49,35 +57,33 @@ export default function LandingPage() {
 
 	return (
 		<Background>
+
+			{/* Display the build version in the top-left corner for debugging purposes. */}
+			<div className="fixed bottom-2 right-3 z-50 rounded-md bg-black/35 px-2 py-1 text-[10px] font-mono text-white/70 shadow-sm">
+				build: {buildVersion}
+			</div>
+
 			{authOpen ? (
 				<AuthModal onBackToHome={() => setAuthOpen(false)} />
 			) : (
 				<>
 					<LandingTopBar onLoginClick={() => setAuthOpen(true)} />
 
-					<ErrorToast message={joinErrorMessage} onDismiss={() => setJoinErrorMessage("")} />
+					<ErrorToast message={actionError} onDismiss={clearActionError} />
 
 					<JoinRoomModal
 						open={joinModalOpen}
-						onOpenChange={setJoinModalOpen}
-						onJoin={async (roomCode) => {
-							setJoinErrorMessage("")
-
-							try {
-								const room = await joinRoom(roomCode)
-								setJoinModalOpen(false)
-								// Pass minimal state to initialize RoomPage as guest.
-								navigate("/room", { state: { isHost: false, roomCode: room.roomCode } })
-							} catch (error) {
-								if (isRoomFullError(error)) {
-									setJoinErrorMessage(ROOM_FULL_ERROR_MESSAGE)
-									return
-								}
-
-								setJoinModalOpen(false)
-								// Keep the existing local fallback if the backend check is unavailable.
-								navigate("/room", { state: { isHost: false, roomCode } })
-							}
+						onOpenChange={(open) => {
+							setJoinModalOpen(open)
+							if (open) clearActionError()
+						}}
+						isSubmitting={isPending}
+						onJoin={(roomCode) => {
+							joinRoomGuarded(roomCode, {
+								onSuccess: () => {
+									setJoinModalOpen(false)
+								},
+							})
 						}}
 					/>
 
@@ -106,7 +112,10 @@ export default function LandingPage() {
 								<div className="flex flex-wrap items-center gap-3 pt-1">
 									<Button
 										className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90"
-										onClick={() => navigate("/room", { state: { isHost: true } })}
+										onClick={() => {
+											createRoomGuarded()
+										}}
+										disabled={isPending}
 									>
 										<Play className="size-4 fill-current" />
 										Create a Room
@@ -114,7 +123,11 @@ export default function LandingPage() {
 									<Button
 										variant="outline"
 										className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
-										onClick={() => setJoinModalOpen(true)}
+										onClick={() => {
+											clearActionError()
+											setJoinModalOpen(true)
+										}}
+										disabled={isPending}
 									>
 										<LogIn className="size-4" />
 										Join with Code

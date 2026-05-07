@@ -11,7 +11,6 @@ export default function GameStatusBroadcast({
 	autoPlayIndex,
 	padCount,
 	freePlaySeconds,
-	startSeconds,
 	isSpectating,
 	isMyTurn,
 	fallbackMessage,
@@ -27,10 +26,6 @@ export default function GameStatusBroadcast({
 
 	if (phase === "familiarize:free") {
 		message = `Free play: try the notes. Match starts in ${freePlaySeconds}s.`
-	}
-
-	if (phase === "start:countdown") {
-		message = `Get ready: match starting in ${startSeconds}s.`
 	}
 
 	if (phase === "playing") {

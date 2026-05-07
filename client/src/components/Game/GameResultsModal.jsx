@@ -12,6 +12,9 @@ import medal4Icon from "../../assets/icons/Medal4.svg"
 import medal5Icon from "../../assets/icons/Medal5.svg"
 import medal6Icon from "../../assets/icons/Medal6.svg"
 
+// NOTE (2026-04-29): Results Modal 仅做“展示排名 + 返回操作”。
+// 真实的离房/判负语义由 GamePage 负责（Back to Home 会先 REST leaveRoom 再导航）。
+
 const MEDAL_BY_RANK = [medal1Icon, medal2Icon, medal3Icon, medal4Icon, medal5Icon, medal6Icon]
 
 function getInitials(name) {
@@ -40,7 +43,7 @@ function ResultsRow({
 
 	const containerClassName =
 		variant === "winner"
-			? "bg-[#fefce8] border-2 border-[#fdc700] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
+			? "bg-[#fefce8] border-2 border-[#fdc700]"
 			: variant === "podium"
 				? "bg-[#f8fafc] border-2 border-[#e2e8f0]"
 				: "bg-white border border-[#f1f5f9]"
@@ -111,7 +114,7 @@ export default function GameResultsModal({ open, players, onBackToRoom, onBackTo
 				if (!nextOpen) onClose?.()
 			}}
 		>
-			<div className="relative w-[448px] max-w-[calc(100vw-2rem)] rounded-[32px] bg-white px-8 pb-8 pt-12 shadow-[0px_25px_50px_0px_rgba(0,0,0,0.25)]">
+			<div className="relative w-[448px] max-w-[calc(100vw-2rem)] rounded-[32px] bg-white px-8 pb-8 pt-12">
 				<div className="absolute -top-8 left-1/2 -translate-x-1/2">
 					<div className="flex size-16 items-center justify-center rounded-full bg-[#fdc700] shadow-[0px_0px_25px_0px_rgba(250,204,21,0.5)]">
 						<img alt="" aria-hidden="true" src={trophyIcon} className="size-10" />
