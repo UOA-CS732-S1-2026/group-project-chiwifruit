@@ -7,7 +7,7 @@ import Background from "../components/Common/Background"
 import ExitGameModal from "../components/Game/ExitGameModal"
 import GamePlayerCard from "../components/Game/GamePlayerCard"
 import GameResultsModal from "../components/Game/GameResultsModal"
-import GameStatusBroadcast from "../components/Game/GameStatusBroadcast"
+import GameToast from "../components/Game/GameToast"
 import GameWheel from "../components/Game/GameWheel"
 import YoureOutModal from "../components/Game/YoureOutModal"
 import LoginButton from "../components/AuthComponent/LoginButton"
@@ -131,15 +131,15 @@ export default function GamePage() {
 		return coerceDifficulty(location.state?.difficulty)
 	}, [location.state?.difficulty, roomState?.difficulty, socketGame?.difficulty])
 	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : getPadCountByDifficulty(difficulty)
-
+	
 	// NOTE (2026-04-29): 音频列表只用 socket 驱动的数据生成（audioSeed + padCount）。
 	// 原因：避免 roomState/location 变化导致重新洗牌，造成玩家两端音频映射不一致。
 	const noteUrls = React.useMemo(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed) return []
-		return pickGameNoteUrls({
-			mode: socketGame.mode || "bird",
-			padCount,
-			seed: socketGame.audioSeed
+		return pickGameNoteUrls({ 
+			mode: socketGame.mode || "bird", 
+			padCount, 
+			seed: socketGame.audioSeed 
 		})
 	}, [isSocketDriven, socketGame?.audioSeed, socketGame?.mode, padCount])
 
@@ -743,22 +743,7 @@ export default function GamePage() {
 					</div>
 				</div>
 
-				<GameStatusBroadcast
-					phase={phase}
-					players={players}
-					currentTurnIndex={currentTurnIndex}
-					turnSeconds={turnSeconds}
-					inputCount={inputCount}
-					requiredInputCount={requiredInputCount}
-					sequenceLength={sequence.length}
-					autoPlayIndex={autoPlayIndex}
-					padCount={padCount}
-					freePlaySeconds={freePlaySeconds}
-					isSpectating={isSpectating}
-					isMyTurn={Boolean(currentUserId) && players[currentTurnIndex]?.id === currentUserId}
-					fallbackMessage={toastMessage}
-					className="mt-8"
-				/>
+				<GameToast message={toastMessage} className="mt-8" />
 			</div>
 		</Background>
 	)

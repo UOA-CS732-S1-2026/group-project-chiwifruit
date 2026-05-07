@@ -1,10 +1,8 @@
 import Background from "../components/Common/Background"
 import bigLogo from "../assets/branding/biglogo.png"
-import AuthModal from "../components/AuthComponent/AuthModal"
 import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
-import ErrorToast from "../components/ui/ErrorToast"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
 import { useState } from "react"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
@@ -16,7 +14,7 @@ import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
 
 export default function LandingPage() {
 
-	// For local development, the build version is set to "local". In dev/prod,
+	// For local development, the build version is set to "local". In dev/prod, 
 	// it should be set to the actual build version via the VITE_BUILD_VERSION environment variable.
 	const buildVersion = import.meta.env.VITE_BUILD_VERSION || "local"
 
@@ -25,7 +23,6 @@ export default function LandingPage() {
 
 	// Controls the Join Room modal triggered by "Join with Code".
 	const [joinModalOpen, setJoinModalOpen] = useState(false)
-	const [authOpen, setAuthOpen] = useState(false)
 	const {
 		actionError,
 		clearActionError,
@@ -63,11 +60,7 @@ export default function LandingPage() {
 				build: {buildVersion}
 			</div>
 
-			<LandingTopBar onLoginClick={() => setAuthOpen(true)} />
-
-			{authOpen ? <AuthModal onBackToHome={() => setAuthOpen(false)} /> : null}
-
-			<ErrorToast message={actionError} onDismiss={clearActionError} />
+			<LandingTopBar />
 
 			<JoinRoomModal
 				open={joinModalOpen}
@@ -131,6 +124,10 @@ export default function LandingPage() {
 								Join with Code
 							</Button>
 						</div>
+
+						{actionError ? (
+							<p className="text-sm font-medium text-destructive">{actionError}</p>
+						) : null}
 					</div>
 
 					<div className="relative flex items-center justify-center lg:justify-end lg:pr-2">
