@@ -41,8 +41,8 @@ const FAMILIARIZE_AUTOPLAY_MS = 900
 const FREE_PLAY_MS = 20_000
 // const COUNTDOWN_MS = 5_000
 
-function shouldExitToLanding(message) {
-	return message === "You are no longer part of this game." || message === "No active game."
+function shouldExitToLanding(errorCode) {
+	return errorCode === "GAME_NOT_PARTICIPANT" || errorCode === "NO_ACTIVE_GAME"
 }
 
 function coerceDifficulty(value) {
@@ -203,12 +203,13 @@ export default function GamePage() {
 				return
 			}
 
+			const errorCode = typeof response?.errorCode === "string" ? response.errorCode : ""
 				const message = typeof response?.error === "string"
 					? response.error
 					: typeof response?.message === "string"
 						? response.message
 						: "Unable to load game"
-				if (shouldExitToLanding(message)) {
+				if (shouldExitToLanding(errorCode)) {
 					leaveSocketRoom(roomCode)
 					navigate("/", { replace: true })
 					return

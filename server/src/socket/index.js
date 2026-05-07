@@ -116,28 +116,18 @@ function initSocket(httpServer, frontendOrigin) {
       const code = String(roomCode).toUpperCase();
       const userId = socket.user?.sub;
       if (!userId) return;
+      const existingGame = getGame(code);
+      const shouldCleanupRoomRoster =
+        (reason === 'disconnect' || reason === 'leave_room') &&
+        existingGame &&
+        existingGame.status !== 'finished';
 
       const result = forfeitPlayer({ roomCode: code, userId, reason });
       if (!result.ok) return;
 
-      if (reason === 'disconnect' || reason === 'leave_room') {
-        try {
-          const removal = await removeParticipantFromRoom({
-            roomCode: code,
-            identity: socket.user,
-          });
-
-          if (removal?.ok) {
-            emitRoomUpdate(io, code, removal.roomState ?? null);
-          }
-        } catch {
-          // best-effort room cleanup
-        }
-      }
-
       io.to(code).emit('game_state', result.game);
 
-      // Reschedule timers if needed.
+      // Reschedule timers immediately after the authoritative game update.
       clearRoomTimeout(code);
       if (result.game.status === 'playing') {
         scheduleTurnTimer(code);
@@ -148,6 +138,21 @@ function initSocket(httpServer, frontendOrigin) {
       if (result.game.status === 'finished') {
         persistFinalScores(code, result.game.scores);
         cleanupGameLater(code);
+      }
+
+      if (shouldCleanupRoomRoster) {
+        void removeParticipantFromRoom({
+          roomCode: code,
+          identity: socket.user,
+        })
+          .then((removal) => {
+            if (removal?.ok) {
+              emitRoomUpdate(io, code, removal.roomState ?? null);
+            }
+          })
+          .catch(() => {
+            // best-effort room cleanup
+          });
       }
     }
 
@@ -192,14 +197,14 @@ function initSocket(httpServer, frontendOrigin) {
     socket.on('game_request_state', (payload = {}, ack) => {
       const { roomCode } = payload;
       if (!roomCode) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'Missing room code.' });
+        if (typeof ack === 'function') ack({ ok: false, errorCode: 'MISSING_ROOM_CODE', error: 'Missing room code.' });
         return;
       }
 
       const code = String(roomCode).toUpperCase();
       const internal = getGame(code);
       if (!internal) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'No active game.' });
+        if (typeof ack === 'function') ack({ ok: false, errorCode: 'NO_ACTIVE_GAME', error: 'No active game.' });
         return;
       }
 
@@ -209,7 +214,7 @@ function initSocket(httpServer, frontendOrigin) {
         : null;
 
       if (!player || player.leftDuringGame) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'You are no longer part of this game.' });
+        if (typeof ack === 'function') ack({ ok: false, errorCode: 'GAME_NOT_PARTICIPANT', error: 'You are no longer part of this game.' });
         return;
       }
 
