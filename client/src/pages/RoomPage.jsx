@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { Check, CircleDot, Copy, Eye, Flame, LogOut, Music, Play, Users, Zap } from "lucide-react"
+import { CircleDot, Copy, Eye, Flame, LogOut, Music, Users, Zap } from "lucide-react"
 
 import Background from "../components/Common/Background"
 import BrandLockup from "../components/Common/BrandLockup"
@@ -8,6 +8,7 @@ import RoomPill from "../components/Room/RoomPill"
 import RoomSectionLabel from "../components/Room/RoomSectionLabel"
 import SegmentedSelection from "../components/Room/SegmentedSelection"
 import PlayerSlotCard from "../components/Room/PlayerSlotCard"
+import WaitingRoomActionBar from "../components/Room/WaitingRoomActionBar"
 import { Button } from "../components/ui/button"
 import SoundToggleButton from "../components/ui/SoundToggleButton"
 
@@ -130,7 +131,7 @@ export default function RoomPage() {
 					</div>
 				</header>
 
-				<main className="mx-auto max-w-6xl px-6 pb-12">
+				<main className="mx-auto max-w-6xl px-6 pb-36">
 					<h1 className="text-center text-4xl font-bold text-foreground md:text-5xl">Waiting Room</h1>
 
 					<div className="mt-6 flex flex-wrap items-center justify-center gap-4">
@@ -196,40 +197,15 @@ export default function RoomPage() {
 						))}
 					</div>
 
-					<div className="mt-10 flex justify-center">
-						{isHost ? (
-							<Button
-								type="button"
-								onClick={handleStartGame}
-								disabled={!canStartGame}
-								className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"
-							>
-								<Play className="size-4 fill-current" />
-								Start Game
-							</Button>
-						) : (
-							<Button
-								type="button"
-								onClick={handleReady}
-								variant={currentUserReady ? "default" : "outline"}
-								className={
-									currentUserReady
-										? "h-12 rounded-full px-12 text-base font-semibold ready-gradient-theme ready-shadow-theme"
-										: "h-12 rounded-full px-12 text-base font-semibold shadow-lg"
-								}
-							>
-								{currentUserReady ? (
-									<>
-										<Check className="size-4" />
-										Ready!
-									</>
-								) : (
-									"Click to Ready"
-								)}
-							</Button>
-						)}
-					</div>
 				</main>
+
+				<WaitingRoomActionBar
+					isHost={isHost}
+					canStartGame={canStartGame}
+					currentUserReady={currentUserReady}
+					onStartGame={handleStartGame}
+					onReady={handleReady}
+				/>
 			</div>
 		</Background>
 	)

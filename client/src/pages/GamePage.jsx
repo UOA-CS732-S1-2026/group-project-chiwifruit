@@ -7,7 +7,7 @@ import Background from "../components/Common/Background"
 import ExitGameModal from "../components/Game/ExitGameModal"
 import GamePlayerCard from "../components/Game/GamePlayerCard"
 import GameResultsModal from "../components/Game/GameResultsModal"
-import GameToast from "../components/Game/GameToast"
+import GameStatusBroadcast from "../components/Game/GameStatusBroadcast"
 import GameWheel from "../components/Game/GameWheel"
 import YoureOutModal from "../components/Game/YoureOutModal"
 import { Button } from "../components/ui/button"
@@ -406,7 +406,23 @@ export default function GamePage() {
 					</div>
 				</div>
 
-				<GameToast message={toastMessage} className="mt-8" />
+				<GameStatusBroadcast
+					phase={phase}
+					players={players}
+					currentTurnIndex={currentTurnIndex}
+					turnSeconds={turnSeconds}
+					inputCount={inputCount}
+					requiredInputCount={requiredInputCount}
+					sequenceLength={sequence.length}
+					autoPlayIndex={autoPlayIndex}
+					padCount={padCount}
+					freePlaySeconds={freePlaySeconds}
+					startSeconds={startSeconds}
+					isSpectating={isSpectating}
+					isMyTurn={currentTurnIndex === 0}
+					fallbackMessage={toastMessage}
+					className="mt-8"
+				/>
 
 				<div className="mt-4 flex justify-center">
 					<Button type="button" variant="outline" onClick={() => setIsResultsModalOpen(true)}>
