@@ -36,7 +36,7 @@ function buildRanking(room, gamePlayers = null) {
       const rankScore = rank === 1 ? 30 : rank === 2 ? 20 : rank === 3 ? 10 : 0;
       const roundScore = player.score * 5;
       const orderBonus = (player.initialOrder || 1) - 1;
-      const failureBonus = player.failureLength || 0;
+      const failureBonus = Number(player.failureLength || 0);
       const totalScore = rankScore + roundScore + orderBonus + failureBonus;
 
       return {
