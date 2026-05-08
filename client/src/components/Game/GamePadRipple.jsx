@@ -28,7 +28,7 @@ export default function GamePadRipple({ active = false }) {
 				className="
 					absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2
 					rounded-full bg-white/20 blur-[3px]
-					animate-[game-pad-ripple-core_700ms_ease-out_forwards]
+					animate-[game-pad-ripple-glow_700ms_ease-out_forwards]
 				"
 			/>
 
@@ -41,7 +41,7 @@ export default function GamePadRipple({ active = false }) {
 						ring.ringClassName,
 					].join(" ")}
 					style={{
-						animationName: "game-pad-ripple",
+						animationName: "game-pad-ripple-wave",
 						animationDuration: ring.duration,
 						animationTimingFunction: "cubic-bezier(0.16, 0.84, 0.32, 1)",
 						animationDelay: ring.delay,
