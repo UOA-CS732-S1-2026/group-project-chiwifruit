@@ -35,7 +35,7 @@ function buildRanking(room, gamePlayers = null) {
       const rank = rankMap.get(player.userId);
       const roundScore = player.score * 5;
       const failureBonus = Math.max(0, Number(player.failureLength || 0) - 1);
-      const totalScore = roundScore + failureBonus;
+      const points = roundScore + failureBonus;
 
       return {
         userId: player.userId,
@@ -44,9 +44,10 @@ function buildRanking(room, gamePlayers = null) {
         correctCount: Number(player.score || 0),
         avatarUrl: player.avatarUrl,
         rank,
-        totalScore,
+        points,
+        totalScore: points,
       };
-    }).sort((a, b) => b.totalScore - a.totalScore).map((entry, index) => ({
+    }).sort((a, b) => b.points - a.points).map((entry, index) => ({
       ...entry,
       rank: index + 1,
     }));
@@ -59,12 +60,13 @@ function buildRanking(room, gamePlayers = null) {
       username: participant.user?.username || participant.guestName,
       isGuest: Boolean(participant.guestId),
       correctCount: participant.correctCount || 0,
+      points: participant.correctCount || 0,
       totalScore: participant.correctCount || 0,
       avatarUrl: participant.user ? buildAvatarUrl(participant.user._id.toString()) : buildAvatarUrl(participant.guestId)
     }))
     .sort((a, b) => {
-      if (b.correctCount !== a.correctCount) {
-        return b.correctCount - a.correctCount;
+      if (b.points !== a.points) {
+        return b.points - a.points;
       }
 
       return String(a.username || '').localeCompare(String(b.username || ''));
