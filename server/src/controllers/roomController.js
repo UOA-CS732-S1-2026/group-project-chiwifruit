@@ -326,20 +326,6 @@ async function getRanking(req, res) {
   const game = getGame(roomCode.toUpperCase());
   const gamePlayers = game?.players;
 
-  // Sync game scores to room participants if game exists
-  if (gamePlayers) {
-    gamePlayers.forEach(gamePlayer => {
-      const participant = room.participants.find(p => 
-        (p.user && String(p.user._id) === gamePlayer.userId) || 
-        (p.guestId === gamePlayer.userId)
-      );
-      if (participant) {
-        participant.correctCount = gamePlayer.score;
-      }
-    });
-    await room.save();
-  }
-
   return res.json({
     roomCode: room.roomCode,
     ranking: buildRanking(room, gamePlayers)
