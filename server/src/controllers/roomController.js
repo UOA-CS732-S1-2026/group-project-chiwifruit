@@ -33,11 +33,9 @@ function buildRanking(room, gamePlayers = null) {
 
     return gamePlayers.map((player) => {
       const rank = rankMap.get(player.userId);
-      const rankScore = rank === 1 ? 30 : rank === 2 ? 20 : rank === 3 ? 10 : 0;
       const roundScore = player.score * 5;
-      const orderBonus = (player.initialOrder || 1) - 1;
-      const failureBonus = player.failureLength || 0;
-      const totalScore = rankScore + roundScore + orderBonus + failureBonus;
+      const failureBonus = Math.max(0, Number(player.failureLength || 0) - 1);
+      const totalScore = roundScore + failureBonus;
 
       return {
         userId: player.userId,
