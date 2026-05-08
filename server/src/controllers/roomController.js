@@ -41,7 +41,7 @@ function buildRanking(room, gamePlayers = null) {
         userId: player.userId,
         username: player.username,
         isGuest: player.isGuest,
-        correctCount: totalScore,
+        correctCount: Number(player.score || 0),
         avatarUrl: player.avatarUrl,
         rank,
         totalScore,
@@ -59,6 +59,7 @@ function buildRanking(room, gamePlayers = null) {
       username: participant.user?.username || participant.guestName,
       isGuest: Boolean(participant.guestId),
       correctCount: participant.correctCount || 0,
+      totalScore: participant.correctCount || 0,
       avatarUrl: participant.user ? buildAvatarUrl(participant.user._id.toString()) : buildAvatarUrl(participant.guestId)
     }))
     .sort((a, b) => {
@@ -324,20 +325,6 @@ async function getRanking(req, res) {
   // Check for active game for fair ranking
   const game = getGame(roomCode.toUpperCase());
   const gamePlayers = game?.players;
-
-  // Sync game scores to room participants if game exists
-  if (gamePlayers) {
-    gamePlayers.forEach(gamePlayer => {
-      const participant = room.participants.find(p => 
-        (p.user && String(p.user._id) === gamePlayer.userId) || 
-        (p.guestId === gamePlayer.userId)
-      );
-      if (participant) {
-        participant.correctCount = gamePlayer.score;
-      }
-    });
-    await room.save();
-  }
 
   return res.json({
     roomCode: room.roomCode,
