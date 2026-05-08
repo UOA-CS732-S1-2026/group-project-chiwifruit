@@ -35,19 +35,18 @@ function buildRanking(room, gamePlayers = null) {
       const rank = rankMap.get(player.userId);
       const roundScore = player.score * 5;
       const failureBonus = Math.max(0, Number(player.failureLength || 0) - 1);
-      const points = roundScore + failureBonus;
+      const totalScore = roundScore + failureBonus;
 
       return {
         userId: player.userId,
         username: player.username,
         isGuest: player.isGuest,
-        correctCount: Number(player.score || 0),
+        correctCount: totalScore,
         avatarUrl: player.avatarUrl,
         rank,
-        points,
-        totalScore: points,
+        totalScore,
       };
-    }).sort((a, b) => b.points - a.points).map((entry, index) => ({
+    }).sort((a, b) => b.totalScore - a.totalScore).map((entry, index) => ({
       ...entry,
       rank: index + 1,
     }));
@@ -60,13 +59,11 @@ function buildRanking(room, gamePlayers = null) {
       username: participant.user?.username || participant.guestName,
       isGuest: Boolean(participant.guestId),
       correctCount: participant.correctCount || 0,
-      points: participant.correctCount || 0,
-      totalScore: participant.correctCount || 0,
       avatarUrl: participant.user ? buildAvatarUrl(participant.user._id.toString()) : buildAvatarUrl(participant.guestId)
     }))
     .sort((a, b) => {
-      if (b.points !== a.points) {
-        return b.points - a.points;
+      if (b.correctCount !== a.correctCount) {
+        return b.correctCount - a.correctCount;
       }
 
       return String(a.username || '').localeCompare(String(b.username || ''));
@@ -327,6 +324,20 @@ async function getRanking(req, res) {
   // Check for active game for fair ranking
   const game = getGame(roomCode.toUpperCase());
   const gamePlayers = game?.players;
+
+  // Sync game scores to room participants if game exists
+  if (gamePlayers) {
+    gamePlayers.forEach(gamePlayer => {
+      const participant = room.participants.find(p => 
+        (p.user && String(p.user._id) === gamePlayer.userId) || 
+        (p.guestId === gamePlayer.userId)
+      );
+      if (participant) {
+        participant.correctCount = gamePlayer.score;
+      }
+    });
+    await room.save();
+  }
 
   return res.json({
     roomCode: room.roomCode,

@@ -72,7 +72,7 @@ function markPlayerEliminated(game, userId, reason, { leftDuringGame = false, fa
     player.isEliminated = true;
     player.eliminationReason = reason;
     player.leftDuringGame = Boolean(leftDuringGame);
-    player.failureLength = Number.isFinite(failureLength) ? failureLength : 0;
+    player.failureLength = Number.isFinite(failureLength) ? failureLength : game.inputIndex;
   }
 
   game.eliminatedUserIds.add(participantId);
