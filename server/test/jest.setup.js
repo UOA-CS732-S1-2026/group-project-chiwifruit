@@ -74,7 +74,3 @@ jest.mock('crypto', () => ({
 jest.mock('../src/services/tokenService', () => ({
   createToken: jest.fn(),
 }));
-
-// Mock getRoomState to prevent DB calls
-const roomController = require('../src/controllers/roomController');
-jest.spyOn(roomController, 'getRoomState').mockResolvedValue({});

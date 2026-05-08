@@ -1,14 +1,9 @@
 const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
+const { getGame } = require('../services/gameService');
 const { buildAvatarUrl } = require('./authController');
-const {
-  MAX_ROOM_PARTICIPANTS,
-  MIN_PARTICIPANTS_TO_START,
-  getParticipantSelector,
-  getRoomState,
-  removeParticipantFromRoom,
-} = require('../services/roomStateService');
+const { removeParticipantFromRoom, getRoomState, getParticipantSelector, MAX_ROOM_PARTICIPANTS } = require('../services/roomStateService');
 
 function createParticipant(identity) {
   if (identity.isGuest) {
@@ -27,7 +22,37 @@ function createParticipant(identity) {
   };
 }
 
-function buildRanking(room) {
+function buildRanking(room, gamePlayers = null) {
+  if (gamePlayers) {
+    // Use game players for fair ranking
+    const sortedByScore = [...gamePlayers].sort((a, b) => b.score - a.score);
+    const rankMap = new Map();
+    sortedByScore.forEach((player, index) => {
+      rankMap.set(player.userId, index + 1);
+    });
+
+    return gamePlayers.map((player) => {
+      const rank = rankMap.get(player.userId);
+      const roundScore = player.score * 5;
+      const failureBonus = Math.max(0, Number(player.failureLength || 0) - 1);
+      const totalScore = roundScore + failureBonus;
+
+      return {
+        userId: player.userId,
+        username: player.username,
+        isGuest: player.isGuest,
+        correctCount: totalScore,
+        avatarUrl: player.avatarUrl,
+        rank,
+        totalScore,
+      };
+    }).sort((a, b) => b.totalScore - a.totalScore).map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+  }
+
+  // Fallback to room participants
   return room.participants
     .map((participant) => ({
       userId: participant.user?._id || participant.guestId,
@@ -296,9 +321,27 @@ async function getRanking(req, res) {
     return res.status(404).json({ message: 'Room not found' });
   }
 
+  // Check for active game for fair ranking
+  const game = getGame(roomCode.toUpperCase());
+  const gamePlayers = game?.players;
+
+  // Sync game scores to room participants if game exists
+  if (gamePlayers) {
+    gamePlayers.forEach(gamePlayer => {
+      const participant = room.participants.find(p => 
+        (p.user && String(p.user._id) === gamePlayer.userId) || 
+        (p.guestId === gamePlayer.userId)
+      );
+      if (participant) {
+        participant.correctCount = gamePlayer.score;
+      }
+    });
+    await room.save();
+  }
+
   return res.json({
     roomCode: room.roomCode,
-    ranking: buildRanking(room)
+    ranking: buildRanking(room, gamePlayers)
   });
 }
 
@@ -311,5 +354,4 @@ module.exports = {
   selectDifficulty,
   submitRoundResult,
   getRanking,
-  getRoomState
 };
