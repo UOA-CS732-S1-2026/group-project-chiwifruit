@@ -33,17 +33,15 @@ function buildRanking(room, gamePlayers = null) {
 
     return gamePlayers.map((player) => {
       const rank = rankMap.get(player.userId);
-      const rankScore = rank === 1 ? 30 : rank === 2 ? 20 : rank === 3 ? 10 : 0;
       const roundScore = player.score * 5;
-      const orderBonus = (player.initialOrder || 1) - 1;
-      const failureBonus = player.failureLength || 0;
-      const totalScore = rankScore + roundScore + orderBonus + failureBonus;
+      const failureBonus = Math.max(0, Number(player.failureLength || 0) - 1);
+      const totalScore = roundScore + failureBonus;
 
       return {
         userId: player.userId,
         username: player.username,
         isGuest: player.isGuest,
-        correctCount: totalScore,
+        correctCount: Number(player.score || 0),
         avatarUrl: player.avatarUrl,
         rank,
         totalScore,
@@ -61,6 +59,7 @@ function buildRanking(room, gamePlayers = null) {
       username: participant.user?.username || participant.guestName,
       isGuest: Boolean(participant.guestId),
       correctCount: participant.correctCount || 0,
+      totalScore: participant.correctCount || 0,
       avatarUrl: participant.user ? buildAvatarUrl(participant.user._id.toString()) : buildAvatarUrl(participant.guestId)
     }))
     .sort((a, b) => {

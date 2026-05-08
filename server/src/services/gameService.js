@@ -64,7 +64,7 @@ function getPlayerByUserId(game, userId) {
   return game.players.find((player) => String(player.userId) === String(userId)) ?? null;
 }
 
-function markPlayerEliminated(game, userId, reason, { leftDuringGame = false } = {}) {
+function markPlayerEliminated(game, userId, reason, { leftDuringGame = false, failureLength = null } = {}) {
   const participantId = String(userId);
   const player = getPlayerByUserId(game, participantId);
 
@@ -72,7 +72,7 @@ function markPlayerEliminated(game, userId, reason, { leftDuringGame = false } =
     player.isEliminated = true;
     player.eliminationReason = reason;
     player.leftDuringGame = Boolean(leftDuringGame);
-    player.failureLength = game.sequence.length;
+    player.failureLength = Number.isFinite(failureLength) ? failureLength : game.inputIndex;
   }
 
   game.eliminatedUserIds.add(participantId);
@@ -374,7 +374,7 @@ function registerPadPress({ roomCode, userId, padIndex }) {
   if (game.inputIndex < game.sequence.length) {
     const expected = game.sequence[game.inputIndex];
     if (index !== expected) {
-      markPlayerEliminated(game, currentUserId, 'wrong_note');
+      markPlayerEliminated(game, currentUserId, 'wrong_note', { failureLength: game.inputIndex + 1 });
       game.lastEvent = {
         type: 'player_eliminated',
         at: Date.now(),
@@ -387,18 +387,19 @@ function registerPadPress({ roomCode, userId, padIndex }) {
       return { ok: true, game: serializeGame(game) };
     }
 
-    const nextScore = (Number(game.scores[currentUserId]) || 0) + 1;
-    game.scores[currentUserId] = nextScore;
-    const player = game.players.find((p) => String(p.userId) === currentUserId);
-    if (player) {
-      player.score = nextScore;
-    }
     game.inputIndex += 1;
     game.lastEvent = { type: 'note_ok', at: Date.now(), userId: currentUserId, padIndex: index };
     return { ok: true, game: serializeGame(game) };
   }
 
   // Otherwise this press is the "add a new note" step.
+  const nextScore = (Number(game.scores[currentUserId]) || 0) + 1;
+  game.scores[currentUserId] = nextScore;
+  const player = game.players.find((p) => String(p.userId) === currentUserId);
+  if (player) {
+    player.score = nextScore;
+  }
+
   game.sequence.push(index);
   game.lastEvent = { type: 'note_added', at: Date.now(), userId: currentUserId, padIndex: index };
   endTurnAdvance(game);

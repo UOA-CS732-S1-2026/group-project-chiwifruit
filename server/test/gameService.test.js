@@ -304,7 +304,7 @@ describe('gameService state machine', () => {
       expect(result.game.lastEvent).toMatchObject({ type: 'note_added', userId: 'user1', padIndex: 3 });
     });
 
-    it('should accept correct replay input and increment score', () => {
+    it('should accept correct replay input without incrementing score until note is added', () => {
       const roomCode = 'CORRECT_REPLAY';
       startPlayingGame(roomCode);
       gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 3 });
@@ -312,7 +312,7 @@ describe('gameService state machine', () => {
       const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 3 });
 
       expect(result.ok).toBe(true);
-      expect(result.game.scores.user2).toBe(1);
+      expect(result.game.scores.user2).toBe(0);
       expect(result.game.inputIndex).toBe(1);
       expect(result.game.lastEvent).toMatchObject({ type: 'note_ok', userId: 'user2', padIndex: 3 });
     });
