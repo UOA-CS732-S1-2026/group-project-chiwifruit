@@ -269,6 +269,18 @@ export default function GamePage() {
 	const [isResultsModalOpen, setIsResultsModalOpen] = React.useState(false)
 	const [isSpectating, setIsSpectating] = React.useState(false)
 	const rankingQuery = useRankingQuery(roomCode, isResultsModalOpen)
+	const displayRanking = React.useMemo(() => {
+		const ranking = Array.isArray(rankingQuery.data?.ranking) ? rankingQuery.data.ranking : []
+		return ranking.map((player) => {
+			const isCurrentUser = Boolean(currentUserId) && String(player?.userId) === currentUserId
+			if (!isCurrentUser) return player
+
+			return {
+				...player,
+				username: `${player.username} (You)`,
+			}
+		})
+	}, [currentUserId, rankingQuery.data?.ranking])
 
 	React.useEffect(() => {
 		if (!socketGame) return
@@ -379,33 +391,6 @@ export default function GamePage() {
 			side: index < leftCount ? "left" : "right",
 		}))
 	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder])
-
-	const resultsPlayers = React.useMemo(() => {
-		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
-		if (gamePlayerList.length > 0) {
-			const orderedIds = participantOrder.length > 0 ? participantOrder : gamePlayerList.map((player) => String(player.userId))
-			const normalized = orderedIds
-				.map((playerId) => {
-					const player = gamePlayerList.find((candidate) => String(candidate.userId) === String(playerId))
-					if (!player) return null
-					const isCurrentUser = Boolean(currentUserId) && String(player.userId) === currentUserId
-					return {
-						id: String(player.userId),
-						name: isCurrentUser ? `${player.username} (You)` : player.username,
-						avatarUrl: player.avatarUrl || (isCurrentUser ? headerAvatarUrl : undefined),
-						score: Number(player.score ?? 0) || 0,
-					}
-				})
-				.filter(Boolean)
-			return normalized.sort((a, b) => {
-				const scoreDiff = Number(b.score) - Number(a.score)
-				if (scoreDiff !== 0) return scoreDiff
-				return orderedIds.indexOf(a.id) - orderedIds.indexOf(b.id)
-			})
-		}
-
-		return players
-	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder, players])
 
 	React.useEffect(() => {
 		if (socketGame?.status) return
@@ -612,7 +597,7 @@ export default function GamePage() {
 			/>
 			<GameResultsModal
 				open={isResultsModalOpen}
-				ranking={rankingQuery.data?.ranking}
+				ranking={displayRanking}
 				onClose={() => setIsResultsModalOpen(false)}
 				onBackToRoom={() => {
 					setIsResultsModalOpen(false)
