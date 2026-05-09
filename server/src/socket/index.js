@@ -117,26 +117,25 @@ function initSocket(httpServer, frontendOrigin) {
       const userId = socket.user?.sub;
       if (!userId) return;
       const existingGame = getGame(code);
-      const shouldCleanupRoomRoster =
-        (reason === 'disconnect' || reason === 'leave_room') &&
-        existingGame &&
-        existingGame.status !== 'finished';
+      const shouldCleanupRoomRoster = reason === 'disconnect' || reason === 'leave_room';
 
       const result = forfeitPlayer({ roomCode: code, userId, reason });
-      if (!result.ok) return;
+      if (result.ok) {
+        io.to(code).emit('game_state', result.game);
 
-      io.to(code).emit('game_state', result.game);
-
-      // Reschedule timers immediately after the authoritative game update.
-      clearRoomTimeout(code);
-      if (result.game.status === 'playing') {
-        scheduleTurnTimer(code);
-      }
-      if (result.game.status === 'familiarizing') {
-        scheduleFamiliarAutoStart(code);
-      }
-      if (result.game.status === 'finished') {
-        persistFinalScores(code, result.game.scores);
+        // Reschedule timers immediately after the authoritative game update.
+        clearRoomTimeout(code);
+        if (result.game.status === 'playing') {
+          scheduleTurnTimer(code);
+        }
+        if (result.game.status === 'familiarizing') {
+          scheduleFamiliarAutoStart(code);
+        }
+        if (result.game.status === 'finished') {
+          persistFinalScores(code, result.game.scores);
+          cleanupGameLater(code);
+        }
+      } else if (existingGame && existingGame.status === 'finished') {
         cleanupGameLater(code);
       }
 

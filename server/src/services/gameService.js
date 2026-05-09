@@ -13,6 +13,13 @@ const GAME_TTL_MS = 10 * 60_000;
 const gamesByRoom = new Map();
 const timeoutsByRoom = new Map();
 
+function normalizeRoomMode(mode) {
+  if (mode === 'bird') return 'kiwi';
+  if (mode === 'Kiwi') return 'kiwi';
+  if (mode === 'Piano') return 'piano';
+  return mode === 'piano' ? 'piano' : 'kiwi';
+}
+
 function getPadCountByDifficulty(difficulty) {
   if (difficulty === 'easy') return 6;
   if (difficulty === 'hard') return 10;
@@ -137,7 +144,7 @@ function startGame({ room, requestedByUserId }) {
     gameId: crypto.randomUUID(),
     status: 'familiarizing',
     startedAt: Date.now(),
-    mode: room.mode || 'bird',
+    mode: normalizeRoomMode(room.mode),
     difficulty,
     padCount,
     // Clients use this seed to deterministically pick audio files.

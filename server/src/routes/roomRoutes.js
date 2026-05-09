@@ -124,7 +124,7 @@ router.get('/:roomCode/ready', authMiddleware, checkIfCandidateIsReady);
  *             properties:
  *               mode:
  *                 type: string
- *                 enum: [bird, piano]
+ *                 enum: [kiwi, piano]
  *     responses:
  *       200:
  *         description: Mode selected
