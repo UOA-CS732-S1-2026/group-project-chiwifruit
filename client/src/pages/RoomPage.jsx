@@ -58,9 +58,11 @@ export default function RoomPage() {
 	const [roomCode, setRoomCode] = useState("")
 	const [setupError, setSetupError] = useState("")
 	const [isStartingGame, setIsStartingGame] = useState(false)
+	const [copyState, setCopyState] = useState("idle")
 
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
+	const copyResetTimerRef = useRef(null)
 
 	useEffect(() => {
 		startedSetupRef.current = false
@@ -180,10 +182,26 @@ export default function RoomPage() {
 
 	const handleCopyCode = async () => {
 		if (!roomCode) return
+
 		try {
 			await navigator.clipboard.writeText(roomCode)
+			setCopyState("success")
+			if (copyResetTimerRef.current) {
+				window.clearTimeout(copyResetTimerRef.current)
+			}
+			copyResetTimerRef.current = window.setTimeout(() => {
+				setCopyState("idle")
+				copyResetTimerRef.current = null
+			}, 1800)
 		} catch {
-			// no-op: clipboard can fail without user gesture / permissions
+			setCopyState("error")
+			if (copyResetTimerRef.current) {
+				window.clearTimeout(copyResetTimerRef.current)
+			}
+			copyResetTimerRef.current = window.setTimeout(() => {
+				setCopyState("idle")
+				copyResetTimerRef.current = null
+			}, 1800)
 		}
 	}
 
@@ -203,6 +221,14 @@ export default function RoomPage() {
 		if (!roomCode) return
 		joinSocketRoom(roomCode)
 	}, [roomCode])
+
+	useEffect(() => {
+		return () => {
+			if (copyResetTimerRef.current) {
+				window.clearTimeout(copyResetTimerRef.current)
+			}
+		}
+	}, [])
 
 	useEffect(() => {
 		hasNavigatedToGameRef.current = false
@@ -327,10 +353,23 @@ export default function RoomPage() {
 								onClick={handleCopyCode}
 								className="text-muted-foreground hover:text-foreground"
 								aria-label="Copy room code"
-								title="Copy room code"
+								title={
+									copyState === "success"
+										? "Copied!"
+										: copyState === "error"
+											? "Copy failed"
+											: "Copy room code"
+								}
 							>
-								<Copy className="size-4" />
+								{copyState === "success" ? (
+									<Check className="size-4 text-emerald-500" />
+								) : (
+									<Copy className="size-4" />
+								)}
 							</button>
+							<span className="text-xs font-semibold text-muted-foreground" aria-live="polite">
+								{copyState === "success" ? "Copied" : copyState === "error" ? "Copy failed" : ""}
+							</span>
 						</RoomPill>
 						<RoomPill className="border-primary/20 bg-primary/10 text-primary">
 							<Users className="size-4" />
