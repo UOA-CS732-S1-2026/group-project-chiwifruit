@@ -58,7 +58,9 @@ function buildPlayerSnapshot(participant, initialOrder) {
     username: participant.user?.username || participant.guestName || 'Unknown Player',
     avatarUrl: buildAvatarUrl(userId || 'unknown'),
     isGuest: Boolean(participant.guestId),
-    score: Number(participant.correctCount || 0),
+    // NOTE: Each new game starts scoring from zero.
+    // Do not carry over room participant historical `correctCount`.
+    score: 0,
     isEliminated: false,
     eliminationReason: null,
     leftDuringGame: false,
