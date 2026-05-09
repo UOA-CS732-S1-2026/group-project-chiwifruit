@@ -58,6 +58,8 @@ export default function GamePage() {
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const lastFamiliarAutoPlayedPadRef = React.useRef({ gameId: null, index: null, at: 0 })
 	const acknowledgedOutGameIdRef = React.useRef(null)
+	const browserBackGuardArmedRef = React.useRef(false)
+	const browserBackConfirmedRef = React.useRef(false)
 // NOTE (2026-04-29): React 18 StrictMode + socket event timing can cause duplicate familiarization autoplay.
 // Remote and local pad sound events may fire almost simultaneously, causing the same note to play twice.
 // Using {gameId, index, at} for deduplication ensures each pad only plays once.
@@ -129,7 +131,7 @@ export default function GamePage() {
 
 	React.useEffect(() => {
 		if (roomCode) return
-		navigate("/", { replace: true })
+		navigate("/")
 	}, [navigate, roomCode])
 
 	const difficulty = React.useMemo(
@@ -154,7 +156,7 @@ export default function GamePage() {
 		if (!currentUserId) {
 			setGameLoadError("Missing session. Please return to home and join again.")
 			setIsGameLoading(false)
-			navigate("/", { replace: true })
+			navigate("/")
 			return
 		}
 
@@ -212,7 +214,7 @@ export default function GamePage() {
 						: "Unable to load game"
 				if (shouldExitToLanding(errorCode)) {
 					leaveSocketRoom(roomCode)
-					navigate("/", { replace: true })
+					navigate("/")
 					return
 				}
 
@@ -512,6 +514,43 @@ export default function GamePage() {
 				navigate("/")
 			})
 	}, [navigate, roomCode])
+
+	React.useEffect(() => {
+		if (!isCurrentUserActive) {
+			browserBackGuardArmedRef.current = false
+			browserBackConfirmedRef.current = false
+			return
+		}
+		if (!isSocketDriven) return
+		if (!socketGame?.status || socketGame.status === "finished") return
+		if (browserBackConfirmedRef.current) return
+
+		if (!browserBackGuardArmedRef.current) {
+			window.history.pushState({ gameBackGuard: true }, "", window.location.href)
+			browserBackGuardArmedRef.current = true
+		}
+
+		const onPopState = () => {
+			if (browserBackConfirmedRef.current) return
+
+			const confirmed = window.confirm(
+				"Going back now will forfeit the current game and remove you from this room. Continue?",
+			)
+
+			if (!confirmed) {
+				window.history.pushState({ gameBackGuard: true }, "", window.location.href)
+				return
+			}
+
+			browserBackConfirmedRef.current = true
+			exitRoomAndGameToHome()
+		}
+
+		window.addEventListener("popstate", onPopState)
+		return () => {
+			window.removeEventListener("popstate", onPopState)
+		}
+	}, [exitRoomAndGameToHome, isCurrentUserActive, isSocketDriven, socketGame?.status])
 
 	const padsDisabled =
 		phase === PHASE.FAMILIARIZE_AUTO ||
