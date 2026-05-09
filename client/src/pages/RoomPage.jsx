@@ -183,11 +183,8 @@ export default function RoomPage() {
 	const handleCopyCode = async () => {
 		if (!roomCode) return
 
-		const inviteLink = `${window.location.origin}/room/${roomCode}`
-		const copyPayload = `${roomCode}\n${inviteLink}`
-
 		try {
-			await navigator.clipboard.writeText(copyPayload)
+			await navigator.clipboard.writeText(roomCode)
 			setCopyState("success")
 			if (copyResetTimerRef.current) {
 				window.clearTimeout(copyResetTimerRef.current)
@@ -355,13 +352,13 @@ export default function RoomPage() {
 								type="button"
 								onClick={handleCopyCode}
 								className="text-muted-foreground hover:text-foreground"
-								aria-label="Copy room code and link"
+								aria-label="Copy room code"
 								title={
 									copyState === "success"
 										? "Copied!"
 										: copyState === "error"
 											? "Copy failed"
-											: "Copy room code and link"
+											: "Copy room code"
 								}
 							>
 								{copyState === "success" ? (
