@@ -140,16 +140,7 @@ jobs:
 
           docker network inspect kichain-net >/dev/null 2>&1 || docker network create kichain-net
 
-          if ! docker ps -a --format '{{.Names}}' | grep -q '^kichain-db$'; then
-            docker run -d \
-              --name kichain-db \
-              --restart unless-stopped \
-              --network kichain-net \
-              -p 27017:27017 \
-              mongo:latest
-          elif ! docker ps --format '{{.Names}}' | grep -q '^kichain-db$'; then
-            docker start kichain-db
-          fi
+          echo "Using external MongoDB from /home/ubuntu/kichain-dev.env"
 
           for CONTAINER in kichain-dev kichain-dev-2; do
             if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
