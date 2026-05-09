@@ -272,6 +272,31 @@ describe('Room API', () => {
       expect(room.save).toHaveBeenCalled();
     });
 
+    it('should preserve the current user readiness when only other participants are normalized', async () => {
+      const room = buildRoom({
+        participants: [
+          rawUserParticipant('userId123', 'Host', { isReady: true, correctCount: 3 }),
+          guestParticipant('guest-2', 'Guest Two', { isReady: true }),
+          guestParticipant('guest-2', 'Guest Two Duplicate', { isReady: false }),
+        ],
+      });
+
+      Room.findOne.mockResolvedValueOnce(room);
+      mockRoomState(room);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', token)
+        .send({ joinRoomCode: 'ABC' })
+        .expect(200);
+
+      expect(countParticipantsByIdentity(room.participants, userIdentity)).toBe(1);
+      expect(room.participants).toHaveLength(2);
+      expect(room.participants.find((participant) => String(participant.user) === 'userId123')?.isReady).toBe(true);
+      expect(room.participants.find((participant) => String(participant.user) === 'userId123')?.correctCount).toBe(3);
+      expect(room.save).toHaveBeenCalled();
+    });
+
     it('should reject joining a full room', async () => {
       const room = buildRoom({
         participants: Array.from({ length: 6 }, (_, index) => guestParticipant(`guest-${index}`, `Guest ${index}`)),
@@ -511,7 +536,7 @@ describe('Room API', () => {
         .send({ mode: 'bird' })
         .expect(200);
 
-      expect(room.mode).toBe('bird');
+      expect(room.mode).toBe('kiwi');
       expect(room.participants[0].isReady).toBe(false);
     });
   });

@@ -118,8 +118,7 @@ async function createRoom(req, res) {
     const matchingParticipants = room.participants.filter(participantSelector);
     const alreadyJoined = matchingParticipants.length > 0;
     const normalizedParticipants = room.participants.filter((participant) => !participantSelector(participant));
-    let roomChanged = matchingParticipants.length !== 1;
-    roomChanged = roomChanged || roomNormalized;
+    const currentUserNeedsNormalization = matchingParticipants.length !== 1;
 
     if (!alreadyJoined) {
       if (normalizedParticipants.length >= MAX_ROOM_PARTICIPANTS) {
@@ -134,9 +133,18 @@ async function createRoom(req, res) {
       await room.save();
 
       emitCleanedRoomUpdates(io, cleanedRooms);
-    } else if (roomChanged) {
+    } else if (currentUserNeedsNormalization) {
+      const freshParticipant = createParticipant(identity);
+      const participantToKeep = matchingParticipants.find((participant) => participant.isReady) || matchingParticipants[0];
+
       room.participants = normalizedParticipants;
-      room.participants.push(createParticipant(identity));
+      room.participants.push({
+        ...freshParticipant,
+        isReady: participantToKeep?.isReady ?? freshParticipant.isReady,
+        correctCount: participantToKeep?.correctCount ?? freshParticipant.correctCount,
+      });
+      await room.save();
+    } else if (roomNormalized) {
       await room.save();
     }
 
