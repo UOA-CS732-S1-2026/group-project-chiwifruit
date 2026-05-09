@@ -19,6 +19,7 @@ import {
 	useSelectModeMutation,
 	useSetReadyMutation,
 } from "../hooks/mutations/useRoomMutations"
+import { leaveRoomKeepalive } from "../api/rooms"
 import { useRoomQuery } from "../hooks/queries/useRoomQuery"
 import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../api/axios"
 
@@ -63,6 +64,7 @@ export default function RoomPage() {
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
 	const copyResetTimerRef = useRef(null)
+	const pageLeaveSentRef = useRef(false)
 
 	useEffect(() => {
 		startedSetupRef.current = false
@@ -166,6 +168,7 @@ export default function RoomPage() {
 			return
 		}
 
+		pageLeaveSentRef.current = true
 		leaveRoomMutation.mutate(activeRoomCode, {
 			onSuccess: () => {
 				navigate("/")
@@ -247,6 +250,25 @@ export default function RoomPage() {
 	useEffect(() => {
 		hasNavigatedToGameRef.current = false
 	}, [roomCode])
+
+	useEffect(() => {
+		pageLeaveSentRef.current = false
+	}, [activeRoomCode])
+
+	useEffect(() => {
+		if (!activeRoomCode) return
+
+		const onPageHide = () => {
+			if (pageLeaveSentRef.current) return
+			pageLeaveSentRef.current = true
+			void leaveRoomKeepalive(activeRoomCode)
+		}
+
+		window.addEventListener("pagehide", onPageHide)
+		return () => {
+			window.removeEventListener("pagehide", onPageHide)
+		}
+	}, [activeRoomCode])
 
 	useEffect(() => {
 		if (!roomCode) return
