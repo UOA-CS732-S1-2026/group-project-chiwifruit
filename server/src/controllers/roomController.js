@@ -179,11 +179,12 @@ async function checkIfCandidateIsReady(req, res) {
 
 async function selectMode(req, res) {
   const { roomCode } = req.params;
-  const { mode } = req.body;
+  const { mode: rawMode } = req.body;
   const userId = req.user.sub;
 
-  if (!['bird', 'piano'].includes(mode)) {
-    return res.status(400).json({ message: 'mode must be bird or piano' });
+  const normalizedMode = rawMode === 'bird' ? 'kiwi' : rawMode;
+  if (!['kiwi', 'piano'].includes(normalizedMode)) {
+    return res.status(400).json({ message: 'mode must be kiwi or piano' });
   }
 
   const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });
@@ -195,7 +196,7 @@ async function selectMode(req, res) {
     return res.status(403).json({ message: 'Only the host can select a mode' });
   }
 
-  room.mode = mode;
+  room.mode = normalizedMode;
   // Reset all participants' ready status when mode changes
   room.participants.forEach(participant => {
     participant.isReady = false;
