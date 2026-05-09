@@ -23,7 +23,7 @@ function normalizeEntries(modules) {
 }
 
 const AUDIO_ENTRIES = {
-	bird: normalizeEntries(kiwiAudioModules),
+	kiwi: normalizeEntries(kiwiAudioModules),
 	piano: normalizeEntries(pianoAudioModules),
 }
 
@@ -58,7 +58,7 @@ function seededShuffle(items, seed) {
 }
 
 export function pickGameNoteUrls({ mode, padCount, seed }) {
-	const key = mode === "piano" ? "piano" : "bird"
+	const key = mode === "piano" ? "piano" : "kiwi"
 	const entries = AUDIO_ENTRIES[key]
 	if (!Array.isArray(entries) || entries.length === 0) return []
 

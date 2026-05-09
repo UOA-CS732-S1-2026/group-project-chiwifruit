@@ -143,7 +143,7 @@ export default function GamePage() {
 	const noteUrls = React.useMemo(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed) return []
 		return pickGameNoteUrls({ 
-			mode: socketGame.mode || "bird", 
+			mode: socketGame.mode || "kiwi", 
 			padCount, 
 			seed: socketGame.audioSeed 
 		})
