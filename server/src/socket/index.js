@@ -2,7 +2,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const Room = require('../models/Room');
-const { removeParticipantFromRoom } = require('../services/roomStateService');
+const { normalizeRoomParticipants, removeParticipantFromRoom } = require('../services/roomStateService');
 const {
   TURN_MS,
   getGame,
@@ -247,6 +247,10 @@ function initSocket(httpServer, frontendOrigin) {
         if (!room) {
           if (typeof ack === 'function') ack({ ok: false, error: 'Room not found.' });
           return;
+        }
+
+        if (normalizeRoomParticipants(room)) {
+          await room.save();
         }
 
         // NOTE (2026-04-27): Re-check readiness server-side before starting.

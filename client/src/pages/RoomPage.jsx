@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Check, CircleDot, Copy, Flame, LogOut, Music, Play, Users, Zap } from "lucide-react"
 
@@ -24,7 +24,7 @@ import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../ap
 
 import birdIcon from "../assets/icons/bird.svg"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
-import { emitGameRequestState, emitGameStart, joinSocketRoom, leaveSocketRoom, reconnectSocket } from "../socket/socket"
+import { emitGameRequestState, emitGameStart, joinSocketRoom, reconnectSocket } from "../socket/socket"
 
 // NOTE (2026-04-29): The waiting room relies on two systems:
 // - REST: join/leave room, ready/mode/difficulty — room participants and configuration
@@ -96,14 +96,14 @@ export default function RoomPage() {
 
 		if (!requestedJoinCode) {
 			setSetupError("Missing room code. Please go back and join/create from landing page.")
-			navigate("/", { replace: true })
+			navigate("/")
 			return
 		}
 
 		const token = getStoredAuthToken()
 		if (!token) {
 			setSetupError("Missing session. Please join from the home page.")
-			navigate("/", { replace: true })
+			navigate("/")
 			return
 		}
 
@@ -158,6 +158,20 @@ export default function RoomPage() {
 		(player) => Boolean(identity?.sub) && String(player.id) === identity.sub,
 	)
 	const currentUserReady = Boolean(currentUserPlayer?.isReady)
+	const activeRoomCode = String(roomCode || requestedJoinCode || "").trim().toUpperCase()
+
+	const leaveRoomAndReturnHome = useCallback(() => {
+		if (!activeRoomCode) {
+			navigate("/")
+			return
+		}
+
+		leaveRoomMutation.mutate(activeRoomCode, {
+			onSuccess: () => {
+				navigate("/")
+			},
+		})
+	}, [activeRoomCode, leaveRoomMutation, navigate])
 
 	const handleStartGame = () => {
 		if (!isHost) return
@@ -174,7 +188,7 @@ export default function RoomPage() {
 				return
 			}
 
-			navigate(`/game/${roomCode}`, { state: { difficulty, soundMode: mode, roomCode } })
+				navigate(`/game/${roomCode}`, { replace: true, state: { difficulty, soundMode: mode, roomCode } })
 		})
 	}
 
@@ -259,7 +273,7 @@ export default function RoomPage() {
 
 			if (hasNavigatedToGameRef.current) return
 			hasNavigatedToGameRef.current = true
-			navigate(`/game/${roomCode}`)
+			navigate(`/game/${roomCode}`, { replace: true })
 		}
 
 		const requestStateOnce = () => {
@@ -298,20 +312,7 @@ export default function RoomPage() {
 						<LoginButton avatarUrl={avatarUrl} label={loginLabel} />
 						<Button
 							type="button"
-							onClick={() => {
-								if (!roomCode) {
-									navigate("/")
-									return
-								}
-								// NOTE (2026-04-29): First call REST leaveRoom() to remove the player from participants and broadcast room_update;
-								// then emit socket leave_room (which has the game-side meaning of "leave the match").
-								leaveRoomMutation.mutate(roomCode, {
-									onSuccess: () => {
-										leaveSocketRoom(roomCode)
-										navigate("/")
-									},
-								})
-							}}
+							onClick={leaveRoomAndReturnHome}
 							variant="outline"
 							className="rounded-full bg-card px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm hover:bg-muted"
 						>

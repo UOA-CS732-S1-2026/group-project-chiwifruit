@@ -9,6 +9,7 @@ jest.mock('../src/config/env', () => ({
 jest.mock('mongoose', () => {
   const mockModel = {
     findOne: jest.fn(),
+    find: jest.fn(),
     create: jest.fn(),
     findById: jest.fn(),
     findByIdAndUpdate: jest.fn(),
