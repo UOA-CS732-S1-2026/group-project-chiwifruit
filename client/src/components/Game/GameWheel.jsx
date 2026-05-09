@@ -33,7 +33,7 @@ export default function GameWheel({
 				return (
 					<div
 						key={`${pad.base}-${index}`}
-						className="absolute left-0 top-0 h-0 w-0 overflow-visible"
+						className="absolute left-0 top-0 aspect-square w-[21.2%] -translate-x-1/2 -translate-y-1/2 overflow-visible"
 						style={{
 							left: `calc(50% + ${x}%)`,
 							top: `calc(50% + ${y}%)`,
