@@ -9,6 +9,8 @@ export default function GamePlayerCard({
 	turnSeconds,
 	className,
 }) {
+	const displayStatus = status === "OUT OF GAME" ? "ELIMINATED" : status
+
 	return (
 		<div
 			className={cn(
@@ -29,7 +31,7 @@ export default function GamePlayerCard({
 					<p className="truncate text-sm font-extrabold text-foreground">{name}</p>
 					<p className={cn("mt-0.5 text-[11px] font-bold tracking-wide text-muted-foreground uppercase", isCurrentTurn ? "text-emerald-600" : "")}
 					>
-						{isCurrentTurn ? "CURRENT TURN" : status}
+						{isCurrentTurn ? "CURRENT TURN" : displayStatus}
 					</p>
 					<p className="mt-1 text-sm font-semibold text-foreground">
 						<span className="text-muted-foreground">Score:</span> {score}
