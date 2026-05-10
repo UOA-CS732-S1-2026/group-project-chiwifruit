@@ -152,6 +152,8 @@ function serializeGame(game) {
     currentTurnIndex: game.currentTurnIndex,
     currentTurnUserId: game.participantsOrder[game.currentTurnIndex] ?? null,
     inputIndex: game.inputIndex,
+    roundNumber: game.roundNumber ?? null,
+    firstRoundStarterUserId: game.firstRoundStarterUserId ?? null,
     turnEndsAt: game.turnEndsAt,
     eliminatedUserIds: [...game.eliminatedUserIds],
     scores: game.scores,

@@ -12,7 +12,7 @@ function room(overrides = {}) {
   return {
     roomCode: overrides.roomCode || `ROOM_${Math.random().toString(36).slice(2, 8)}`,
     host: overrides.host || 'user1',
-    mode: overrides.mode || 'bird',
+    mode: overrides.mode || 'kiwi',
     difficulty: overrides.difficulty || 'easy',
     participants: overrides.participants || [participant('user1', 'Host'), participant('user2', 'Player Two')],
   };
@@ -64,7 +64,7 @@ describe('gameService state machine', () => {
       expect(result.game).toMatchObject({
         roomCode: 'START_OK',
         status: 'familiarizing',
-        mode: 'bird',
+        mode: 'kiwi',
         difficulty: 'hard',
         padCount: 10,
         participantsOrder: ['user1', 'user2'],
