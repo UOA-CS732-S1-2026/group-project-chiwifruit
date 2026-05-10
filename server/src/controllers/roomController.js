@@ -8,6 +8,7 @@ const {
   getRoomState,
   getParticipantSelector,
   normalizeRoomParticipants,
+  normalizePersistedRoomParticipants,
   ensureSingleRoomMembership,
   MAX_ROOM_PARTICIPANTS
 } = require('../services/roomStateService');
@@ -107,6 +108,7 @@ async function createRoom(req, res) {
 
   if (joinRoomCode) {
     const room = await Room.findOne({ roomCode: joinRoomCode.toUpperCase() });
+    let didPersistJoin = false;
 
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
@@ -131,6 +133,7 @@ async function createRoom(req, res) {
       room.participants = normalizedParticipants;
       room.participants.push(createParticipant(identity));
       await room.save();
+      didPersistJoin = true;
 
       emitCleanedRoomUpdates(io, cleanedRooms);
     } else if (currentUserNeedsNormalization) {
@@ -144,8 +147,14 @@ async function createRoom(req, res) {
         correctCount: participantToKeep?.correctCount ?? freshParticipant.correctCount,
       });
       await room.save();
+      didPersistJoin = true;
     } else if (roomNormalized) {
       await room.save();
+      didPersistJoin = true;
+    }
+
+    if (didPersistJoin) {
+      await normalizePersistedRoomParticipants(room.roomCode, room);
     }
 
     const roomState = await getRoomState(room.roomCode);

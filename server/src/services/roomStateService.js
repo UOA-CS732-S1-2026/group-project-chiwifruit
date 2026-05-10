@@ -137,6 +137,29 @@ async function getRoomState(roomCode) {
   };
 }
 
+async function normalizePersistedRoomParticipants(roomCode, fallbackRoom = null) {
+  const normalizedRoomCode = String(roomCode).toUpperCase();
+  const fetchedRoom = await Room.findOne({ roomCode: normalizedRoomCode });
+  const room = Array.isArray(fetchedRoom?.participants) ? fetchedRoom : fallbackRoom;
+  if (!room) {
+    return null;
+  }
+
+  if (normalizeRoomParticipants(room)) {
+    try {
+      await room.save();
+    } catch (error) {
+      // A concurrent leave/delete can invalidate this stale room version while a refresh re-joins.
+      // In that case, skip this best-effort cleanup instead of crashing the server.
+      if (error?.name !== 'VersionError') {
+        throw error;
+      }
+    }
+  }
+
+  return room;
+}
+
 async function removeParticipantFromRoom({ roomCode, identity }) {
   const normalizedRoomCode = String(roomCode).toUpperCase();
   const room = await Room.findOne({ roomCode: normalizedRoomCode });
@@ -220,6 +243,7 @@ module.exports = {
   getParticipantSelector,
   getRoomState,
   normalizeRoomParticipants,
+  normalizePersistedRoomParticipants,
   ensureSingleRoomMembership,
   removeParticipantFromRoomDocument,
   removeParticipantFromRoom,

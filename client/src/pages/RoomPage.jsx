@@ -19,7 +19,6 @@ import {
 	useSelectModeMutation,
 	useSetReadyMutation,
 } from "../hooks/mutations/useRoomMutations"
-import { leaveRoomKeepalive } from "../api/rooms"
 import { useRoomQuery } from "../hooks/queries/useRoomQuery"
 import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../api/axios"
 
@@ -168,9 +167,9 @@ export default function RoomPage() {
 			return
 		}
 
-		pageLeaveSentRef.current = true
 		leaveRoomMutation.mutate(activeRoomCode, {
 			onSuccess: () => {
+				pageLeaveSentRef.current = true
 				navigate("/")
 			},
 		})
@@ -253,21 +252,6 @@ export default function RoomPage() {
 
 	useEffect(() => {
 		pageLeaveSentRef.current = false
-	}, [activeRoomCode])
-
-	useEffect(() => {
-		if (!activeRoomCode) return
-
-		const onPageHide = () => {
-			if (pageLeaveSentRef.current) return
-			pageLeaveSentRef.current = true
-			void leaveRoomKeepalive(activeRoomCode)
-		}
-
-		window.addEventListener("pagehide", onPageHide)
-		return () => {
-			window.removeEventListener("pagehide", onPageHide)
-		}
 	}, [activeRoomCode])
 
 	useEffect(() => {

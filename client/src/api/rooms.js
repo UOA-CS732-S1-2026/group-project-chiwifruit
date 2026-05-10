@@ -42,7 +42,7 @@ export function leaveRoomKeepalive(roomCode, tokenOverride) {
 			Authorization: `Bearer ${token}`,
 		},
 		keepalive: true,
-	})
+	}).catch(() => null)
 }
 
 export async function getRoomState(roomCode) {

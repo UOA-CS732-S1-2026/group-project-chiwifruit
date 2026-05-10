@@ -52,12 +52,14 @@ function populatedRoomCopy(room) {
   };
 }
 
-function mockRoomState(roomOrFactory) {
-  Room.findOne.mockReturnValueOnce({
-    populate: jest.fn().mockImplementation(async () => {
-      const room = typeof roomOrFactory === 'function' ? roomOrFactory() : roomOrFactory;
-      return room ? populatedRoomCopy(room) : null;
-    }),
+function mockRoomState(roomOrFactory, times = 1) {
+  Array.from({ length: times }).forEach(() => {
+    Room.findOne.mockReturnValueOnce({
+      populate: jest.fn().mockImplementation(async () => {
+        const room = typeof roomOrFactory === 'function' ? roomOrFactory() : roomOrFactory;
+        return room ? populatedRoomCopy(room) : null;
+      }),
+    });
   });
 }
 
@@ -136,7 +138,7 @@ describe('Room API', () => {
 
       Room.exists.mockResolvedValue(false);
       Room.create.mockResolvedValue(room);
-      mockRoomState(room);
+      mockRoomState(room, 2);
 
       const response = await request(app)
         .post('/api/rooms')
@@ -193,7 +195,7 @@ describe('Room API', () => {
 
       Room.findOne.mockResolvedValueOnce(roomBeforeSave);
       Room.find.mockResolvedValue([]);
-      mockRoomState(() => roomBeforeSave);
+      mockRoomState(() => roomBeforeSave, 2);
 
       const response = await request(app)
         .post('/api/rooms')
@@ -213,7 +215,7 @@ describe('Room API', () => {
       });
 
       Room.findOne.mockResolvedValueOnce(room);
-      mockRoomState(room);
+      mockRoomState(room, 2);
 
       await request(app)
         .post('/api/rooms')
@@ -237,7 +239,7 @@ describe('Room API', () => {
       });
 
       Room.findOne.mockResolvedValueOnce(room);
-      mockRoomState(room);
+      mockRoomState(room, 2);
 
       await request(app)
         .post('/api/rooms')
@@ -259,7 +261,7 @@ describe('Room API', () => {
       });
 
       Room.findOne.mockResolvedValueOnce(room);
-      mockRoomState(room);
+      mockRoomState(room, 2);
 
       await request(app)
         .post('/api/rooms')
@@ -282,7 +284,7 @@ describe('Room API', () => {
       });
 
       Room.findOne.mockResolvedValueOnce(room);
-      mockRoomState(room);
+      mockRoomState(room, 2);
 
       await request(app)
         .post('/api/rooms')
@@ -295,6 +297,36 @@ describe('Room API', () => {
       expect(room.participants.find((participant) => String(participant.user) === 'userId123')?.isReady).toBe(true);
       expect(room.participants.find((participant) => String(participant.user) === 'userId123')?.correctCount).toBe(3);
       expect(room.save).toHaveBeenCalled();
+    });
+
+    it('should persistently collapse duplicate participants written by concurrent join requests', async () => {
+      const roomBeforeSave = buildRoom({
+        participants: [guestParticipant('guest-2', 'Guest Two')],
+      });
+      const persistedRoom = buildRoom({
+        participants: [
+          guestParticipant('guest-2', 'Guest Two'),
+          rawUserParticipant('userId123', 'Host'),
+          rawUserParticipant('userId123', 'Host Duplicate'),
+        ],
+      });
+
+      Room.findOne
+        .mockResolvedValueOnce(roomBeforeSave)
+        .mockResolvedValueOnce(persistedRoom);
+      Room.find.mockResolvedValue([]);
+      mockRoomState(() => persistedRoom);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', token)
+        .send({ joinRoomCode: 'ABC' })
+        .expect(200);
+
+      expect(roomBeforeSave.save).toHaveBeenCalled();
+      expect(persistedRoom.save).toHaveBeenCalled();
+      expect(countParticipantsByIdentity(persistedRoom.participants, userIdentity)).toBe(1);
+      expect(persistedRoom.participants).toHaveLength(2);
     });
 
     it('should reject joining a full room', async () => {
@@ -345,7 +377,7 @@ describe('Room API', () => {
       Room.findOne.mockResolvedValueOnce(targetRoom);
       Room.find.mockResolvedValue([previousRoom, targetRoom]);
       mockRoomState(() => previousRoom);
-      mockRoomState(() => targetRoom);
+      mockRoomState(() => targetRoom, 2);
 
       await request(app)
         .post('/api/rooms')
@@ -382,7 +414,7 @@ describe('Room API', () => {
       Room.findOne.mockResolvedValueOnce(targetRoom);
       Room.find.mockResolvedValue([previousRoom, targetRoom]);
       mockRoomState(() => previousRoom);
-      mockRoomState(() => targetRoom);
+      mockRoomState(() => targetRoom, 2);
 
       await request(app)
         .post('/api/rooms')
