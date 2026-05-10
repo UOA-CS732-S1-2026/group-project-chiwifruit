@@ -14,6 +14,7 @@ import {
 	Zap,
 } from "lucide-react"
 
+import Background from "../components/Common/Background"
 import BrandLockup from "../components/Common/BrandLockup"
 import LoginButton from "../components/AuthComponent/LoginButton"
 import RoomPill from "../components/Room/RoomPill"
@@ -318,7 +319,7 @@ export default function RoomPage() {
 	}, [identity?.sub, navigate, roomCode])
 
 	return (
-		<div className="min-h-screen w-full overflow-hidden bg-[#F6F8FF] bg-[radial-gradient(circle_at_94%_94%,rgba(168,116,255,0.28)_0,rgba(168,116,255,0.14)_18rem,rgba(246,248,255,0)_34rem)]">
+		<Background>
 			<div className="min-h-screen">
 				<header className="flex items-center justify-between px-8 py-5">
 					<BrandLockup />
@@ -496,6 +497,6 @@ export default function RoomPage() {
 				) : null}
 				</main>
 			</div>
-		</div>
+		</Background>
 	)
 }
