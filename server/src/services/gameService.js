@@ -120,6 +120,16 @@ function markPlayerEliminated(game, userId, reason, { leftDuringGame = false, fa
   }
 
   game.eliminatedUserIds.add(participantId);
+
+  // If a player is eliminated before taking their turn in the current round
+  // (e.g. off-turn forfeit/disconnect), remove them from the round-start alive
+  // set so round completion doesn't get permanently blocked.
+  if (Array.isArray(game.roundStartAliveUserIds)) {
+    game.roundStartAliveUserIds = game.roundStartAliveUserIds.filter((id) => String(id) !== participantId);
+  }
+  if (game.roundTurnTakenUserIds instanceof Set) {
+    game.roundTurnTakenUserIds.delete(participantId);
+  }
 }
 
 function serializeGame(game) {

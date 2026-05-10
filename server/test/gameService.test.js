@@ -413,6 +413,32 @@ describe('gameService state machine', () => {
       expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
 
+    it('should not stall round completion after off-turn elimination in 3-player game', () => {
+      const roomCode = 'OFF_TURN_ELIMINATION_ROUND_PROGRESS';
+      const participants = [
+        participant('user1', 'Host'),
+        participant('user2', 'Player Two'),
+        participant('user3', 'Player Three'),
+      ];
+      startPlayingGame(roomCode, participants);
+
+      // P1 starts sequence.
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 1 });
+
+      // Off-turn elimination: P3 leaves before taking turn this round.
+      const forfeit = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'leave_room' });
+      expect(forfeit.ok).toBe(true);
+
+      // P2 completes their turn, which should now close the round (P1 and P2 only).
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 1 });
+      const add = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 2 });
+
+      expect(add.ok).toBe(true);
+      expect(add.game.roundNumber).toBe(2);
+      expect(add.game.scores.user2).toBe(6); // +1 replay +5 survival
+      expect(add.game.currentTurnUserId).toBe('user1');
+    });
+
     it('should finish when the current player forfeits and only one player remains', () => {
       const roomCode = 'FORFEIT_CURRENT_PLAYER';
       startPlayingGame(roomCode);
