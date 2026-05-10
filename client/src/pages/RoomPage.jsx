@@ -351,7 +351,7 @@ export default function RoomPage() {
 					</div>
 				</header>
 
-				<main className="mx-auto max-w-6xl px-6 pb-0">
+				<main className="mx-auto max-w-6xl px-6 pb-12">
 					<h1 className="text-center text-4xl font-bold text-foreground md:text-5xl">Waiting Room</h1>
 
 					{isSettingUpRoom || isRoomLoading ? (
@@ -459,15 +459,15 @@ export default function RoomPage() {
 						))}
 					</div>
 
-					<div className="mt-16 flex h-[109px] items-start justify-center px-6 py-6">
+					<div className="mt-10 flex justify-center">
 						{isHost ? (
 							<Button
 								type="button"
 								onClick={handleStartGame}
 								disabled={!canStartGame || isStartingGame}
-								className="h-[60px] w-[227px] rounded-full bg-[linear-gradient(90deg,#4A5EED_0%,#505EED_11.11%,#565EED_22.22%,#5C5EED_33.33%,#625EED_44.44%,#675EED_55.56%,#6C5EED_66.67%,#715EED_77.78%,#765EED_88.89%,#7B5EED_100%)] px-0 text-[18px] font-bold leading-7 text-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] hover:brightness-105"
+								className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"
 							>
-								<Play className="size-5 fill-current" />
+								<Play className="size-4 fill-current" />
 								{isStartingGame ? "Starting..." : "Start Game"}
 							</Button>
 						) : (
