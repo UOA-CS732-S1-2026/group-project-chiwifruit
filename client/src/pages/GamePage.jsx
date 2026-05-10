@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { ArrowLeft, ChevronsRight } from "lucide-react"
-import { useLocation, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 
 import Background from "../components/Common/Background"
 import ExitGameModal from "../components/Game/ExitGameModal"
@@ -14,15 +14,14 @@ import LoginButton from "../components/AuthComponent/LoginButton"
 import { Button } from "../components/ui/button"
 import { getStoredAuthUser } from "../api/axios"
 import { leaveRoom } from "../api/rooms"
-import { useRankingQuery, useRoomQuery } from "../hooks/queries/useRoomQuery"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useSoundStore from "../store/useSoundStore"
+import { useRankingQuery } from "../hooks/queries/useRoomQuery"
 import {
 	emitGameFamiliarPadPress,
 	emitGameFamiliarReady,
 	emitGamePadPress,
 	emitGameRequestState,
-	emitGameStart,
 	joinSocketRoom,
 	leaveSocketRoom,
 	reconnectSocket,
@@ -30,7 +29,7 @@ import {
 import { pickGameNoteUrls, playGameNote } from "../lib/gameAudio"
 
 import logo from "../assets/branding/logo.png"
-import { buildPadThemeSetByPadCount, getPadCountByDifficulty } from "../lib/gamePadPalette"
+import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
 
 const PHASE = {
 	FAMILIARIZE_AUTO: "familiarize:auto",
@@ -43,6 +42,10 @@ const FAMILIARIZE_AUTOPLAY_MS = 2000
 const FREE_PLAY_MS = 20_000
 // const COUNTDOWN_MS = 5_000
 
+function shouldExitToLanding(errorCode) {
+	return errorCode === "GAME_NOT_PARTICIPANT" || errorCode === "NO_ACTIVE_GAME"
+}
+
 function coerceDifficulty(value) {
 	if (value === "easy") return "easy"
 	if (value === "hard") return "hard"
@@ -51,13 +54,15 @@ function coerceDifficulty(value) {
 
 export default function GamePage() {
 	const navigate = useNavigate()
-	const location = useLocation()
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const lastFamiliarAutoPlayedPadRef = React.useRef({ gameId: null, index: null, at: 0 })
-	// NOTE (2026-04-29): React 18 StrictMode + socket event timing 会导致“熟悉阶段自动播放”
-	// 与远端/本地 pad sound 事件几乎同时触发，从而出现同一个音重复播放。这里用
-	// {gameId, index, at} 做去重，保证单次 pad 只响一次。
+	const acknowledgedOutGameIdRef = React.useRef(null)
+	const browserBackGuardArmedRef = React.useRef(false)
+	const browserBackConfirmedRef = React.useRef(false)
+// NOTE (2026-04-29): React 18 StrictMode + socket event timing can cause duplicate familiarization autoplay.
+// Remote and local pad sound events may fire almost simultaneously, causing the same note to play twice.
+// Using {gameId, index, at} for deduplication ensures each pad only plays once.
 	const user = getStoredAuthUser()
 	const headerAvatarUrl = typeof user?.avatarUrl === "string" ? user.avatarUrl : undefined
 	const headerLoginLabel = typeof user?.username === "string" ? user.username : "Login"
@@ -77,29 +82,40 @@ export default function GamePage() {
 		setMuted(false)
 	}, [muted, setMuted])
 
-	const { data: roomState } = useRoomQuery(roomCode, Boolean(roomCode))
-	const hostId = roomState?.hostId ? String(roomState.hostId) : null
-	const isHost = Boolean(currentUserId) && Boolean(hostId) && currentUserId === hostId
-	const canStartGame = Boolean(isHost && roomState?.canStartGame)
 	const [socketGame, setSocketGame] = React.useState(null)
 	const [socketError, setSocketError] = React.useState("")
+	const [gameLoadError, setGameLoadError] = React.useState("")
+	const [isGameLoading, setIsGameLoading] = React.useState(true)
 	const [serverOffsetMs, setServerOffsetMs] = React.useState(0)
 	const isSocketDriven = Boolean(socketGame?.gameId)
-	const participantOrder = React.useMemo(
-		() => (Array.isArray(socketGame?.participantsOrder) ? socketGame.participantsOrder.map(String) : []),
-		[socketGame?.participantsOrder],
+	const gamePlayers = React.useMemo(
+		() => (Array.isArray(socketGame?.players) ? socketGame.players : []),
+		[socketGame?.players],
 	)
-	const isCurrentUserParticipant = Boolean(currentUserId) && participantOrder.includes(String(currentUserId))
+	const participantOrder = React.useMemo(
+		() => {
+			if (Array.isArray(socketGame?.participantsOrder) && socketGame.participantsOrder.length > 0) {
+				return socketGame.participantsOrder.map(String)
+			}
+			return gamePlayers.map((player) => String(player.userId))
+		},
+		[socketGame?.participantsOrder, gamePlayers],
+	)
+	const currentGamePlayer = React.useMemo(() => {
+		if (!currentUserId) return null
+		return gamePlayers.find((player) => String(player.userId) === String(currentUserId)) ?? null
+	}, [currentUserId, gamePlayers])
+	const isCurrentUserActive = Boolean(currentGamePlayer && !currentGamePlayer.isEliminated && !currentGamePlayer.leftDuringGame)
 	const waitingUserIds = React.useMemo(
 		() => (Array.isArray(socketGame?.familiarReadyUserIds) ? socketGame.familiarReadyUserIds.map(String) : []),
 		[socketGame?.familiarReadyUserIds],
 	)
-	const isCurrentUserWaiting = Boolean(isCurrentUserParticipant) && waitingUserIds.includes(String(currentUserId))
+	const isCurrentUserWaiting = Boolean(isCurrentUserActive) && waitingUserIds.includes(String(currentUserId))
 
 	React.useEffect(() => {
 		// Browser limitation: we cannot show a custom React modal on refresh/close.
-		// Use the native beforeunload confirmation for hosts during an active game.
-		if (!isHost) return
+		// Use the native beforeunload confirmation for any in-game player during an active game.
+		if (!isCurrentUserActive) return
 		if (!isSocketDriven) return
 		if (!socketGame?.status || socketGame.status === "finished") return
 
@@ -111,33 +127,25 @@ export default function GamePage() {
 		}
 		window.addEventListener("beforeunload", onBeforeUnload)
 		return () => window.removeEventListener("beforeunload", onBeforeUnload)
-	}, [isHost, isSocketDriven, socketGame?.status])
-
-	React.useEffect(() => {
-		if (!roomCode) return
-		if (!canStartGame) return
-		if (socketGame?.status) return
-		emitGameStart(roomCode)
-	}, [canStartGame, roomCode, socketGame?.status])
+	}, [isCurrentUserActive, isSocketDriven, socketGame?.status])
 
 	React.useEffect(() => {
 		if (roomCode) return
-		navigate("/", { replace: true })
+		navigate("/")
 	}, [navigate, roomCode])
 
-	const difficulty = React.useMemo(() => {
-		if (socketGame?.difficulty) return coerceDifficulty(socketGame.difficulty)
-		if (roomState?.difficulty) return coerceDifficulty(roomState.difficulty)
-		return coerceDifficulty(location.state?.difficulty)
-	}, [location.state?.difficulty, roomState?.difficulty, socketGame?.difficulty])
-	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : getPadCountByDifficulty(difficulty)
+	const difficulty = React.useMemo(
+		() => coerceDifficulty(socketGame?.difficulty),
+		[socketGame?.difficulty],
+	)
+	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : 0
 	
-	// NOTE (2026-04-29): 音频列表只用 socket 驱动的数据生成（audioSeed + padCount）。
-	// 原因：避免 roomState/location 变化导致重新洗牌，造成玩家两端音频映射不一致。
+// NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
+// This avoids reshuffling from any non-authoritative client fallback state.
 	const noteUrls = React.useMemo(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed) return []
 		return pickGameNoteUrls({ 
-			mode: socketGame.mode || "bird", 
+			mode: socketGame.mode || "kiwi", 
 			padCount, 
 			seed: socketGame.audioSeed 
 		})
@@ -145,11 +153,22 @@ export default function GamePage() {
 
 	React.useEffect(() => {
 		if (!roomCode) return
+		if (!currentUserId) {
+			setGameLoadError("Missing session. Please return to home and join again.")
+			setIsGameLoading(false)
+			navigate("/")
+			return
+		}
+
+		let hasReceivedGameState = false
 		setSocketError("")
+		setGameLoadError("")
+		setIsGameLoading(true)
 		joinSocketRoom(roomCode)
 		const socket = reconnectSocket()
 
 		const onGameState = (nextState) => {
+			hasReceivedGameState = true
 			if (typeof nextState?.serverNow === "number") {
 				setServerOffsetMs(nextState.serverNow - Date.now())
 			}
@@ -158,14 +177,19 @@ export default function GamePage() {
 		const onGameError = (payload) => {
 			const message = typeof payload?.message === "string" ? payload.message : "Game error"
 			setSocketError(message)
+			if (!hasReceivedGameState) {
+				setGameLoadError(message)
+				setIsGameLoading(false)
+			}
 		}
 		const onGamePadSound = (payload) => {
+			if (socketGame?.status !== "playing") return
 			const sourceUserId = typeof payload?.userId === "string" ? payload.userId : null
 			if (sourceUserId && currentUserId && sourceUserId === currentUserId) return
 			const padIndex = Number(payload?.padIndex)
 			if (!Number.isInteger(padIndex) || padIndex < 0 || padIndex >= noteUrls.length) return
 			playGameNote(noteUrls[padIndex])
-			// NOTE (2026-04-29): 远端 pad sound 已经播放过一次，自动播放 effect 不应再次补播。
+			// NOTE (2026-04-29): The remote pad sound has already played once, so the automatic playback effect should not play again.
 			lastFamiliarAutoPlayedPadRef.current = { gameId: null, index: padIndex, at: Date.now() }
 			setActivePadIndex(padIndex)
 			window.setTimeout(() => setActivePadIndex(null), 180)
@@ -176,7 +200,26 @@ export default function GamePage() {
 		socket.on("game_pad_sound", onGamePadSound)
 
 		emitGameRequestState(roomCode, (response) => {
-			if (response?.ok && response.game) onGameState(response.game)
+			if (response?.ok && response.game) {
+				onGameState(response.game)
+				setIsGameLoading(false)
+				return
+			}
+
+			const errorCode = typeof response?.errorCode === "string" ? response.errorCode : ""
+				const message = typeof response?.error === "string"
+					? response.error
+					: typeof response?.message === "string"
+						? response.message
+						: "Unable to load game"
+				if (shouldExitToLanding(errorCode)) {
+					leaveSocketRoom(roomCode)
+					navigate("/")
+					return
+				}
+
+			setGameLoadError(message)
+			setIsGameLoading(false)
 		})
 
 		return () => {
@@ -184,7 +227,7 @@ export default function GamePage() {
 			socket.off("game_error", onGameError)
 			socket.off("game_pad_sound", onGamePadSound)
 		}
-	}, [currentUserId, noteUrls, roomCode])
+	}, [currentUserId, navigate, noteUrls, roomCode, socketGame?.status])
 
 	const [phase, setPhase] = React.useState(PHASE.FAMILIARIZE_AUTO)
 	const padThemes = React.useMemo(
@@ -227,16 +270,33 @@ export default function GamePage() {
 	const [isOutModalOpen, setIsOutModalOpen] = React.useState(false)
 	const [isResultsModalOpen, setIsResultsModalOpen] = React.useState(false)
 	const [isSpectating, setIsSpectating] = React.useState(false)
+	const rankingQuery = useRankingQuery(roomCode, isResultsModalOpen)
+	const displayRanking = React.useMemo(() => {
+		const ranking = Array.isArray(rankingQuery.data?.ranking) ? rankingQuery.data.ranking : []
+		return ranking.map((player) => {
+			const isCurrentUser = Boolean(currentUserId) && String(player?.userId) === currentUserId
+			if (!isCurrentUser) return player
+
+			return {
+				...player,
+				username: `${player.username} (You)`,
+			}
+		})
+	}, [currentUserId, rankingQuery.data?.ranking])
 
 	React.useEffect(() => {
 		if (!socketGame) return
+		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
+		if (acknowledgedOutGameIdRef.current !== currentGameId) {
+			acknowledgedOutGameIdRef.current = null
+		}
+
 		setSequence(Array.isArray(socketGame.sequence) ? socketGame.sequence : [])
 		setInputCount(Number(socketGame.inputIndex ?? 0) || 0)
 		setCurrentTurnIndex(Number(socketGame.currentTurnIndex ?? 0) || 0)
 
-		const eliminated = Array.isArray(socketGame.eliminatedUserIds) ? socketGame.eliminatedUserIds : []
-		const isEliminated = Boolean(currentUserId) && eliminated.includes(currentUserId)
-		setIsSpectating(isEliminated)
+		const isOut = Boolean(currentGamePlayer && (currentGamePlayer.isEliminated || currentGamePlayer.leftDuringGame))
+		setIsSpectating(isOut || Boolean(socketGame && !currentGamePlayer))
 
 		if (socketGame.status === "finished") {
 			setIsOutModalOpen(false)
@@ -245,9 +305,12 @@ export default function GamePage() {
 			return
 		}
 
-		if (isEliminated) setIsOutModalOpen(true)
+		if (isOut && currentGameId && acknowledgedOutGameIdRef.current !== currentGameId) {
+			acknowledgedOutGameIdRef.current = currentGameId
+			setIsOutModalOpen(true)
+		}
 		if (socketGame.status === "playing") setPhase(PHASE.PLAYING)
-	}, [currentUserId, socketGame])
+	}, [currentGamePlayer, socketGame])
 
 	React.useEffect(() => {
 		if (!isSocketDriven) return
@@ -300,39 +363,26 @@ export default function GamePage() {
 	}, [serverOffsetMs, socketGame?.status, socketGame?.turnEndsAt])
 
 	const players = React.useMemo(() => {
-		const participants = Array.isArray(roomState?.participants) ? roomState.participants : []
-		if (participants.length === 0) {
-			return [
-				{
-					id: currentUserId ?? "me",
-					name: `${headerLoginLabel} (You)`,
-					avatarUrl: headerAvatarUrl,
-					score: 0,
-					side: "left",
-				},
-			]
+		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
+		if (gamePlayerList.length === 0) {
+			return []
 		}
 
-		// Important: order must match the server-authoritative participantsOrder so that
-		// currentTurnIndex highlights the correct player.
-		const participantById = new Map(participants.map((participant) => [String(participant.userId), participant]))
-		const orderedIds = participantOrder.length > 0 ? participantOrder : participants.map((p) => String(p.userId))
+		const playerById = new Map(gamePlayerList.map((player) => [String(player.userId), player]))
+		const orderedIds = participantOrder.length > 0 ? participantOrder : gamePlayerList.map((player) => String(player.userId))
 
 		const mapped = orderedIds
-			.map((participantId) => {
-				const participant = participantById.get(String(participantId))
-				if (!participant) return null
-				const isCurrentUser = Boolean(currentUserId) && String(participantId) === currentUserId
-				const backendAvatarUrl = typeof participant.avatarUrl === "string" ? participant.avatarUrl : undefined
-				const scoreFromSocket =
-					socketGame?.scores && String(participantId) in socketGame.scores
-						? Number(socketGame.scores[String(participantId)])
-						: null
+			.map((playerId) => {
+				const player = playerById.get(String(playerId))
+				if (!player) return null
+				const isCurrentUser = Boolean(currentUserId) && String(playerId) === currentUserId
 				return {
-					id: String(participantId),
-					name: isCurrentUser ? `${participant.username} (You)` : participant.username,
-					avatarUrl: backendAvatarUrl ?? (isCurrentUser ? headerAvatarUrl : undefined),
-					score: (Number.isFinite(scoreFromSocket) ? scoreFromSocket : Number(participant.correctCount ?? 0)) || 0,
+					id: String(playerId),
+					name: isCurrentUser ? `${player.username} (You)` : player.username,
+					avatarUrl: player.avatarUrl || (isCurrentUser ? headerAvatarUrl : undefined),
+					score: Number(player.score ?? 0) || 0,
+					isEliminated: Boolean(player.isEliminated),
+					leftDuringGame: Boolean(player.leftDuringGame),
 				}
 			})
 			.filter(Boolean)
@@ -342,27 +392,11 @@ export default function GamePage() {
 			...player,
 			side: index < leftCount ? "left" : "right",
 		}))
-	}, [currentUserId, headerAvatarUrl, headerLoginLabel, participantOrder, roomState?.participants, socketGame?.scores])
-
-	const { data: rankingData } = useRankingQuery(roomCode, Boolean(roomCode) && isResultsModalOpen)
-	const resultsPlayers = React.useMemo(() => {
-		const entries = Array.isArray(rankingData?.ranking) ? rankingData.ranking : []
-		if (entries.length === 0) return players
-		return entries.map((entry) => {
-			const entryId = String(entry.userId)
-			const isCurrentUser = Boolean(currentUserId) && entryId === currentUserId
-			const backendAvatarUrl = typeof entry.avatarUrl === "string" ? entry.avatarUrl : undefined
-			return {
-				id: entryId,
-				name: isCurrentUser ? `${entry.username} (You)` : entry.username,
-				score: Number(entry.correctCount ?? 0) || 0,
-				avatarUrl: backendAvatarUrl ?? (isCurrentUser ? headerAvatarUrl : undefined),
-			}
-		})
-	}, [currentUserId, headerAvatarUrl, players, rankingData?.ranking])
+	}, [currentUserId, headerAvatarUrl, gamePlayers, participantOrder])
 
 	React.useEffect(() => {
 		if (socketGame?.status) return
+		acknowledgedOutGameIdRef.current = null
 		setSequence([])
 		setInputCount(0)
 		setPhase(PHASE.FAMILIARIZE_AUTO)
@@ -394,62 +428,6 @@ export default function GamePage() {
 		setToastMessage("You're out! You can keep spectating.")
 	}, [currentTurnIndex, isOutModalOpen, isSpectating, phase, socketGame?.status, turnSeconds])
 
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_AUTO) return
-
-		setToastMessage("Familiarize yourself with the notes!")
-		setAutoPlayIndex(0)
-
-		const intervalId = window.setInterval(() => {
-			setAutoPlayIndex((previous) => {
-				const next = previous + 1
-				if (next >= padCount) {
-					window.clearInterval(intervalId)
-					setPhase(PHASE.FAMILIARIZE_FREE)
-					setActivePadIndex(null)
-					return Math.max(0, padCount - 1)
-				}
-				return next
-			})
-		}, FAMILIARIZE_AUTOPLAY_MS)
-
-		return () => window.clearInterval(intervalId)
-	}, [isSocketDriven, padCount, phase])
-
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_AUTO) return
-		setActivePadIndex(autoPlayIndex)
-	}, [autoPlayIndex, isSocketDriven, phase])
-
-	React.useEffect(() => {
-		if (isSocketDriven) return
-		if (phase !== PHASE.FAMILIARIZE_FREE) return
-		setToastMessage("Familiarize yourself with the notes!")
-		setFreePlaySeconds(20)
-
-		const intervalId = window.setInterval(() => {
-			setFreePlaySeconds((previous) => {
-				return Math.max(0, previous - 1)
-			})
-		}, 1000)
-
-		return () => window.clearInterval(intervalId)
-	}, [isSocketDriven, phase])
-
-	React.useEffect(() => {
-		if (phase !== PHASE.PLAYING) return
-		if (socketGame?.status === "playing") return
-		setTurnSeconds(20)
-
-		const intervalId = window.setInterval(() => {
-			setTurnSeconds((previous) => Math.max(0, previous - 1))
-		}, 1000)
-
-		return () => window.clearInterval(intervalId)
-	}, [currentTurnIndex, phase, socketGame?.status])
-
 	const isFamiliarize =
 		phase === PHASE.FAMILIARIZE_AUTO || phase === PHASE.FAMILIARIZE_FREE || phase === PHASE.FAMILIARIZE_WAITING
 
@@ -479,7 +457,7 @@ export default function GamePage() {
 				</div>
 			</div>
 
-			{phase === PHASE.FAMILIARIZE_FREE && isCurrentUserParticipant ? (
+			{phase === PHASE.FAMILIARIZE_FREE && isCurrentUserActive ? (
 				<button
 					type="button"
 					onClick={() => {
@@ -496,7 +474,7 @@ export default function GamePage() {
 	) : null
 
 	const handlePadPress = (index) => {
-		if (isSocketDriven && !isCurrentUserParticipant) return
+		if (isSocketDriven && !isCurrentUserActive) return
 		if (phase === PHASE.FAMILIARIZE_AUTO) return
 		if (phase === PHASE.FAMILIARIZE_WAITING) return
 		if (phase === PHASE.PLAYING && isSpectating) return
@@ -522,11 +500,64 @@ export default function GamePage() {
 		}
 	}
 
+	const exitRoomAndGameToHome = React.useCallback(() => {
+		if (!roomCode) {
+			navigate("/")
+			return
+		}
+
+		Promise.resolve()
+			.then(() => leaveRoom(roomCode))
+			.catch(() => null)
+			.finally(() => {
+				leaveSocketRoom(roomCode)
+				navigate("/")
+			})
+	}, [navigate, roomCode])
+
+	React.useEffect(() => {
+		if (!isCurrentUserActive) {
+			browserBackGuardArmedRef.current = false
+			browserBackConfirmedRef.current = false
+			return
+		}
+		if (!isSocketDriven) return
+		if (!socketGame?.status || socketGame.status === "finished") return
+		if (browserBackConfirmedRef.current) return
+
+		if (!browserBackGuardArmedRef.current) {
+			window.history.pushState({ gameBackGuard: true }, "", window.location.href)
+			browserBackGuardArmedRef.current = true
+		}
+
+		const onPopState = () => {
+			if (browserBackConfirmedRef.current) return
+
+			const confirmed = window.confirm(
+				"Going back now will forfeit the current game and remove you from this room. Continue?",
+			)
+
+			if (!confirmed) {
+				window.history.pushState({ gameBackGuard: true }, "", window.location.href)
+				return
+			}
+
+			browserBackConfirmedRef.current = true
+			exitRoomAndGameToHome()
+		}
+
+		window.addEventListener("popstate", onPopState)
+		return () => {
+			window.removeEventListener("popstate", onPopState)
+		}
+	}, [exitRoomAndGameToHome, isCurrentUserActive, isSocketDriven, socketGame?.status])
+
 	const padsDisabled =
 		phase === PHASE.FAMILIARIZE_AUTO ||
 		phase === PHASE.FAMILIARIZE_WAITING ||
 		(phase === PHASE.PLAYING && Boolean(isSpectating)) ||
 		(phase === PHASE.FAMILIARIZE_FREE && isCurrentUserWaiting) ||
+		(isSocketDriven && !isCurrentUserActive) ||
 		(phase === PHASE.PLAYING &&
 			socketGame?.status === "playing" &&
 			(Boolean(!currentUserId) || (socketGame.currentTurnUserId && currentUserId !== socketGame.currentTurnUserId)))
@@ -539,7 +570,7 @@ export default function GamePage() {
 		const now = Date.now()
 		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
 		const last = lastFamiliarAutoPlayedPadRef.current
-		// NOTE (2026-04-29): 250ms 窗口内认为是同一次触发（StrictMode/重复渲染/事件抖动）。
+		// NOTE (2026-04-29): Within a 250ms window, treat this as the same trigger (StrictMode/re-render/event jitter).
 		if (last?.gameId === currentGameId && last?.index === activePadIndex && now - Number(last?.at ?? 0) < 250) {
 			return
 		}
@@ -556,7 +587,21 @@ export default function GamePage() {
 		return (
 			<Background>
 				<div className="flex min-h-screen items-center justify-center px-6 text-center">
-					<p className="text-sm font-semibold text-muted-foreground">Connecting to game...</p>
+					{gameLoadError && !isGameLoading ? (
+						<div>
+							<p className="text-sm font-semibold text-destructive">{gameLoadError}</p>
+							<Button
+								type="button"
+								variant="outline"
+								className="mt-4 rounded-full px-6 py-2 text-sm font-semibold"
+								onClick={() => navigate(roomCode ? `/room/${roomCode}` : "/")}
+							>
+								Return
+							</Button>
+						</div>
+					) : (
+						<p className="text-sm font-semibold text-muted-foreground">Connecting to game...</p>
+					)}
 				</div>
 			</Background>
 		)
@@ -569,41 +614,38 @@ export default function GamePage() {
 				onCancel={() => setIsExitModalOpen(false)}
 				onConfirm={() => {
 					setIsExitModalOpen(false)
-					if (roomCode) leaveSocketRoom(roomCode)
-					navigate(roomCode ? `/room/${roomCode}` : "/")
+					// Exit Game leaves both the current match and the room roster.
+					exitRoomAndGameToHome()
 				}}
 			/>
 			<YoureOutModal
 				open={isOutModalOpen}
-				onKeepSpectating={() => setIsOutModalOpen(false)}
+				onKeepSpectating={() => {
+					if (socketGame?.gameId) {
+						acknowledgedOutGameIdRef.current = String(socketGame.gameId)
+					}
+					setIsOutModalOpen(false)
+				}}
 				onBackToWaitingRoom={() => {
+					if (socketGame?.gameId) {
+						acknowledgedOutGameIdRef.current = String(socketGame.gameId)
+					}
 					setIsOutModalOpen(false)
 					navigate(roomCode ? `/room/${roomCode}` : "/")
 				}}
 			/>
 			<GameResultsModal
 				open={isResultsModalOpen}
-				players={resultsPlayers}
+				ranking={displayRanking}
 				onClose={() => setIsResultsModalOpen(false)}
 				onBackToRoom={() => {
 					setIsResultsModalOpen(false)
 					navigate(roomCode ? `/room/${roomCode}` : "/")
 				}}
 				onBackToHome={() => {
-					// NOTE (2026-04-29): “回首页”必须先 REST leaveRoom，让其他玩家看到你离开。
-					// socket 的 leave_room 语义是“离开比赛=直接判负”，这里只是离开房间名单。
+						// Returning home leaves both the room roster and the current match.
 					setIsResultsModalOpen(false)
-					if (!roomCode) {
-						navigate("/")
-						return
-					}
-					Promise.resolve()
-						.then(() => leaveRoom(roomCode))
-						.catch(() => null)
-						.finally(() => {
-							leaveSocketRoom(roomCode)
-							navigate("/")
-						})
+					exitRoomAndGameToHome()
 				}}
 			/>
 			<div className="mx-auto w-full max-w-[90rem] px-4 pb-14 pt-6 md:px-6 lg:px-8">

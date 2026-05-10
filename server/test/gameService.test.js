@@ -70,6 +70,24 @@ describe('gameService state machine', () => {
         participantsOrder: ['user1', 'user2'],
       });
       expect(result.game.scores).toEqual({ user1: 0, user2: 0 });
+      expect(result.game.players).toEqual([
+        expect.objectContaining({ userId: 'user1', username: 'Host', score: 0, isEliminated: false, leftDuringGame: false }),
+        expect.objectContaining({ userId: 'user2', username: 'Player Two', score: 0, isEliminated: false, leftDuringGame: false }),
+      ]);
+    });
+
+    it('should snapshot room participants into game.players without mutating room participants', () => {
+      const roomCode = 'START_SNAPSHOT_ROOM';
+      const activeRoom = room({ roomCode, participants: [participant('user1', 'Host'), participant('user2', 'Player Two')] });
+      const originalParticipants = JSON.parse(JSON.stringify(activeRoom.participants));
+
+      const result = gameService.startGame({ room: activeRoom, requestedByUserId: 'user1' });
+
+      expect(result.ok).toBe(true);
+      expect(activeRoom.participants).toEqual(originalParticipants);
+      expect(result.game.players).toHaveLength(2);
+      expect(result.game.players[0].userId).toBe('user1');
+      expect(result.game.players[1].userId).toBe('user2');
     });
   });
 
@@ -143,6 +161,103 @@ describe('gameService state machine', () => {
       expect(result.game.status).toBe('playing');
       expect(result.game.lastEvent).toMatchObject({ type: 'game_started', reason: 'test_timeout' });
     });
+
+    it('should finish when a familiarizing forfeit leaves only one player alive', () => {
+      const roomCode = 'FAMILIAR_FORFEIT_FINISH';
+      gameService.startGame({ room: room({ roomCode }), requestedByUserId: 'user1' });
+
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user2', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('finished');
+      expect(result.game.turnEndsAt).toBeNull();
+      expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
+    });
+
+    it('should stay familiarizing when a familiarizing forfeit still leaves multiple players alive', () => {
+      const roomCode = 'FAMILIAR_FORFEIT_STAYS_OPEN';
+      gameService.startGame({
+        room: room({
+          roomCode,
+          participants: [
+            participant('user1', 'Host'),
+            participant('user2', 'Player Two'),
+            participant('user3', 'Player Three'),
+          ],
+        }),
+        requestedByUserId: 'user1',
+      });
+
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('familiarizing');
+      expect(result.game.eliminatedUserIds).toContain('user3');
+      expect(result.game.players.find((p) => p.userId === 'user3')).toMatchObject({
+        isEliminated: true,
+        leftDuringGame: true,
+        eliminationReason: 'disconnect',
+      });
+      expect(result.game.lastEvent).toMatchObject({ type: 'player_eliminated', userId: 'user3', reason: 'disconnect' });
+    });
+
+    it('should not mutate room participants when a player forfeits during familiarization', () => {
+      const roomCode = 'FAMILIAR_FORFEIT_ROOM_INTACT';
+      const activeRoom = room({
+        roomCode,
+        participants: [
+          participant('user1', 'Host'),
+          participant('user2', 'Player Two'),
+          participant('user3', 'Player Three'),
+        ],
+      });
+      const originalParticipants = JSON.parse(JSON.stringify(activeRoom.participants));
+
+      gameService.startGame({ room: activeRoom, requestedByUserId: 'user1' });
+      const result = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'disconnect' });
+
+      expect(result.ok).toBe(true);
+      expect(activeRoom.participants).toEqual(originalParticipants);
+    });
+
+    it('should not force-start into playing when only one player is alive', () => {
+      const roomCode = 'FORCE_START_ONE_ALIVE';
+      gameService.startGame({ room: room({ roomCode }), requestedByUserId: 'user1' });
+      gameService.forfeitPlayer({ roomCode, userId: 'user2', reason: 'disconnect' });
+
+      const result = gameService.forceStartPlaying({ roomCode, reason: 'test_timeout' });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.status).toBe('finished');
+      expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
+    });
+
+    it('should start playing when all remaining alive players are familiar-ready', () => {
+      const roomCode = 'FAMILIAR_READY_IGNORES_ELIMINATED';
+      gameService.startGame({
+        room: room({
+          roomCode,
+          participants: [
+            participant('user1', 'Host'),
+            participant('user2', 'Player Two'),
+            participant('user3', 'Player Three'),
+          ],
+        }),
+        requestedByUserId: 'user1',
+      });
+
+      const forfeit = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'disconnect' });
+      expect(forfeit.game.status).toBe('familiarizing');
+
+      let ready = gameService.markFamiliarReady({ roomCode, userId: 'user1' });
+      expect(ready.ok).toBe(true);
+      expect(ready.game.status).toBe('familiarizing');
+
+      ready = gameService.markFamiliarReady({ roomCode, userId: 'user2' });
+      expect(ready.ok).toBe(true);
+      expect(ready.game.status).toBe('playing');
+      expect(ready.game.currentTurnUserId).toBe('user1');
+    });
   });
 
   describe('playing phase pad input', () => {
@@ -189,7 +304,7 @@ describe('gameService state machine', () => {
       expect(result.game.lastEvent).toMatchObject({ type: 'note_added', userId: 'user1', padIndex: 3 });
     });
 
-    it('should accept correct replay input and increment score', () => {
+    it('should accept correct replay input without incrementing score until note is added', () => {
       const roomCode = 'CORRECT_REPLAY';
       startPlayingGame(roomCode);
       gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 3 });
@@ -197,7 +312,7 @@ describe('gameService state machine', () => {
       const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 3 });
 
       expect(result.ok).toBe(true);
-      expect(result.game.scores.user2).toBe(1);
+      expect(result.game.scores.user2).toBe(0);
       expect(result.game.inputIndex).toBe(1);
       expect(result.game.lastEvent).toMatchObject({ type: 'note_ok', userId: 'user2', padIndex: 3 });
     });
@@ -212,6 +327,11 @@ describe('gameService state machine', () => {
       expect(result.ok).toBe(true);
       expect(result.game.status).toBe('finished');
       expect(result.game.eliminatedUserIds).toContain('user2');
+      expect(result.game.players.find((player) => player.userId === 'user2')).toMatchObject({
+        isEliminated: true,
+        eliminationReason: 'wrong_note',
+        leftDuringGame: false,
+      });
       expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
   });
@@ -224,6 +344,11 @@ describe('gameService state machine', () => {
       const result = gameService.registerTurnTimeout(roomCode);
 
       expect(result.eliminatedUserIds).toContain('user1');
+      expect(result.players.find((player) => player.userId === 'user1')).toMatchObject({
+        isEliminated: true,
+        eliminationReason: 'timeout',
+        leftDuringGame: false,
+      });
       expect(result.status).toBe('finished');
       expect(result.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user2' });
     });
@@ -369,6 +494,30 @@ describe('gameService state machine', () => {
       const result = gameService.forfeitPlayer({ roomCode, userId: 'outsider', reason: 'leave_room' });
 
       expect(result).toMatchObject({ ok: false, error: 'Not a game participant.' });
+    });
+
+    it('should finish after consecutive familiarizing forfeits leave one player alive', () => {
+      const roomCode = 'FAMILIAR_CONSECUTIVE_FORFEITS_FINISH';
+      gameService.startGame({
+        room: room({
+          roomCode,
+          participants: [
+            participant('user1', 'Host'),
+            participant('user2', 'Player Two'),
+            participant('user3', 'Player Three'),
+          ],
+        }),
+        requestedByUserId: 'user1',
+      });
+
+      const first = gameService.forfeitPlayer({ roomCode, userId: 'user3', reason: 'disconnect' });
+      expect(first.game.status).toBe('familiarizing');
+
+      const second = gameService.forfeitPlayer({ roomCode, userId: 'user2', reason: 'leave_room' });
+      expect(second.ok).toBe(true);
+      expect(second.game.status).toBe('finished');
+      expect(second.game.turnEndsAt).toBeNull();
+      expect(second.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
   });
 

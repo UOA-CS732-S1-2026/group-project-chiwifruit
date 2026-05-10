@@ -1,18 +1,16 @@
 const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
+const { getGame } = require('../services/gameService');
 const { buildAvatarUrl } = require('./authController');
-
-const MAX_ROOM_PARTICIPANTS = 6;
-const MIN_PARTICIPANTS_TO_START = 2;
-
-function getParticipantSelector(identity) {
-  if (identity.isGuest) {
-    return (participant) => participant.guestId === identity.sub;
-  }
-
-  return (participant) => String(participant.user) === String(identity.sub);
-}
+const {
+  removeParticipantFromRoom,
+  getRoomState,
+  getParticipantSelector,
+  normalizeRoomParticipants,
+  ensureSingleRoomMembership,
+  MAX_ROOM_PARTICIPANTS
+} = require('../services/roomStateService');
 
 function createParticipant(identity) {
   if (identity.isGuest) {
@@ -31,7 +29,43 @@ function createParticipant(identity) {
   };
 }
 
-function buildRanking(room) {
+function emitCleanedRoomUpdates(io, cleanedRooms = []) {
+  cleanedRooms.forEach(({ roomCode, roomState }) => {
+    emitRoomUpdate(io, roomCode, roomState ?? null);
+  });
+}
+
+function buildRanking(room, gamePlayers = null) {
+  if (gamePlayers) {
+    // Use game players for fair ranking
+    const sortedByScore = [...gamePlayers].sort((a, b) => b.score - a.score);
+    const rankMap = new Map();
+    sortedByScore.forEach((player, index) => {
+      rankMap.set(player.userId, index + 1);
+    });
+
+    return gamePlayers.map((player) => {
+      const rank = rankMap.get(player.userId);
+      const roundScore = player.score * 5;
+      const failureBonus = Math.max(0, Number(player.failureLength || 0) - 1);
+      const totalScore = roundScore + failureBonus;
+
+      return {
+        userId: player.userId,
+        username: player.username,
+        isGuest: player.isGuest,
+        correctCount: totalScore,
+        avatarUrl: player.avatarUrl,
+        rank,
+        totalScore,
+      };
+    }).sort((a, b) => b.totalScore - a.totalScore).map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+  }
+
+  // Fallback to room participants
   return room.participants
     .map((participant) => ({
       userId: participant.user?._id || participant.guestId,
@@ -69,6 +103,7 @@ async function generateUniqueRoomCode() {
 async function createRoom(req, res) {
   const identity = req.user;
   const { joinRoomCode } = req.body;
+  const io = req.app.get('io');
 
   if (joinRoomCode) {
     const room = await Room.findOne({ roomCode: joinRoomCode.toUpperCase() });
@@ -77,37 +112,63 @@ async function createRoom(req, res) {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    const alreadyJoined = room.participants.some(getParticipantSelector(identity));
+    const roomNormalized = normalizeRoomParticipants(room);
+
+    const participantSelector = getParticipantSelector(identity);
+    const matchingParticipants = room.participants.filter(participantSelector);
+    const alreadyJoined = matchingParticipants.length > 0;
+    const normalizedParticipants = room.participants.filter((participant) => !participantSelector(participant));
+    const currentUserNeedsNormalization = matchingParticipants.length !== 1;
 
     if (!alreadyJoined) {
-      if (room.participants.length >= MAX_ROOM_PARTICIPANTS) {
+      if (normalizedParticipants.length >= MAX_ROOM_PARTICIPANTS) {
         return res.status(409).json({
           message: `Room is full. Maximum ${MAX_ROOM_PARTICIPANTS} participants are allowed`
         });
       }
 
+      const { cleanedRooms } = await ensureSingleRoomMembership({ identity, targetRoomCode: room.roomCode });
+      room.participants = normalizedParticipants;
       room.participants.push(createParticipant(identity));
+      await room.save();
+
+      emitCleanedRoomUpdates(io, cleanedRooms);
+    } else if (currentUserNeedsNormalization) {
+      const freshParticipant = createParticipant(identity);
+      const participantToKeep = matchingParticipants.find((participant) => participant.isReady) || matchingParticipants[0];
+
+      room.participants = normalizedParticipants;
+      room.participants.push({
+        ...freshParticipant,
+        isReady: participantToKeep?.isReady ?? freshParticipant.isReady,
+        correctCount: participantToKeep?.correctCount ?? freshParticipant.correctCount,
+      });
+      await room.save();
+    } else if (roomNormalized) {
       await room.save();
     }
 
     const roomState = await getRoomState(room.roomCode);
     if (roomState) {
-      emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+      emitRoomUpdate(io, room.roomCode, roomState);
     }
 
     return res.json({ message: 'Joined room', roomCode: room.roomCode, roomId: room._id });
   }
 
   const roomCode = await generateUniqueRoomCode();
+  const { cleanedRooms } = await ensureSingleRoomMembership({ identity });
   const room = await Room.create({
     roomCode,
     host: identity.sub,
     participants: [createParticipant(identity)]
   });
 
+  emitCleanedRoomUpdates(io, cleanedRooms);
+
   const roomState = await getRoomState(room.roomCode);
   if (roomState) {
-    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+    emitRoomUpdate(io, room.roomCode, roomState);
   }
 
   return res.status(201).json({ message: 'Room created', roomCode: roomCode, roomId: room._id });
@@ -140,47 +201,6 @@ async function setCandidateReady(req, res) {
   return res.json({ message: 'Readiness updated', roomCode: room.roomCode, isReady: participant.isReady });
 }
 
-async function getRoomState(roomCode) {
-  const room = await Room.findOne({ roomCode: roomCode.toUpperCase() }).populate(
-    'participants.user',
-    'username'
-  );
-  if (!room) {
-    return null;
-  }
-
-	const hostId = room.host != null ? String(room.host) : null;
-	const nonHostParticipants = room.participants.filter((participant) => {
-		const participantId = participant.user?._id ? String(participant.user._id) : participant.guestId ? String(participant.guestId) : null;
-		if (!participantId) return true;
-		if (!hostId) return true;
-		return participantId !== hostId;
-	});
-
-	const everyoneReady = nonHostParticipants.length > 0 && nonHostParticipants.every((p) => p.isReady);
-	const canStartGame = room.participants.length >= MIN_PARTICIPANTS_TO_START && everyoneReady;
-
-  return {
-    roomCode: room.roomCode,
-    hostId,
-    mode: room.mode,
-    difficulty: room.difficulty,
-    participantCount: room.participants.length,
-    maxParticipantCount: MAX_ROOM_PARTICIPANTS,
-    minParticipantsToStart: MIN_PARTICIPANTS_TO_START,
-    everyoneReady,
-    canStartGame,
-    participants: room.participants.map((participant) => ({
-      userId: participant.user?._id || participant.guestId,
-      username: participant.user?.username || participant.guestName,
-      isGuest: Boolean(participant.guestId),
-      correctCount: participant.correctCount || 0,
-      isReady: participant.isReady,
-      avatarUrl: participant.user ? buildAvatarUrl(participant.user._id.toString()) : buildAvatarUrl(participant.guestId)
-    }))
-  };
-}
-
 async function checkIfCandidateIsReady(req, res) {
   const { roomCode } = req.params;
 
@@ -199,11 +219,12 @@ async function checkIfCandidateIsReady(req, res) {
 
 async function selectMode(req, res) {
   const { roomCode } = req.params;
-  const { mode } = req.body;
+  const { mode: rawMode } = req.body;
   const userId = req.user.sub;
 
-  if (!['bird', 'piano'].includes(mode)) {
-    return res.status(400).json({ message: 'mode must be bird or piano' });
+  const normalizedMode = rawMode === 'bird' ? 'kiwi' : rawMode;
+  if (!['kiwi', 'piano'].includes(normalizedMode)) {
+    return res.status(400).json({ message: 'mode must be kiwi or piano' });
   }
 
   const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });
@@ -215,7 +236,7 @@ async function selectMode(req, res) {
     return res.status(403).json({ message: 'Only the host can select a mode' });
   }
 
-  room.mode = mode;
+  room.mode = normalizedMode;
   // Reset all participants' ready status when mode changes
   room.participants.forEach(participant => {
     participant.isReady = false;
@@ -273,44 +294,20 @@ async function leaveRoom(req, res) {
   // socket 的 leave_room 在本项目中被定义为“离开比赛=判负”，语义不同。
   const { roomCode } = req.params;
   const identity = req.user;
-
-  const room = await Room.findOne({ roomCode: String(roomCode).toUpperCase() });
-  if (!room) {
-    return res.status(404).json({ message: 'Room not found' });
+  const result = await removeParticipantFromRoom({ roomCode, identity });
+  if (!result.ok) {
+    return res.status(result.status).json({ message: result.error });
   }
 
-  const participantIndex = room.participants.findIndex(getParticipantSelector(identity));
-  if (participantIndex === -1) {
-    return res.status(403).json({ message: 'Join the room first before leaving' });
+  if (result.roomState) {
+    emitRoomUpdate(req.app.get('io'), result.roomCode, result.roomState);
   }
 
-  const leavingParticipant = room.participants[participantIndex];
-  room.participants.splice(participantIndex, 1);
-
-  // NOTE (2026-04-29): host 离开时转移 host，避免房间进入“无人能开始游戏”的死状态。
-  const leavingId = leavingParticipant?.user ? String(leavingParticipant.user) : leavingParticipant?.guestId ? String(leavingParticipant.guestId) : null;
-  if (leavingId && String(room.host) === leavingId) {
-    const next = room.participants[0];
-    const nextHostId = next?.user?._id || next?.user || next?.guestId || null;
-    if (nextHostId) {
-      room.host = nextHostId;
-    }
+  if (result.deleted) {
+    return res.json({ message: 'Left room', roomCode: result.roomCode, deleted: true });
   }
 
-  if (room.participants.length === 0) {
-    // NOTE (2026-04-29): 房间没人时直接删除，避免遗留无效房间码。
-    await Room.deleteOne({ _id: room._id });
-    return res.json({ message: 'Left room', roomCode: String(roomCode).toUpperCase(), deleted: true });
-  }
-
-  await room.save();
-
-  const roomState = await getRoomState(room.roomCode);
-  if (roomState) {
-    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
-  }
-
-  return res.json({ message: 'Left room', roomCode: room.roomCode, hostId: roomState?.hostId ?? null });
+  return res.json({ message: 'Left room', roomCode: result.roomCode, hostId: result.hostId });
 }
 
 async function submitRoundResult(req, res) {
@@ -365,9 +362,27 @@ async function getRanking(req, res) {
     return res.status(404).json({ message: 'Room not found' });
   }
 
+  // Check for active game for fair ranking
+  const game = getGame(roomCode.toUpperCase());
+  const gamePlayers = game?.players;
+
+  // Sync game scores to room participants if game exists
+  if (gamePlayers) {
+    gamePlayers.forEach(gamePlayer => {
+      const participant = room.participants.find(p => 
+        (p.user && String(p.user._id) === gamePlayer.userId) || 
+        (p.guestId === gamePlayer.userId)
+      );
+      if (participant) {
+        participant.correctCount = gamePlayer.score;
+      }
+    });
+    await room.save();
+  }
+
   return res.json({
     roomCode: room.roomCode,
-    ranking: buildRanking(room)
+    ranking: buildRanking(room, gamePlayers)
   });
 }
 
@@ -380,5 +395,4 @@ module.exports = {
   selectDifficulty,
   submitRoundResult,
   getRanking,
-  getRoomState
 };

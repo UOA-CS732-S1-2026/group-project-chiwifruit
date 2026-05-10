@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { buildAvatarUrl } = require('../controllers/authController');
 
 // NOTE (2026-04-27): Multiplayer game state is kept in-memory.
 // Reason: the game is ephemeral and driven by socket events; persisting to Mongo
@@ -11,6 +12,13 @@ const GAME_TTL_MS = 10 * 60_000;
 
 const gamesByRoom = new Map();
 const timeoutsByRoom = new Map();
+
+function normalizeRoomMode(mode) {
+  if (mode === 'bird') return 'kiwi';
+  if (mode === 'Kiwi') return 'kiwi';
+  if (mode === 'Piano') return 'piano';
+  return mode === 'piano' ? 'piano' : 'kiwi';
+}
 
 function getPadCountByDifficulty(difficulty) {
   if (difficulty === 'easy') return 6;
@@ -39,6 +47,44 @@ function cleanupGameLater(roomCode) {
   }, GAME_TTL_MS);
 }
 
+function participantIdOf(participant) {
+  return participant.user?._id ? String(participant.user._id) : participant.guestId ? String(participant.guestId) : null;
+}
+
+function buildPlayerSnapshot(participant, initialOrder) {
+  const userId = participantIdOf(participant);
+  return {
+    userId,
+    username: participant.user?.username || participant.guestName || 'Unknown Player',
+    avatarUrl: buildAvatarUrl(userId || 'unknown'),
+    isGuest: Boolean(participant.guestId),
+    score: Number(participant.correctCount || 0),
+    isEliminated: false,
+    eliminationReason: null,
+    leftDuringGame: false,
+    initialOrder,
+    failureLength: 0,
+  };
+}
+
+function getPlayerByUserId(game, userId) {
+  return game.players.find((player) => String(player.userId) === String(userId)) ?? null;
+}
+
+function markPlayerEliminated(game, userId, reason, { leftDuringGame = false, failureLength = null } = {}) {
+  const participantId = String(userId);
+  const player = getPlayerByUserId(game, participantId);
+
+  if (player) {
+    player.isEliminated = true;
+    player.eliminationReason = reason;
+    player.leftDuringGame = Boolean(leftDuringGame);
+    player.failureLength = Number.isFinite(failureLength) ? failureLength : game.inputIndex;
+  }
+
+  game.eliminatedUserIds.add(participantId);
+}
+
 function serializeGame(game) {
   return {
     // NOTE (2026-04-28): `serverNow` and `startedAt` are included so clients can
@@ -52,6 +98,7 @@ function serializeGame(game) {
     difficulty: game.difficulty,
     padCount: game.padCount,
     audioSeed: game.audioSeed,
+    players: game.players,
     participantsOrder: game.participantsOrder,
     familiarReadyUserIds: [...game.familiarReadyUserIds],
     sequence: game.sequence,
@@ -76,9 +123,14 @@ function startGame({ room, requestedByUserId }) {
     return { ok: false, error: 'Only the host can start the game.' };
   }
 
-  const participantsOrder = room.participants
-    .map((p) => (p.user?._id ? String(p.user._id) : p.guestId ? String(p.guestId) : null))
+  const players = room.participants
+    .map((participant, index) => {
+      const snapshot = buildPlayerSnapshot(participant, index + 1);
+      return snapshot.userId ? snapshot : null;
+    })
     .filter(Boolean);
+
+  const participantsOrder = players.map((player) => player.userId);
 
   if (participantsOrder.length < 2) {
     return { ok: false, error: 'Need at least 2 participants to start.' };
@@ -92,11 +144,12 @@ function startGame({ room, requestedByUserId }) {
     gameId: crypto.randomUUID(),
     status: 'familiarizing',
     startedAt: Date.now(),
-    mode: room.mode || 'bird',
+    mode: normalizeRoomMode(room.mode),
     difficulty,
     padCount,
     // Clients use this seed to deterministically pick audio files.
     audioSeed: crypto.randomUUID(),
+    players,
     participantsOrder,
     familiarReadyUserIds: [],
     scores: Object.fromEntries(participantsOrder.map((id) => [id, 0])),
@@ -113,8 +166,13 @@ function startGame({ room, requestedByUserId }) {
 }
 
 function startPlaying(game) {
-  game.status = 'playing';
   game.familiarReadyUserIds = [];
+
+  if (finishIfOnlyOneAlive(game)) {
+    return;
+  }
+
+  game.status = 'playing';
 
   // Pick the first alive participant to start.
   const firstAliveIndex = (() => {
@@ -146,12 +204,18 @@ function forceStartPlaying({ roomCode, reason }) {
   }
 
   startPlaying(game);
-  game.lastEvent = { type: 'game_started', at: Date.now(), reason: reason || 'familiar_timeout' };
+  if (game.status === 'playing') {
+    game.lastEvent = { type: 'game_started', at: Date.now(), reason: reason || 'familiar_timeout' };
+  }
   return { ok: true, game: serializeGame(game) };
 }
 
 function getFamiliarizeEndsAt(game) {
   return Number(game.startedAt) + Number(game.padCount) * FAMILIARIZE_AUTOPLAY_MS + FAMILIARIZE_FREE_PLAY_MS;
+}
+
+function getAliveParticipantIds(game) {
+  return game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(String(id)));
 }
 
 function isParticipantReady(game, userId) {
@@ -174,7 +238,8 @@ function markFamiliarReady({ roomCode, userId }) {
     game.familiarReadyUserIds.push(participantId);
   }
 
-  const allReady = game.participantsOrder.every((id) => game.familiarReadyUserIds.includes(id));
+  const aliveParticipantIds = getAliveParticipantIds(game);
+  const allReady = aliveParticipantIds.length > 0 && aliveParticipantIds.every((id) => game.familiarReadyUserIds.includes(id));
   if (allReady) {
     startPlaying(game);
   } else {
@@ -212,7 +277,7 @@ function registerFamiliarPadPress({ roomCode, userId, padIndex }) {
 }
 
 function endTurnAdvance(game) {
-  const alive = game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(id));
+  const alive = getAliveParticipantIds(game);
   if (alive.length <= 1) {
     game.status = 'finished';
     game.turnEndsAt = null;
@@ -234,11 +299,21 @@ function endTurnAdvance(game) {
 }
 
 function finishIfOnlyOneAlive(game) {
-  const alive = game.participantsOrder.filter((id) => !game.eliminatedUserIds.has(id));
+  const alive = getAliveParticipantIds(game);
   if (alive.length <= 1) {
     game.status = 'finished';
     game.turnEndsAt = null;
-    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId: alive[0] ?? null };
+    const winnerUserId = alive[0] ?? null;
+    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId };
+
+    // Set winner's failureLength to 0
+    if (winnerUserId) {
+      const winnerPlayer = getPlayerByUserId(game, winnerUserId);
+      if (winnerPlayer) {
+        winnerPlayer.failureLength = 0;
+      }
+    }
+
     return true;
   }
   return false;
@@ -254,25 +329,34 @@ function forfeitPlayer({ roomCode, userId, reason }) {
     return { ok: false, error: 'Not a game participant.' };
   }
 
-  // Idempotent: already eliminated.
-  if (game.eliminatedUserIds.has(participantId)) {
+  const player = getPlayerByUserId(game, participantId);
+  if (!player) {
+    return { ok: false, error: 'Not a game participant.' };
+  }
+
+  // Idempotent: already eliminated or already left.
+  if (game.eliminatedUserIds.has(participantId) || player.isEliminated || player.leftDuringGame) {
     return { ok: true, game: serializeGame(game) };
   }
 
   const currentUserId = game.participantsOrder[game.currentTurnIndex];
+  const normalizedReason = reason || 'left_game';
+  const leftDuringGame = ['disconnect', 'leave_room', 'left_game'].includes(normalizedReason);
 
-  game.eliminatedUserIds.add(participantId);
+  markPlayerEliminated(game, participantId, normalizedReason, { leftDuringGame });
   game.lastEvent = {
     type: 'player_eliminated',
     at: Date.now(),
     userId: participantId,
-    reason: reason || 'left_game',
+    reason: normalizedReason,
   };
 
-  if (game.status === 'playing') {
-    if (!finishIfOnlyOneAlive(game) && String(currentUserId) === participantId) {
-      endTurnAdvance(game);
-    }
+  if (finishIfOnlyOneAlive(game)) {
+    return { ok: true, game: serializeGame(game) };
+  }
+
+  if (game.status === 'playing' && String(currentUserId) === participantId) {
+    endTurnAdvance(game);
   }
 
   return { ok: true, game: serializeGame(game) };
@@ -297,7 +381,7 @@ function registerPadPress({ roomCode, userId, padIndex }) {
   if (game.inputIndex < game.sequence.length) {
     const expected = game.sequence[game.inputIndex];
     if (index !== expected) {
-      game.eliminatedUserIds.add(currentUserId);
+      markPlayerEliminated(game, currentUserId, 'wrong_note', { failureLength: game.inputIndex + 1 });
       game.lastEvent = {
         type: 'player_eliminated',
         at: Date.now(),
@@ -310,13 +394,19 @@ function registerPadPress({ roomCode, userId, padIndex }) {
       return { ok: true, game: serializeGame(game) };
     }
 
-    game.scores[currentUserId] = (Number(game.scores[currentUserId]) || 0) + 1;
     game.inputIndex += 1;
     game.lastEvent = { type: 'note_ok', at: Date.now(), userId: currentUserId, padIndex: index };
     return { ok: true, game: serializeGame(game) };
   }
 
   // Otherwise this press is the "add a new note" step.
+  const nextScore = (Number(game.scores[currentUserId]) || 0) + 1;
+  game.scores[currentUserId] = nextScore;
+  const player = game.players.find((p) => String(p.userId) === currentUserId);
+  if (player) {
+    player.score = nextScore;
+  }
+
   game.sequence.push(index);
   game.lastEvent = { type: 'note_added', at: Date.now(), userId: currentUserId, padIndex: index };
   endTurnAdvance(game);
@@ -329,7 +419,7 @@ function registerTurnTimeout(roomCode) {
 
   const currentUserId = game.participantsOrder[game.currentTurnIndex];
   if (currentUserId) {
-    game.eliminatedUserIds.add(currentUserId);
+    markPlayerEliminated(game, currentUserId, 'timeout');
     game.lastEvent = {
       type: 'player_eliminated',
       at: Date.now(),

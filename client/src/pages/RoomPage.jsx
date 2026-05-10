@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Check, CircleDot, Copy, Flame, LogOut, Music, Play, Users, Zap } from "lucide-react"
 
@@ -11,6 +11,7 @@ import SegmentedSelection from "../components/Room/SegmentedSelection"
 import PlayerSlotCard from "../components/Room/PlayerSlotCard"
 import { Button } from "../components/ui/button"
 import SoundToggleButton from "../components/ui/SoundToggleButton"
+import { useRoomSocketUpdates } from "../hooks/useSocketListeners"
 import {
 	useJoinRoomMutation,
 	useLeaveRoomMutation,
@@ -19,16 +20,16 @@ import {
 	useSetReadyMutation,
 } from "../hooks/mutations/useRoomMutations"
 import { useRoomQuery } from "../hooks/queries/useRoomQuery"
-import { getApiErrorMessage, getStoredAuthUser } from "../api/axios"
+import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../api/axios"
 
 import birdIcon from "../assets/icons/bird.svg"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
-import { emitGameRequestState, emitGameStart, joinSocketRoom, leaveSocketRoom, reconnectSocket } from "../socket/socket"
+import { emitGameRequestState, emitGameStart, joinSocketRoom, reconnectSocket } from "../socket/socket"
 
-// NOTE (2026-04-29): Waiting Room 页面同时依赖两类机制：
-// - REST: join/leave room, ready/mode/difficulty 等“房间成员列表/配置”
-// - Socket: 订阅 room_update / game_state 等实时广播，并在游戏开始时自动跳转
-// 重点：离开等待房间请走 REST leaveRoom；socket leave_room 在本项目语义是“离开比赛=判负”。
+// NOTE (2026-04-29): The waiting room relies on two systems:
+// - REST: join/leave room, ready/mode/difficulty — room participants and configuration
+// - Socket: subscribe to room_update / game_state real-time broadcasts and auto-navigate when the game starts
+// Important: use REST leaveRoom to exit the waiting room; socket leave_room means "leave the match = forfeit" in this app.
 
 function BirdIcon({ className, ...props }) {
 	const isActive = Boolean(props["data-active"])
@@ -56,13 +57,17 @@ export default function RoomPage() {
 	const requestedJoinCode = normalizedParamCode === "NEW" ? "" : normalizedParamCode
 	const [roomCode, setRoomCode] = useState("")
 	const [setupError, setSetupError] = useState("")
+	const [isStartingGame, setIsStartingGame] = useState(false)
+	const [copyState, setCopyState] = useState("idle")
 
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
+	const copyResetTimerRef = useRef(null)
 
 	useEffect(() => {
 		startedSetupRef.current = false
 		setSetupError("")
+		setIsStartingGame(false)
 	}, [normalizedParamCode])
 
 	const joinRoomMutation = useJoinRoomMutation({
@@ -91,7 +96,14 @@ export default function RoomPage() {
 
 		if (!requestedJoinCode) {
 			setSetupError("Missing room code. Please go back and join/create from landing page.")
-			navigate("/", { replace: true })
+			navigate("/")
+			return
+		}
+
+		const token = getStoredAuthToken()
+		if (!token) {
+			setSetupError("Missing session. Please join from the home page.")
+			navigate("/")
 			return
 		}
 
@@ -102,8 +114,9 @@ export default function RoomPage() {
 		roomCode,
 		Boolean(roomCode),
 	)
+	useRoomSocketUpdates(roomCode)
 
-	const mode = roomState?.mode ?? "bird"
+	const mode = roomState?.mode ?? "kiwi"
 	const difficulty = roomState?.difficulty ?? "easy"
 
 	const identity = useMemo(() => {
@@ -145,22 +158,64 @@ export default function RoomPage() {
 		(player) => Boolean(identity?.sub) && String(player.id) === identity.sub,
 	)
 	const currentUserReady = Boolean(currentUserPlayer?.isReady)
+	const activeRoomCode = String(roomCode || requestedJoinCode || "").trim().toUpperCase()
+
+	const leaveRoomAndReturnHome = useCallback(() => {
+		if (!activeRoomCode) {
+			navigate("/")
+			return
+		}
+
+		leaveRoomMutation.mutate(activeRoomCode, {
+			onSuccess: () => {
+				navigate("/")
+			},
+		})
+	}, [activeRoomCode, leaveRoomMutation, navigate])
 
 	const handleStartGame = () => {
 		if (!isHost) return
 		if (!canStartGame) return
-		emitGameStart(roomCode)
-		navigate(`/game/${roomCode}`, { state: { difficulty, soundMode: mode, roomCode } })
+		if (isStartingGame) return
+
+		setSetupError("")
+		setIsStartingGame(true)
+		emitGameStart(roomCode, (response) => {
+			setIsStartingGame(false)
+			if (!response?.ok || !response?.game) {
+				const message = typeof response?.error === "string" ? response.error : "Unable to start game"
+				setSetupError(message)
+				return
+			}
+
+				navigate(`/game/${roomCode}`, { replace: true, state: { difficulty, soundMode: mode, roomCode } })
+		})
 	}
 
 	const canStartGame = Boolean(isHost && roomState?.canStartGame)
 
 	const handleCopyCode = async () => {
 		if (!roomCode) return
+
 		try {
 			await navigator.clipboard.writeText(roomCode)
+			setCopyState("success")
+			if (copyResetTimerRef.current) {
+				window.clearTimeout(copyResetTimerRef.current)
+			}
+			copyResetTimerRef.current = window.setTimeout(() => {
+				setCopyState("idle")
+				copyResetTimerRef.current = null
+			}, 1800)
 		} catch {
-			// no-op: clipboard can fail without user gesture / permissions
+			setCopyState("error")
+			if (copyResetTimerRef.current) {
+				window.clearTimeout(copyResetTimerRef.current)
+			}
+			copyResetTimerRef.current = window.setTimeout(() => {
+				setCopyState("idle")
+				copyResetTimerRef.current = null
+			}, 1800)
 		}
 	}
 
@@ -171,6 +226,7 @@ export default function RoomPage() {
 
 	const errorMessage = setupError || (roomQueryError ? getApiErrorMessage(roomQueryError) : "")
 	const isSettingUpRoom = joinRoomMutation.isPending
+	const shouldShowRoomContent = !errorMessage && !isSettingUpRoom && !isRoomLoading && Boolean(roomCode)
 	const user = getStoredAuthUser()
 	const avatarUrl = typeof user?.avatarUrl === "string" ? user.avatarUrl : undefined
 	const loginLabel = typeof user?.username === "string" ? user.username : "Login"
@@ -179,6 +235,14 @@ export default function RoomPage() {
 		if (!roomCode) return
 		joinSocketRoom(roomCode)
 	}, [roomCode])
+
+	useEffect(() => {
+		return () => {
+			if (copyResetTimerRef.current) {
+				window.clearTimeout(copyResetTimerRef.current)
+			}
+		}
+	}, [])
 
 	useEffect(() => {
 		hasNavigatedToGameRef.current = false
@@ -209,7 +273,7 @@ export default function RoomPage() {
 
 			if (hasNavigatedToGameRef.current) return
 			hasNavigatedToGameRef.current = true
-			navigate(`/game/${roomCode}`)
+			navigate(`/game/${roomCode}`, { replace: true })
 		}
 
 		const requestStateOnce = () => {
@@ -248,20 +312,7 @@ export default function RoomPage() {
 						<LoginButton avatarUrl={avatarUrl} label={loginLabel} />
 						<Button
 							type="button"
-							onClick={() => {
-								if (!roomCode) {
-									navigate("/")
-									return
-								}
-										// NOTE (2026-04-29): 先 REST leaveRoom() 确保从 participants 移除并广播 room_update；
-										// 然后再发 socket leave_room（用于 game-side 的“离开比赛”语义）。
-								leaveRoomMutation.mutate(roomCode, {
-									onSuccess: () => {
-										leaveSocketRoom(roomCode)
-										navigate("/")
-									},
-								})
-							}}
+							onClick={leaveRoomAndReturnHome}
 							variant="outline"
 							className="rounded-full bg-card px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm hover:bg-muted"
 						>
@@ -279,10 +330,22 @@ export default function RoomPage() {
 					) : null}
 
 					{errorMessage ? (
-						<p className="mt-4 text-center text-sm font-semibold text-destructive">{errorMessage}</p>
+						<div className="mt-4 text-center">
+							<p className="text-sm font-semibold text-destructive">{errorMessage}</p>
+							<Button
+								type="button"
+								variant="outline"
+								className="mt-4 rounded-full px-6 py-2 text-sm font-semibold"
+								onClick={() => navigate("/")}
+							>
+								Back to Home
+							</Button>
+						</div>
 					) : null}
 
-					<div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+					{shouldShowRoomContent ? (
+						<>
+							<div className="mt-6 flex flex-wrap items-center justify-center gap-4">
 						<RoomPill>
 							<span className="text-muted-foreground">Room Code:</span>
 							<span className="text-lg font-bold text-primary">{roomCode}</span>
@@ -291,10 +354,23 @@ export default function RoomPage() {
 								onClick={handleCopyCode}
 								className="text-muted-foreground hover:text-foreground"
 								aria-label="Copy room code"
-								title="Copy room code"
+								title={
+									copyState === "success"
+										? "Copied!"
+										: copyState === "error"
+											? "Copy failed"
+											: "Copy room code"
+								}
 							>
-								<Copy className="size-4" />
+								{copyState === "success" ? (
+									<Check className="size-4 text-emerald-500" />
+								) : (
+									<Copy className="size-4" />
+								)}
 							</button>
+							<span className="text-xs font-semibold text-muted-foreground" aria-live="polite">
+								{copyState === "success" ? "Copied" : copyState === "error" ? "Copy failed" : ""}
+							</span>
 						</RoomPill>
 						<RoomPill className="border-primary/20 bg-primary/10 text-primary">
 							<Users className="size-4" />
@@ -316,7 +392,7 @@ export default function RoomPage() {
 										selectModeMutation.mutate({ roomCode, mode: next })
 									}}
 									options={[
-										{ value: "bird", label: "Kiwi", Icon: BirdIcon },
+										{ value: "kiwi", label: "Kiwi", Icon: BirdIcon },
 										{ value: "piano", label: "Piano", Icon: Music },
 									]}
 								/>
@@ -356,11 +432,11 @@ export default function RoomPage() {
 							<Button
 								type="button"
 								onClick={handleStartGame}
-								disabled={!canStartGame}
+								disabled={!canStartGame || isStartingGame}
 								className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"
 							>
 								<Play className="size-4 fill-current" />
-								Start Game
+								{isStartingGame ? "Starting..." : "Start Game"}
 							</Button>
 						) : (
 							<Button
@@ -385,6 +461,8 @@ export default function RoomPage() {
 							</Button>
 						)}
 					</div>
+					</>
+				) : null}
 				</main>
 			</div>
 		</Background>

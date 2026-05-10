@@ -20,6 +20,11 @@ function buildSocket() {
 	})
 }
 
+function isGameRoute() {
+	if (typeof window === "undefined") return false
+	return window.location.pathname.toLowerCase().startsWith("/game/")
+}
+
 export function getSocket() {
 	if (!socket) {
 		socket = buildSocket()
@@ -56,6 +61,18 @@ export function leaveSocketRoom(roomCode) {
 
 export function emitGameStart(roomCode, ack) {
 	if (!roomCode) return
+	// NOTE (2026-05-03): Game start must be an explicit waiting-room action.
+	// GamePage also imports this helper, but it should not be allowed to start a
+	// fresh game just because the browser history re-entered /game/:roomCode after
+	// a previous game finished. Without this guard, browser back/forward can
+	// accidentally restart the familiarisation flow from a stale game route.
+	if (isGameRoute()) {
+		if (typeof ack === "function") {
+			ack({ ok: false, error: "Game start must be triggered from the room." })
+		}
+		return
+	}
+
 	const s = reconnectSocket()
 	s.emit(SOCKET_EVENTS.GAME_START, { roomCode }, ack)
 }

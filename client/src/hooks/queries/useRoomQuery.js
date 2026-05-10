@@ -11,8 +11,6 @@ export function useRoomQuery(roomCode, enabled = true) {
 		queryFn: () => getRoomState(roomCode),
 		enabled: Boolean(roomCode) && enabled && Boolean(getStoredAuthToken()),
 		retry: false,
-		// Stop polling when query is in error state to avoid hammering the backend.
-		refetchInterval: (query) => (query.state.status === "error" ? false : 1000),
 	})
 }
 

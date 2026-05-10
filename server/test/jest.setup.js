@@ -9,6 +9,7 @@ jest.mock('../src/config/env', () => ({
 jest.mock('mongoose', () => {
   const mockModel = {
     findOne: jest.fn(),
+    find: jest.fn(),
     create: jest.fn(),
     findById: jest.fn(),
     findByIdAndUpdate: jest.fn(),
@@ -74,7 +75,3 @@ jest.mock('crypto', () => ({
 jest.mock('../src/services/tokenService', () => ({
   createToken: jest.fn(),
 }));
-
-// Mock getRoomState to prevent DB calls
-const roomController = require('../src/controllers/roomController');
-jest.spyOn(roomController, 'getRoomState').mockResolvedValue({});
