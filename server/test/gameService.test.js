@@ -358,7 +358,7 @@ describe('gameService state machine', () => {
       expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
 
-    it('should not grant round survival bonus when elimination happens before round completion', () => {
+    it('should grant survival bonus to the remaining alive player when elimination happens on the round-closing turn', () => {
       const roomCode = 'NO_SURVIVAL_ON_INCOMPLETE_FINAL_ROUND';
       startPlayingGame(roomCode);
 

@@ -325,12 +325,6 @@ function endTurnAdvance(game) {
     game.roundTurnTakenUserIds.add(String(currentUserId));
   }
 
-  const alive = getAliveParticipantIds(game);
-  if (alive.length <= 1) {
-    finalizeGame(game);
-    return;
-  }
-
   if (
     game.roundStartAliveUserIds.length > 0 &&
     game.roundTurnTakenUserIds.size >= game.roundStartAliveUserIds.length
@@ -339,6 +333,12 @@ function endTurnAdvance(game) {
     applyRoundSurvivalBonus(game, { excludedUserId });
     game.roundNumber += 1;
     startNewRound(game);
+  }
+
+  const alive = getAliveParticipantIds(game);
+  if (alive.length <= 1) {
+    finalizeGame(game);
+    return;
   }
 
   let nextIndex = game.currentTurnIndex;
