@@ -20,8 +20,6 @@ const {
   cleanupGameLater,
 } = require('../services/gameService');
 
-const WAITING_ROOM_DISCONNECT_GRACE_MS = 3000;
-
 function initSocket(httpServer, frontendOrigin) {
   const io = new Server(httpServer, {
     cors: {
@@ -45,49 +43,6 @@ function initSocket(httpServer, frontendOrigin) {
     } catch {
       // best-effort persistence
     }
-  }
-
-  const pendingRoomRosterCleanupTimers = new Map();
-
-  function getPendingCleanupKey(roomCode, userId) {
-    return `${String(roomCode).toUpperCase()}::${String(userId)}`;
-  }
-
-  function cancelPendingRoomRosterCleanup(roomCode, userId) {
-    const key = getPendingCleanupKey(roomCode, userId);
-    const timeoutId = pendingRoomRosterCleanupTimers.get(key);
-    if (!timeoutId) return;
-
-    clearTimeout(timeoutId);
-    pendingRoomRosterCleanupTimers.delete(key);
-  }
-
-  function schedulePendingRoomRosterCleanup(io, roomCode, identity) {
-    const userId = identity?.sub;
-    if (!userId) return;
-
-    const code = String(roomCode).toUpperCase();
-    const key = getPendingCleanupKey(code, userId);
-    cancelPendingRoomRosterCleanup(code, userId);
-
-    const timeoutId = setTimeout(() => {
-      pendingRoomRosterCleanupTimers.delete(key);
-
-      void removeParticipantFromRoom({
-        roomCode: code,
-        identity,
-      })
-        .then((removal) => {
-          if (removal?.ok) {
-            emitRoomUpdate(io, code, removal.roomState ?? null);
-          }
-        })
-        .catch(() => {
-          // best-effort room cleanup
-        });
-    }, WAITING_ROOM_DISCONNECT_GRACE_MS);
-
-    pendingRoomRosterCleanupTimers.set(key, timeoutId);
   }
 
   function scheduleTurnTimer(roomCode) {
@@ -163,9 +118,6 @@ function initSocket(httpServer, frontendOrigin) {
       if (!userId) return;
       const existingGame = getGame(code);
       const shouldCleanupRoomRoster = reason === 'disconnect' || reason === 'leave_room';
-      const shouldDelayRoomCleanup = reason === 'disconnect' && !existingGame;
-
-      cancelPendingRoomRosterCleanup(code, userId);
 
       const result = forfeitPlayer({ roomCode: code, userId, reason });
       if (result.ok) {
@@ -188,11 +140,6 @@ function initSocket(httpServer, frontendOrigin) {
       }
 
       if (shouldCleanupRoomRoster) {
-        if (shouldDelayRoomCleanup) {
-          schedulePendingRoomRosterCleanup(io, code, socket.user);
-          return;
-        }
-
         void removeParticipantFromRoom({
           roomCode: code,
           identity: socket.user,
@@ -214,9 +161,7 @@ function initSocket(httpServer, frontendOrigin) {
         return;
       }
 
-      const code = String(roomCode).toUpperCase();
-      cancelPendingRoomRosterCleanup(code, socket.user?.sub);
-      socket.join(code);
+      socket.join(String(roomCode).toUpperCase());
     });
 
     socket.on('leave_room', async (payload = {}) => {
