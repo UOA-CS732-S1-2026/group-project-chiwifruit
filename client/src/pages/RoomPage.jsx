@@ -63,6 +63,7 @@ export default function RoomPage() {
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
 	const copyResetTimerRef = useRef(null)
+	const pageLeaveSentRef = useRef(false)
 
 	useEffect(() => {
 		startedSetupRef.current = false
@@ -168,6 +169,7 @@ export default function RoomPage() {
 
 		leaveRoomMutation.mutate(activeRoomCode, {
 			onSuccess: () => {
+				pageLeaveSentRef.current = true
 				navigate("/")
 			},
 		})
@@ -247,6 +249,10 @@ export default function RoomPage() {
 	useEffect(() => {
 		hasNavigatedToGameRef.current = false
 	}, [roomCode])
+
+	useEffect(() => {
+		pageLeaveSentRef.current = false
+	}, [activeRoomCode])
 
 	useEffect(() => {
 		if (!roomCode) return

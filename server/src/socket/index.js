@@ -20,6 +20,8 @@ const {
   cleanupGameLater,
 } = require('../services/gameService');
 
+const WAITING_ROOM_DISCONNECT_GRACE_MS = 3000;
+
 function initSocket(httpServer, frontendOrigin) {
   const io = new Server(httpServer, {
     cors: {
@@ -27,6 +29,55 @@ function initSocket(httpServer, frontendOrigin) {
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     }
   });
+
+  const pendingRoomRosterCleanupTimers = new Map();
+
+  function getRoomRosterCleanupKey(roomCode, userId) {
+    return `${String(roomCode).toUpperCase()}::${String(userId)}`;
+  }
+
+  function cancelPendingRoomRosterCleanup(roomCode, userId) {
+    if (!roomCode || !userId) return;
+
+    const cleanupKey = getRoomRosterCleanupKey(roomCode, userId);
+    const pendingTimer = pendingRoomRosterCleanupTimers.get(cleanupKey);
+    if (!pendingTimer) return;
+
+    clearTimeout(pendingTimer);
+    pendingRoomRosterCleanupTimers.delete(cleanupKey);
+  }
+
+  function schedulePendingRoomRosterCleanup(roomCode, identity) {
+    const userId = identity?.sub;
+    if (!roomCode || !userId) return;
+
+    const normalizedRoomCode = String(roomCode).toUpperCase();
+    const cleanupKey = getRoomRosterCleanupKey(normalizedRoomCode, userId);
+    cancelPendingRoomRosterCleanup(normalizedRoomCode, userId);
+
+    const pendingTimer = setTimeout(() => {
+      pendingRoomRosterCleanupTimers.delete(cleanupKey);
+
+      void removeParticipantFromRoom({
+        roomCode: normalizedRoomCode,
+        identity,
+      })
+        .then((removal) => {
+          if (removal?.ok) {
+            emitRoomUpdate(io, normalizedRoomCode, removal.roomState ?? null);
+          }
+        })
+        .catch(() => {
+          // best-effort room cleanup
+        });
+    }, WAITING_ROOM_DISCONNECT_GRACE_MS);
+
+    if (typeof pendingTimer.unref === 'function') {
+      pendingTimer.unref();
+    }
+
+    pendingRoomRosterCleanupTimers.set(cleanupKey, pendingTimer);
+  }
 
   async function persistFinalScores(roomCode, scores) {
     try {
@@ -118,6 +169,7 @@ function initSocket(httpServer, frontendOrigin) {
       if (!userId) return;
       const existingGame = getGame(code);
       const shouldCleanupRoomRoster = reason === 'disconnect' || reason === 'leave_room';
+      const hasActiveGame = Boolean(existingGame && existingGame.status !== 'finished');
 
       const result = forfeitPlayer({ roomCode: code, userId, reason });
       if (result.ok) {
@@ -140,6 +192,11 @@ function initSocket(httpServer, frontendOrigin) {
       }
 
       if (shouldCleanupRoomRoster) {
+        if (reason === 'disconnect' && !hasActiveGame) {
+          schedulePendingRoomRosterCleanup(code, socket.user);
+          return;
+        }
+
         void removeParticipantFromRoom({
           roomCode: code,
           identity: socket.user,
@@ -161,7 +218,9 @@ function initSocket(httpServer, frontendOrigin) {
         return;
       }
 
-      socket.join(String(roomCode).toUpperCase());
+      const normalizedRoomCode = String(roomCode).toUpperCase();
+      cancelPendingRoomRosterCleanup(normalizedRoomCode, socket.user?.sub);
+      socket.join(normalizedRoomCode);
     });
 
     socket.on('leave_room', async (payload = {}) => {

@@ -1,4 +1,5 @@
 import api from "./axios"
+import { getStoredAuthToken } from "./axios"
 
 // NOTE (2026-04-29): 房间 REST API。
 // 其中 leaveRoom() 的语义是“从房间 participants 列表移除自己并广播 room_update”。
@@ -18,6 +19,30 @@ export async function leaveRoom(roomCode) {
 	const normalized = String(roomCode ?? "").trim().toUpperCase()
 	const { data } = await api.delete(`/rooms/${normalized}`)
 	return data
+}
+
+export function leaveRoomKeepalive(roomCode, tokenOverride) {
+	const normalized = String(roomCode ?? "").trim().toUpperCase()
+	if (!normalized) {
+		return Promise.resolve(null)
+	}
+
+	const token = tokenOverride ?? getStoredAuthToken()
+	if (!token) {
+		return Promise.resolve(null)
+	}
+
+	const apiBaseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+	const roomUrl = `${String(apiBaseUrl).replace(/\/$/, "")}/rooms/${normalized}`
+
+	// Use fetch + keepalive here so the browser can still send the leave request during pagehide/unload.
+	return fetch(roomUrl, {
+		method: "DELETE",
+		headers: {
+			Authorization: `Bearer ${token}`,
+		},
+		keepalive: true,
+	}).catch(() => null)
 }
 
 export async function getRoomState(roomCode) {
