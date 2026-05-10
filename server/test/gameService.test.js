@@ -357,6 +357,30 @@ describe('gameService state machine', () => {
       });
       expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
+
+    it('should not grant round survival bonus when elimination happens before round completion', () => {
+      const roomCode = 'NO_SURVIVAL_ON_INCOMPLETE_FINAL_ROUND';
+      startPlayingGame(roomCode);
+
+      // Round 1: P1 adds first note (0 point), P2 replays 1 (+1) then adds.
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 1 });
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 1 });
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 2 });
+
+      // Round 2 (in progress): P1 replays 2 (+2) then adds.
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 1 });
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 2 });
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 3 });
+
+      // P2 replays only first 2 of 3, then fails on 3rd.
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 1 });
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 2 });
+      const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 4 });
+
+      expect(result.game.status).toBe('finished');
+      expect(result.game.scores.user1).toBe(12);
+      expect(result.game.scores.user2).toBe(8);
+    });
   });
 
   describe('timeout and forfeit', () => {

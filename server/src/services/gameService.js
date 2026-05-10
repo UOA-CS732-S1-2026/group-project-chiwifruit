@@ -98,8 +98,6 @@ function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
 function finalizeGame(game) {
   const alive = getAliveParticipantIds(game);
   const winnerUserId = alive[0] ?? null;
-  // Final round still grants survival bonus before ranking.
-  applyRoundSurvivalBonus(game);
   if (winnerUserId) addScore(game, winnerUserId, 5);
   game.status = 'finished';
   game.turnEndsAt = null;
@@ -327,6 +325,12 @@ function endTurnAdvance(game) {
     game.roundTurnTakenUserIds.add(String(currentUserId));
   }
 
+  const alive = getAliveParticipantIds(game);
+  if (alive.length <= 1) {
+    finalizeGame(game);
+    return;
+  }
+
   if (
     game.roundStartAliveUserIds.length > 0 &&
     game.roundTurnTakenUserIds.size >= game.roundStartAliveUserIds.length
@@ -335,12 +339,6 @@ function endTurnAdvance(game) {
     applyRoundSurvivalBonus(game, { excludedUserId });
     game.roundNumber += 1;
     startNewRound(game);
-  }
-
-  const alive = getAliveParticipantIds(game);
-  if (alive.length <= 1) {
-    finalizeGame(game);
-    return;
   }
 
   let nextIndex = game.currentTurnIndex;
