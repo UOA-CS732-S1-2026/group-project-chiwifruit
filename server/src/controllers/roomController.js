@@ -38,30 +38,24 @@ function emitCleanedRoomUpdates(io, cleanedRooms = []) {
 
 function buildRanking(room, gamePlayers = null) {
   if (gamePlayers) {
-    // Use game players for fair ranking
-    const sortedByScore = [...gamePlayers].sort((a, b) => b.score - a.score);
-    const rankMap = new Map();
-    sortedByScore.forEach((player, index) => {
-      rankMap.set(player.userId, index + 1);
-    });
-
-    return gamePlayers.map((player) => {
-      const rank = rankMap.get(player.userId);
-      const roundScore = player.score * 5;
-      const failureBonus = Math.max(0, Number(player.failureLength || 0) - 1);
-      const totalScore = roundScore + failureBonus;
-
-      return {
+    const sortedByScore = [...gamePlayers]
+      .map((player) => ({
         userId: player.userId,
         username: player.username,
         isGuest: player.isGuest,
-        correctCount: totalScore,
         avatarUrl: player.avatarUrl,
-        rank,
-        totalScore,
-      };
-    }).sort((a, b) => b.totalScore - a.totalScore).map((entry, index) => ({
+        totalScore: Number(player.score || 0),
+        initialOrder: Number(player.initialOrder || 0),
+      }))
+      .sort((a, b) => {
+        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+        if (b.initialOrder !== a.initialOrder) return b.initialOrder - a.initialOrder;
+        return String(a.userId || '').localeCompare(String(b.userId || ''));
+      });
+
+    return sortedByScore.map(({ initialOrder, ...entry }, index) => ({
       ...entry,
+      correctCount: entry.totalScore,
       rank: index + 1,
     }));
   }
