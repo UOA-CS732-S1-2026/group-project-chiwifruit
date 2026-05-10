@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronsRight } from "lucide-react"
 import { useNavigate, useParams } from "react-router-dom"
 
 import Background from "../components/Common/Background"
+import { BACKGROUND_STICKERS } from "../components/Common/floatingStickerConfigs"
 import ExitGameModal from "../components/Game/ExitGameModal"
 import GamePlayerCard from "../components/Game/GamePlayerCard"
 import GameResultsModal from "../components/Game/GameResultsModal"
@@ -608,7 +609,7 @@ export default function GamePage() {
 	}
 
 	return (
-		<Background>
+		<Background stickers={BACKGROUND_STICKERS}>
 			<ExitGameModal
 				open={isExitModalOpen}
 				onCancel={() => setIsExitModalOpen(false)}
@@ -756,7 +757,7 @@ export default function GamePage() {
 							activePadIndex={activePadIndex}
 							disabled={padsDisabled}
 							onPadPress={handlePadPress}
-							centerContent={<img src={logo} alt="Kichain" className="h-20 w-24" />}
+							centerContent={<img src={logo} alt="Kichain" className="h-24 w-28 object-contain" />}
 						/>
 
 						<p className="mt-6 text-center text-xs font-semibold text-muted-foreground">

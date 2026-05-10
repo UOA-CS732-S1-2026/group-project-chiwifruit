@@ -10,6 +10,7 @@ import { getStoredAuthUser } from "../api/axios"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useGuardedRoomNavigation from "../hooks/useGuardedRoomNavigation"
+import { HOME_STICKERS } from "../components/Common/floatingStickerConfigs"
 
 // NOTE (2026-04-29): Landing create/join actions follow a guarded flow:
 // If no token exists, create a guest session first (obtain token), then call the room API.
@@ -59,7 +60,7 @@ export default function LandingPage() {
 	return (
 	  <>
         <AuthModal open={showAuthModal} onClose={() => setShowAuthModal(false)} />
-		<Background>
+		<Background stickers={HOME_STICKERS}>
 
 			{/* Display the build version in the top-left corner for debugging purposes. */}
 			<div className="fixed bottom-2 right-3 z-50 rounded-md bg-black/35 px-2 py-1 text-[10px] font-mono text-white/70 shadow-sm">
