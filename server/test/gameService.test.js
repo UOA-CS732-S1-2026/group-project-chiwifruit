@@ -335,6 +335,7 @@ describe('gameService state machine', () => {
       // (Round survival bonus may apply separately at round completion.)
       expect(addNote.game.scores.user2).toBeGreaterThanOrEqual(1);
       expect(addNote.game.scores.user2 % 5).toBe(1);
+      expect(addNote.game.scores.user1).toBe(0);
       expect(addNote.game.sequence).toEqual([3, 4]);
       expect(addNote.game.lastEvent).toMatchObject({ type: 'note_added', userId: 'user2', padIndex: 4 });
     });

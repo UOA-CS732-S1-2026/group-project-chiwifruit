@@ -86,9 +86,10 @@ function startNewRound(game) {
   game.roundTurnTakenUserIds = new Set();
 }
 
-function applyRoundSurvivalBonus(game) {
+function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
   const aliveNow = getAliveParticipantIds(game);
   aliveNow.forEach((id) => {
+    if (excludedUserId && String(id) === String(excludedUserId)) return;
     addScore(game, id, 5);
     game.completedSurvivalRounds[id] = (Number(game.completedSurvivalRounds[id]) || 0) + 1;
   });
@@ -233,6 +234,8 @@ function startPlaying(game) {
 
   game.currentTurnIndex = firstAliveIndex;
   game.inputIndex = 0;
+  game.roundNumber = 1;
+  game.firstRoundStarterUserId = game.participantsOrder[firstAliveIndex] ?? null;
   startNewRound(game);
   game.turnEndsAt = Date.now() + TURN_MS;
   game.lastEvent = { type: 'game_started', at: Date.now() };
@@ -328,7 +331,9 @@ function endTurnAdvance(game) {
     game.roundStartAliveUserIds.length > 0 &&
     game.roundTurnTakenUserIds.size >= game.roundStartAliveUserIds.length
   ) {
-    applyRoundSurvivalBonus(game);
+    const excludedUserId = game.roundNumber === 1 ? game.firstRoundStarterUserId : null;
+    applyRoundSurvivalBonus(game, { excludedUserId });
+    game.roundNumber += 1;
     startNewRound(game);
   }
 
