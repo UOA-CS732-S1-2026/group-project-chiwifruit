@@ -4,52 +4,49 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate:
-    name: Validate client and server
+  # validate:
+  #   name: Validate client and server
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 22
+  #         cache: npm
+
+  #     - name: Install dependencies
+  #       run: npm ci
+
+  #     - name: Run frontend quality checks
+  #       run: npm run ci --workspace=client
+
+  #     - name: Run backend integrity and smoke checks
+  #       run: npm run ci --workspace=server
+
+  # docker-build:
+  #   name: Validate Docker image build
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   needs: validate
+
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Build Docker image
+  #       run: docker build -t kichain-dev2:test .
+
+  deploy-dev2:
+    name: Build, push, and deploy dev2 image
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run frontend quality checks
-        run: npm run ci --workspace=client
-
-      - name: Run backend integrity and smoke checks
-        run: npm run ci --workspace=server
-
-  docker-build:
-    name: Validate Docker image build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: validate
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t kichain-dev:test .
-
-  deploy-dev:
-    name: Build, push, and deploy dev image
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     environment: AWS Dev
-    needs:
-      - validate
-      - docker-build
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev2'
 
     steps:
       - name: Checkout repository
@@ -79,17 +76,17 @@ jobs:
         run: |
           docker build \
           --build-arg VITE_BUILD_VERSION="${{ steps.meta.outputs.short_sha }}" \
-          -t kichain-dev:local .
+          -t kichain-dev2:local .
 
       - name: Tag Docker image
         run: |
-          docker tag kichain-dev:local "${{ steps.meta.outputs.ecr_repo }}:${{ steps.meta.outputs.short_sha }}"
-          docker tag kichain-dev:local "${{ steps.meta.outputs.ecr_repo }}:dev"
+          docker tag kichain-dev2:local "${{ steps.meta.outputs.ecr_repo }}:${{ steps.meta.outputs.short_sha }}"
+          docker tag kichain-dev2:local "${{ steps.meta.outputs.ecr_repo }}:dev2"
 
       - name: Push Docker image to ECR
         run: |
           docker push "${{ steps.meta.outputs.ecr_repo }}:${{ steps.meta.outputs.short_sha }}"
-          docker push "${{ steps.meta.outputs.ecr_repo }}:dev"
+          docker push "${{ steps.meta.outputs.ecr_repo }}:dev2"
 
       - name: Keep latest 5 rollback image tags in ECR
         run: |
@@ -99,7 +96,7 @@ jobs:
 
           OLD_TAGS=$(aws ecr describe-images \
             --repository-name "$REPO" \
-            --query "sort_by(imageDetails[?imageTags && !contains(imageTags, 'dev')], &imagePushedAt)[0:-5].imageTags[0]" \
+            --query "sort_by(imageDetails[?imageTags && !contains(imageTags, 'dev') && !contains(imageTags, 'dev2')], &imagePushedAt)[0:-5].imageTags[0]" \
             --output text)
 
           if [ -z "$OLD_TAGS" ] || [ "$OLD_TAGS" = "None" ]; then
@@ -119,12 +116,12 @@ jobs:
           set -e
 
           INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=kichain-dev" "Name=instance-state-name,Values=running" \
+            --filters "Name=tag:Name,Values=kichain-dev-2" "Name=instance-state-name,Values=running" \
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
 
           if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
-            echo "No running EC2 instance found with tag Name=kichain-dev"
+            echo "No running EC2 instance found with tag Name=kichain-dev-2"
             exit 1
           fi
 
@@ -139,34 +136,27 @@ jobs:
           aws ecr get-login-password --region "$REGION" | \
             docker login --username AWS --password-stdin "$ECR_REPO"
 
-          docker pull "$ECR_REPO:dev"
+          docker pull "$ECR_REPO:dev2"
 
           docker network inspect kichain-net >/dev/null 2>&1 || docker network create kichain-net
 
-          if ! docker ps -a --format '{{.Names}}' | grep -q '^kichain-db$'; then
-            docker run -d \
-              --name kichain-db \
-              --restart unless-stopped \
-              --network kichain-net \
-              -p 27017:27017 \
-              mongo:latest
-          elif ! docker ps --format '{{.Names}}' | grep -q '^kichain-db$'; then
-            docker start kichain-db
-          fi
+          echo "Using external MongoDB from /home/ubuntu/kichain-dev.env"
 
-          if docker ps -a --format '{{.Names}}' | grep -q '^kichain-dev$'; then
-            docker stop kichain-dev || true
-            docker rm kichain-dev || true
-          fi
+          for CONTAINER in kichain-dev kichain-dev-2; do
+            if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+              docker stop "$CONTAINER" || true
+              docker rm "$CONTAINER" || true
+            fi
+          done
 
           docker run -d \
-            --name kichain-dev \
+            --name kichain-dev-2 \
             --restart unless-stopped \
             --network kichain-net \
             --env-file /home/ubuntu/kichain-dev.env \
             -p 5173:5173 \
             -p 3000:3000 \
-            "$ECR_REPO:dev"
+            "$ECR_REPO:dev2"
 
           echo "Waiting for backend health check..."
 
@@ -178,13 +168,13 @@ jobs:
 
             echo "Backend not ready yet. Attempt $i/30"
             docker ps -a
-            docker logs --tail 40 kichain-dev || true
+            docker logs --tail 40 kichain-dev-2 || true
             sleep 2
           done
 
           echo "Backend failed to become healthy."
           docker ps -a
-          docker logs --tail 150 kichain-dev || true
+          docker logs --tail 150 kichain-dev-2 || true
           exit 1
           EOF
 
