@@ -304,7 +304,7 @@ describe('gameService state machine', () => {
       expect(result.game.lastEvent).toMatchObject({ type: 'note_added', userId: 'user1', padIndex: 3 });
     });
 
-    it('should accept correct replay input without incrementing score until note is added', () => {
+    it('should award one replication point for each correct existing note replay', () => {
       const roomCode = 'CORRECT_REPLAY';
       startPlayingGame(roomCode);
       gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 3 });
@@ -312,9 +312,31 @@ describe('gameService state machine', () => {
       const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 3 });
 
       expect(result.ok).toBe(true);
-      expect(result.game.scores.user2).toBe(0);
+      expect(result.game.scores.user2).toBe(1);
       expect(result.game.inputIndex).toBe(1);
       expect(result.game.lastEvent).toMatchObject({ type: 'note_ok', userId: 'user2', padIndex: 3 });
+    });
+
+    it('should not award an extra point for the newly added note in the same turn', () => {
+      const roomCode = 'NO_POINT_FOR_ADDED_NOTE';
+      startPlayingGame(roomCode);
+
+      // Round 1, player 1 starts the chain with a new note. This note is not validated,
+      // so player 1 should still have 0 replication points.
+      const firstTurn = gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 3 });
+      expect(firstTurn.game.scores.user1).toBe(0);
+
+      // Player 2 correctly reproduces existing note (+1), then adds a new note.
+      const replay = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 3 });
+      expect(replay.game.scores.user2).toBe(1);
+      const addNote = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 4 });
+
+      // The newly added note itself must not grant an additional replication point.
+      // (Round survival bonus may apply separately at round completion.)
+      expect(addNote.game.scores.user2).toBeGreaterThanOrEqual(1);
+      expect(addNote.game.scores.user2 % 5).toBe(1);
+      expect(addNote.game.sequence).toEqual([3, 4]);
+      expect(addNote.game.lastEvent).toMatchObject({ type: 'note_added', userId: 'user2', padIndex: 4 });
     });
 
     it('should eliminate player on wrong replay input and finish when one player remains', () => {
