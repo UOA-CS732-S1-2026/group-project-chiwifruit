@@ -58,7 +58,9 @@ function buildPlayerSnapshot(participant, initialOrder) {
     username: participant.user?.username || participant.guestName || 'Unknown Player',
     avatarUrl: buildAvatarUrl(userId || 'unknown'),
     isGuest: Boolean(participant.guestId),
-    score: Number(participant.correctCount || 0),
+    // NOTE: Each new game starts scoring from zero.
+    // Do not carry over room participant historical `correctCount`.
+    score: 0,
     isEliminated: false,
     eliminationReason: null,
     leftDuringGame: false,
@@ -69,6 +71,41 @@ function buildPlayerSnapshot(participant, initialOrder) {
 
 function getPlayerByUserId(game, userId) {
   return game.players.find((player) => String(player.userId) === String(userId)) ?? null;
+}
+
+function addScore(game, userId, amount) {
+  const participantId = String(userId);
+  const nextScore = (Number(game.scores[participantId]) || 0) + Number(amount || 0);
+  game.scores[participantId] = nextScore;
+  const player = getPlayerByUserId(game, participantId);
+  if (player) player.score = nextScore;
+}
+
+function startNewRound(game) {
+  game.roundStartAliveUserIds = getAliveParticipantIds(game);
+  game.roundTurnTakenUserIds = new Set();
+}
+
+function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
+  const aliveNow = getAliveParticipantIds(game);
+  aliveNow.forEach((id) => {
+    if (excludedUserId && String(id) === String(excludedUserId)) return;
+    addScore(game, id, 5);
+    game.completedSurvivalRounds[id] = (Number(game.completedSurvivalRounds[id]) || 0) + 1;
+  });
+}
+
+function finalizeGame(game) {
+  const alive = getAliveParticipantIds(game);
+  const winnerUserId = alive[0] ?? null;
+  if (winnerUserId) addScore(game, winnerUserId, 5);
+  game.status = 'finished';
+  game.turnEndsAt = null;
+  game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId };
+  if (winnerUserId) {
+    const winnerPlayer = getPlayerByUserId(game, winnerUserId);
+    if (winnerPlayer) winnerPlayer.failureLength = 0;
+  }
 }
 
 function markPlayerEliminated(game, userId, reason, { leftDuringGame = false, failureLength = null } = {}) {
@@ -83,6 +120,16 @@ function markPlayerEliminated(game, userId, reason, { leftDuringGame = false, fa
   }
 
   game.eliminatedUserIds.add(participantId);
+
+  // If a player is eliminated before taking their turn in the current round
+  // (e.g. off-turn forfeit/disconnect), remove them from the round-start alive
+  // set so round completion doesn't get permanently blocked.
+  if (Array.isArray(game.roundStartAliveUserIds)) {
+    game.roundStartAliveUserIds = game.roundStartAliveUserIds.filter((id) => String(id) !== participantId);
+  }
+  if (game.roundTurnTakenUserIds instanceof Set) {
+    game.roundTurnTakenUserIds.delete(participantId);
+  }
 }
 
 function serializeGame(game) {
@@ -157,6 +204,9 @@ function startGame({ room, requestedByUserId }) {
     currentTurnIndex: 0,
     inputIndex: 0,
     eliminatedUserIds: new Set(),
+    roundStartAliveUserIds: participantsOrder,
+    roundTurnTakenUserIds: new Set(),
+    completedSurvivalRounds: Object.fromEntries(participantsOrder.map((id) => [id, 0])),
     turnEndsAt: null,
     lastEvent: { type: 'game_familiarizing_started', at: Date.now(), by: String(requestedByUserId) },
   };
@@ -192,6 +242,9 @@ function startPlaying(game) {
 
   game.currentTurnIndex = firstAliveIndex;
   game.inputIndex = 0;
+  game.roundNumber = 1;
+  game.firstRoundStarterUserId = game.participantsOrder[firstAliveIndex] ?? null;
+  startNewRound(game);
   game.turnEndsAt = Date.now() + TURN_MS;
   game.lastEvent = { type: 'game_started', at: Date.now() };
 }
@@ -277,11 +330,24 @@ function registerFamiliarPadPress({ roomCode, userId, padIndex }) {
 }
 
 function endTurnAdvance(game) {
+  const currentUserId = game.participantsOrder[game.currentTurnIndex];
+  if (currentUserId && game.roundStartAliveUserIds.includes(currentUserId)) {
+    game.roundTurnTakenUserIds.add(String(currentUserId));
+  }
+
+  if (
+    game.roundStartAliveUserIds.length > 0 &&
+    game.roundTurnTakenUserIds.size >= game.roundStartAliveUserIds.length
+  ) {
+    const excludedUserId = game.roundNumber === 1 ? game.firstRoundStarterUserId : null;
+    applyRoundSurvivalBonus(game, { excludedUserId });
+    game.roundNumber += 1;
+    startNewRound(game);
+  }
+
   const alive = getAliveParticipantIds(game);
   if (alive.length <= 1) {
-    game.status = 'finished';
-    game.turnEndsAt = null;
-    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId: alive[0] ?? null };
+    finalizeGame(game);
     return;
   }
 
@@ -301,19 +367,7 @@ function endTurnAdvance(game) {
 function finishIfOnlyOneAlive(game) {
   const alive = getAliveParticipantIds(game);
   if (alive.length <= 1) {
-    game.status = 'finished';
-    game.turnEndsAt = null;
-    const winnerUserId = alive[0] ?? null;
-    game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId };
-
-    // Set winner's failureLength to 0
-    if (winnerUserId) {
-      const winnerPlayer = getPlayerByUserId(game, winnerUserId);
-      if (winnerPlayer) {
-        winnerPlayer.failureLength = 0;
-      }
-    }
-
+    finalizeGame(game);
     return true;
   }
   return false;
@@ -394,19 +448,13 @@ function registerPadPress({ roomCode, userId, padIndex }) {
       return { ok: true, game: serializeGame(game) };
     }
 
+    addScore(game, currentUserId, 1);
     game.inputIndex += 1;
     game.lastEvent = { type: 'note_ok', at: Date.now(), userId: currentUserId, padIndex: index };
     return { ok: true, game: serializeGame(game) };
   }
 
   // Otherwise this press is the "add a new note" step.
-  const nextScore = (Number(game.scores[currentUserId]) || 0) + 1;
-  game.scores[currentUserId] = nextScore;
-  const player = game.players.find((p) => String(p.userId) === currentUserId);
-  if (player) {
-    player.score = nextScore;
-  }
-
   game.sequence.push(index);
   game.lastEvent = { type: 'note_added', at: Date.now(), userId: currentUserId, padIndex: index };
   endTurnAdvance(game);
