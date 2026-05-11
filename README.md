@@ -1,51 +1,468 @@
-# Group Project Chiwifruit
+# KiChain - Group Project Chiwifruit
 
 [![CI/CD](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml)
 ![Backend tests](https://img.shields.io/badge/backend_tests-Jest%20%2B%20Supertest-blue)
 ![API coverage](https://img.shields.io/badge/API%20coverage-auth%20%7C%20rooms%20%7C%20game%20state-green)
 
-Full-stack workspace for the Sound Chain game project.
+KiChain is a full-stack multiplayer memory game built for COMPSCI 732. Players join a shared room, listen to sound options, and take turns reproducing an increasingly long sound sequence. The project is implemented as a React + Vite client, an Express + MongoDB backend, and Socket.IO realtime communication.
 
-This repository contains:
-- A React + Vite frontend in [client](client)
-- An Express + MongoDB backend in [server](server)
-- A birdcall metadata CSV used as reference data at the repository root
+> [!TIP]
+> Start here if you are a marker, reviewer, or new team member. This root README explains the overall product, local setup, Docker setup, testing, deployment, and troubleshooting. More detailed frontend and backend notes are linked near the end.
 
-## Project Structure
+## 1. Product Overview
+
+### 1.1 Core user flow
+
+1. A player enters as a guest or registered user.
+2. A host creates a game room.
+3. Other players join using the room code.
+4. The host selects the sound mode and difficulty.
+5. Players ready up in the waiting room.
+6. Players enter a familiarisation phase to hear and practise the sounds.
+7. During gameplay, each player repeats the existing sound chain and adds one new sound.
+8. Incorrect input eliminates the player from active play.
+9. The game ends when the result condition is reached, and rankings are displayed.
+
+### 1.2 Main features
+
+1. Guest and registered-user authentication.
+2. Room creation and room-code joining.
+3. Host-controlled mode and difficulty selection.
+4. Realtime waiting-room updates through Socket.IO.
+5. Familiarisation stage before the main game.
+6. Turn-based multiplayer sound-chain gameplay.
+7. Elimination, forfeit handling, and result ranking.
+8. Local CLI development and local Docker development workflows.
+9. Backend automated tests and Docker-based deployment support.
+
+## 2. Tech Stack
+
+| Area | Technologies |
+| --- | --- |
+| Frontend | React, Vite, Tailwind CSS, React Query, Socket.IO client |
+| Backend | Node.js, Express, MongoDB, Mongoose, Socket.IO |
+| Auth/session | JWT, guest sessions, local/session browser storage |
+| Audio/UI | Static frontend audio assets, Howler.js, Framer Motion |
+| Testing | Jest, Supertest, backend smoke checks, frontend lint/build validation |
+| DevOps/deployment | Docker, GitHub Actions, AWS EC2/ECR, Nginx, CloudFront, MongoDB Atlas |
+
+> [!NOTE]
+> Audio files are handled as frontend static assets for the MVP. The backend no longer depends on S3 audio delivery for local development.
+
+## 3. Project Structure
 
 ```text
 group-project-chiwifruit/
-├── client/                  # React frontend
-├── server/                  # Node/Express backend
-├── birdscall_data - Sheet1.csv
-└── README.md
+├── client/                  # React + Vite frontend
+├── server/                  # Node / Express backend
+├── .env.example             # Single shared environment template
+├── Dockerfile               # Local / deployment container image definition
+└── README.md                # Main project setup and delivery guide
 ```
 
-## Prerequisites
+## 4. Prerequisites
 
-- Node.js 18+ and npm
-- MongoDB running locally (default: `mongodb://localhost:27017`)
+1. Node.js 18+ and npm.
+2. Docker, if using the Docker-based local setup.
+3. MongoDB, either running directly on your machine or as a Docker container.
 
-## Root Workspace Scripts
+## 5. Environment Configuration
 
-The root [package.json](package.json) is configured as an npm workspace and can start both apps from one command.
+This project uses one shared environment file at the repository root.
 
-- `npm run dev` starts frontend and backend together
-- `npm run dev:client` starts only frontend
-- `npm run dev:server` starts only backend
-- `npm run build` builds frontend
-- `npm run start` starts backend in non-dev mode
+### 5.1 Create the root `.env` file
 
-## Testing and Coverage
+```bash
+cp .env.example .env
+```
+
+Do not create separate `client/.env` or `server/.env` files. The frontend Vite config and backend dotenv config are both configured to read from the root `.env` file.
+
+> [!IMPORTANT]
+> The root `.env` file is intentionally ignored by Git. Commit `.env.example`, but do not commit real secrets or local machine-specific values.
+
+### 5.2 Default local environment values
+
+The default local configuration is designed for running the client and server directly from the command line:
+
+```bash
+PORT=3000
+FRONTEND_PORT=5173
+FRONTEND_ORIGIN=http://localhost:5173
+VITE_API_URL=http://localhost:3000/api
+VITE_SOCKET_URL=http://localhost:3000
+MONGODB_URI=mongodb://localhost:27017/kichain-db
+JWT_SECRET=replace_with_long_random_secret
+JWT_EXPIRES_IN=1d
+```
+
+### 5.3 MongoDB URI: host machine vs Docker container
+
+The main value that changes between local run modes is `MONGODB_URI`.
+
+#### 5.3.1 Backend running on the host machine
+
+Use this when the backend is started through npm, for example `npm run dev`, `npm run dev:server`, or `npm run start`:
+
+```bash
+MONGODB_URI=mongodb://localhost:27017/kichain-db
+```
+
+Here, `localhost` means your Mac / host machine. This works when MongoDB is installed locally, or when MongoDB is running in Docker with port `27017` exposed to the host machine.
+
+#### 5.3.2 Backend running inside a Docker container
+
+Use this when the backend itself runs inside the app container and MongoDB runs in another Docker container:
+
+```bash
+MONGODB_URI=mongodb://kichain-db:27017/kichain-db
+```
+
+Here, `localhost` would mean the app container itself, not the MongoDB container. The hostname `kichain-db` works only when the app container and MongoDB container are attached to the same user-defined Docker network, `kichain-net`.
+
+#### 5.3.3 Why the Docker command overrides `MONGODB_URI`
+
+The README keeps `.env` suitable for normal CLI development by default:
+
+```bash
+MONGODB_URI=mongodb://localhost:27017/kichain-db
+```
+
+When running the app inside Docker, the recommended `docker run` command overrides only this one value:
+
+```bash
+-e MONGODB_URI=mongodb://kichain-db:27017/kichain-db
+```
+
+This means you do not need to edit `.env` every time you switch between CLI development and Docker development.
+
+> [!TIP]
+> If you already changed `.env` to use `MONGODB_URI=mongodb://kichain-db:27017/kichain-db`, you can omit the `-e MONGODB_URI=...` line from `docker run`.
+
+## 6. Workspace Scripts
+
+Run these commands from the repository root.
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start frontend and backend together for local development |
+| `npm run dev:client` | Start only the Vite frontend |
+| `npm run dev:server` | Start only the Express backend with nodemon |
+| `npm run build` | Build the frontend |
+| `npm run start` | Start the backend in non-dev mode |
+| `npm run ci` | Run client and server validation checks |
+
+## 7. Local Setup Option 1: CLI Development
+
+Use this option when you want to run the frontend and backend directly from your terminal with npm.
+
+### 7.1 Summary
+
+In this setup:
+
+1. The frontend runs on your host machine through Vite.
+2. The backend runs on your host machine through Node / Express.
+3. MongoDB can run either directly on your host machine or in a Docker container with port `27017` exposed.
+4. The backend should use `mongodb://localhost:27017/kichain-db`.
+5. A Docker network is not required, because the backend is not running inside Docker.
+
+### 7.2 Steps
+
+#### Step 1: Install dependencies
+
+```bash
+npm install
+```
+
+#### Step 2: Create root `.env`
+
+```bash
+cp .env.example .env
+```
+
+Keep the default MongoDB URI:
+
+```bash
+MONGODB_URI=mongodb://localhost:27017/kichain-db
+```
+
+#### Step 3: Start MongoDB
+
+You can use a local MongoDB installation, or start MongoDB quickly through Docker:
+
+```bash
+docker rm -f kichain-db 2>/dev/null || true
+
+docker run -d \
+  --name kichain-db \
+  -p 27017:27017 \
+  mongo:latest
+```
+
+This MongoDB container does not need to be attached to `kichain-net` for CLI development. The important part is `-p 27017:27017`, which exposes MongoDB to your host machine so the backend can connect through `localhost`.
+
+#### Step 4: Start the app
+
+Start both frontend and backend together:
+
+```bash
+npm run dev
+```
+
+This starts:
+
+1. Frontend: `http://localhost:5173`
+2. Backend: `http://localhost:3000`
+
+Alternatively, start them separately:
+
+```bash
+npm run dev:client
+npm run dev:server
+```
+
+To start the backend without nodemon:
+
+```bash
+npm run start
+```
+
+#### Step 5: Verify the CLI setup
+
+Check the backend health endpoint:
+
+```bash
+curl http://localhost:3000/health
+```
+
+Open the frontend:
+
+```text
+http://localhost:5173
+```
+
+A useful manual smoke test is:
+
+1. Open two browser tabs.
+2. Log in as guests in both tabs.
+3. Create a room in one tab.
+4. Join the room from the other tab.
+5. Confirm that room updates appear in real time.
+
+## 8. Local Setup Option 2: Docker Development
+
+Use this option when you want to build and run the app inside Docker. This is closer to the shared deployment setup than the CLI option.
+
+### 8.1 Summary
+
+In this setup:
+
+1. MongoDB runs in a Docker container named `kichain-db`.
+2. The app runs in a Docker container named `kichain-dev-local`.
+3. Both containers must be attached to the same Docker network, `kichain-net`.
+4. The app container should use `mongodb://kichain-db:27017/kichain-db`.
+5. The Docker network must be created before starting the MongoDB and app containers.
+
+### 8.2 Steps
+
+#### Step 1: Create the Docker network
+
+```bash
+docker network create kichain-net 2>/dev/null || true
+```
+
+This must happen before creating the MongoDB container with `--network kichain-net`.
+
+The user-defined Docker network is required because the app container uses `kichain-db` as the MongoDB hostname. Docker provides container-name DNS resolution on this network.
+
+#### Step 2: Start MongoDB on the Docker network
+
+```bash
+docker rm -f kichain-db 2>/dev/null || true
+
+docker run -d \
+  --name kichain-db \
+  --network kichain-net \
+  -p 27017:27017 \
+  mongo:latest
+```
+
+This creates the MongoDB container on `kichain-net`. The app container can then connect to it using:
+
+```bash
+mongodb://kichain-db:27017/kichain-db
+```
+
+The `-p 27017:27017` mapping is not required for container-to-container access, but it is useful if you also want to inspect the database from your host machine, for example with MongoDB Compass.
+
+#### Step 3: Build the app image
+
+From the repository root:
+
+```bash
+docker build -t kichain-dev:local .
+```
+
+The Docker build context excludes local dependencies, test files, coverage output, Git metadata, and local environment files through [.dockerignore](.dockerignore).
+
+#### Step 4: Start the app container
+
+Recommended command:
+
+```bash
+docker rm -f kichain-dev-local 2>/dev/null || true
+
+docker run --rm \
+  --name kichain-dev-local \
+  --network kichain-net \
+  --env-file .env \
+  -e MONGODB_URI=mongodb://kichain-db:27017/kichain-db \
+  -p 5173:5173 \
+  -p 3000:3000 \
+  kichain-dev:local
+```
+
+This command does four important things:
+
+1. `--network kichain-net` puts the app container on the same network as MongoDB.
+2. `--env-file .env` loads the shared root environment file.
+3. `-e MONGODB_URI=...` overrides the CLI-friendly MongoDB URI with the Docker-container URI.
+4. `-p 5173:5173` and `-p 3000:3000` expose the frontend and backend to your host machine.
+
+If `.env` already contains `MONGODB_URI=mongodb://kichain-db:27017/kichain-db`, you can omit the `-e MONGODB_URI=...` line.
+
+#### Step 5: Verify the Docker setup
+
+In another terminal:
+
+```bash
+docker ps
+curl http://localhost:3000/health
+```
+
+Open the frontend:
+
+```text
+http://localhost:5173
+```
+
+You should see both containers running:
+
+```text
+kichain-db
+kichain-dev-local
+```
+
+#### Step 6: Stop Docker containers
+
+Stop the app container:
+
+```bash
+docker stop kichain-dev-local
+```
+
+Stop MongoDB:
+
+```bash
+docker stop kichain-db
+```
+
+Remove MongoDB if you want a clean database next time:
+
+```bash
+docker rm kichain-db
+```
+
+## 9. Clean Up and Reset Local Docker Environment
+
+Use this section when the local Docker environment becomes confusing, for example old containers are still running, ports are already in use, or the app appears to be using stale data.
+
+### 9.1 Project-only reset
+
+This removes only the containers, image, and network used by this project. It does not remove unrelated Docker resources from other projects.
+
+#### Step 1: Remove project Docker resources
+
+```bash
+# Stop and remove project containers.
+docker rm -f kichain-dev-local kichain-db 2>/dev/null || true
+
+# Remove the local app image built for this project.
+docker rmi kichain-dev:local 2>/dev/null || true
+
+# Remove the project network.
+docker network rm kichain-net 2>/dev/null || true
+```
+
+#### Step 2: Rebuild from a clean Docker state
+
+```bash
+docker network create kichain-net 2>/dev/null || true
+
+docker run -d \
+  --name kichain-db \
+  --network kichain-net \
+  -p 27017:27017 \
+  mongo:latest
+
+docker build -t kichain-dev:local .
+
+docker run --rm \
+  --name kichain-dev-local \
+  --network kichain-net \
+  --env-file .env \
+  -e MONGODB_URI=mongodb://kichain-db:27017/kichain-db \
+  -p 5173:5173 \
+  -p 3000:3000 \
+  kichain-dev:local
+```
+
+### 9.2 Reset only the MongoDB data
+
+Use this if the app image is fine but you want an empty local database.
+
+```bash
+docker rm -f kichain-db 2>/dev/null || true
+
+docker network create kichain-net 2>/dev/null || true
+
+docker run -d \
+  --name kichain-db \
+  --network kichain-net \
+  -p 27017:27017 \
+  mongo:latest
+```
+
+This deletes the data stored inside that MongoDB container. This is safe for local development data, but do not use it for any database container that contains data you need to keep.
+
+### 9.3 Optional aggressive Docker cleanup
+
+Use this only if Docker itself is cluttered and you are comfortable deleting unused Docker resources across your machine.
+
+```bash
+# Remove all stopped containers, unused networks, dangling images, and build cache.
+docker system prune
+
+# More aggressive: also remove all unused images.
+docker system prune -a
+```
+
+> [!WARNING]
+> Do not use `docker system prune -a` if you want to keep images from other projects.
+
+## 10. Testing and Coverage
 
 Backend tests are written with Jest and Supertest. They cover:
-- Auth API contract tests
-- Room API contract tests, including happy paths and key error paths
-- Core game-state unit tests for turn progression, elimination, timeout, and forfeit edge cases
-- Token service unit tests
-- Focused socket helper tests
 
-Run all backend tests:
+1. Auth API contract tests.
+2. Room API contract tests, including happy paths and key error paths.
+3. Core game-state unit tests for turn progression, elimination, timeout, and forfeit edge cases.
+4. Token service unit tests.
+5. Focused socket helper tests.
+
+### 10.1 Backend tests
+
+Run backend tests:
 
 ```bash
 npm test --workspace=server
@@ -57,209 +474,106 @@ Run backend tests with coverage:
 npm run test:coverage --workspace=server
 ```
 
+Run backend syntax check, tests, and health smoke test:
+
+```bash
+npm run ci --workspace=server
+```
+
 The coverage report is generated locally under:
 
 ```text
 server/coverage/lcov-report/index.html
 ```
 
-The CI pipeline runs the backend Jest suite as part of the server validation gate.
+### 10.2 Frontend validation
 
-## GitHub Actions CI (PR Gate for `dev` and `main`)
-
-This repository includes a workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) that runs on:
-- Pull requests targeting `dev` or `main`
-- Direct pushes to `dev` or `main`
-
-The CI pipeline runs in a GitHub-hosted Ubuntu runner and executes:
-- Frontend integrity checks: `npm run lint` + `npm run build`
-- Backend syntax check: `node --check src/server.js`
-- Backend Jest test suite: API, service, and focused socket helper tests
-- Backend smoke test: starts the Express app in-process and verifies `GET /health` returns `{ status: "ok" }`
-- Docker image build validation
-
-### Why no full Docker-based test pipeline right now?
-
-The CI currently runs code validation directly on GitHub Actions runners, then separately validates that the Docker image can be built. This keeps PR feedback fast while still catching container packaging issues.
-
-You can extend this later with a containerized test job if production parity becomes more important.
-
-### Required GitHub repo settings (one-time)
-
-To make CI truly block merges to `dev` and `main`, enable branch protection rules:
-
-1. Go to **GitHub → Settings → Branches**.
-2. Add (or edit) a branch protection rule for `main`.
-3. Enable:
-   - **Require a pull request before merging**
-   - **Require status checks to pass before merging**
-4. In status checks, select the jobs **`validate`** and **`docker-build`** from this workflow.
-5. Repeat the same rule for `dev`.
-
-Optional hardening:
-- Enable **Require branches to be up to date before merging**
-- Include administrators if you want the rule to apply to admins too
-- Disable direct pushes to protected branches
-
-## Quick Start
-
-1. Install all dependencies from repository root:
+Run frontend validation:
 
 ```bash
-npm install
+npm run ci --workspace=client
 ```
 
-2. Configure backend environment:
-- Copy [server/.env.example](server/.env.example) to `server/.env`
-- Fill required values (MongoDB, JWT, AWS)
+### 10.3 Full workspace checks
 
-3. Configure frontend environment:
-- Copy [client/.env.example](client/.env.example) to `client/.env`
-
-4. Ensure MongoDB is running locally.
-
-5. Start both services from root:
+Run all configured workspace checks:
 
 ```bash
-npm run dev
+npm run ci
 ```
 
-6. Verify services:
-- Frontend: `http://localhost:5173`
-- Backend health endpoint: `http://localhost:3000/health`
+## 11. Deployment Overview
 
-## Local Docker Development Environment
+The shared development/demo environment is deployed as a Dockerized full-stack app.
 
-This project can be run locally using Docker with two containers:
+1. GitHub Actions builds the Docker image manually through `workflow_dispatch`.
+2. The image is pushed to AWS ECR.
+3. AWS EC2 runs the app container.
+4. Nginx routes frontend, backend API, health check, and Socket.IO traffic.
+5. CloudFront provides the HTTPS user-facing entry point.
+6. MongoDB Atlas is used for the shared remote database instead of a local MongoDB container on EC2.
 
-- `kichain-db`: MongoDB container
-- `kichain-dev-local`: application container running both the Vite client and Express server
+> [!NOTE]
+> GitHub repository secrets are used for AWS deployment credentials. These deployment secrets are separate from the local `.env` file.
 
-The app container connects to MongoDB through a shared Docker network.
+## 12. Additional Documentation
 
-### 1. Create a Docker network
+The root README is the main setup and delivery guide. Subdirectory READMEs provide implementation details only.
 
-```bash
-docker network create kichain-net
+1. [Frontend technical notes](client/README.md)
+2. [Backend technical notes](server/README.md)
+3. [Backend test notes](server/test/README.md)
+
+## 13. GitHub Actions CI/CD
+
+The workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) is manual-only:
+
+```yaml
+on:
+  workflow_dispatch:
 ```
 
-If the network already exists, Docker may show an error. This is fine and can be ignored.
+This avoids unnecessary GitHub Actions usage during rapid debugging. The current deployment job is intended for the `dev2` branch and uses GitHub repository secrets for AWS deployment credentials.
 
-### 2. Start MongoDB
+## 14. Troubleshooting
+
+### 14.1 Backend cannot connect to MongoDB in CLI mode
+
+Check that MongoDB is reachable from your host machine:
 
 ```bash
-docker run -d \
-  --name kichain-db \
-  --network kichain-net \
-  -p 27017:27017 \
-  mongo:latest
+curl http://localhost:3000/health
 ```
 
-This starts a MongoDB container named kichain-db.
-
-### 3. Configure environment variables
-
-Create or update server/.env:
+If the backend logs show a MongoDB connection error, confirm that MongoDB is running and that `.env` contains:
 
 ```bash
-PORT=3000
-FRONTEND_ORIGIN=http://localhost:5173
+MONGODB_URI=mongodb://localhost:27017/kichain-db
+```
+
+### 14.2 Backend cannot connect to MongoDB in Docker mode
+
+If the app container logs show a MongoDB connection error, confirm that both containers are on the same Docker network:
+
+```bash
+docker network inspect kichain-net
+```
+
+For Docker app-container mode, the app must use:
+
+```bash
 MONGODB_URI=mongodb://kichain-db:27017/kichain-db
-JWT_SECRET=local_dev_secret_change_later
-JWT_EXPIRES_IN=1d
-AWS_REGION=ap-southeast-2
-AWS_ACCESS_KEY_ID=dummy
-AWS_SECRET_ACCESS_KEY=dummy
-AWS_S3_BUCKET=dummy
 ```
 
-Create or update client/.env:
+### 14.3 Port already in use
 
-```bash
-VITE_API_URL=http://localhost:3000/api
-VITE_SOCKET_URL=http://localhost:3000
-VITE_APP_NAME=KiChain
-VITE_APP_ENV=development
-```
-
-Note: When the backend runs inside a Docker container, localhost does not refer to the MongoDB container. The backend should connect to MongoDB using the container name kichain-db on the shared Docker network.
-
-### 4. Build the app image
-
-From the project root:
-
-```bash
-docker build -t kichain-dev:local .
-```
-
-The Docker build context excludes local dependencies, test files, coverage output, Git metadata, and environment files through [.dockerignore](.dockerignore).
-
-### 5. Start the app container
-
-```bash
-docker run --rm \
-  --name kichain-dev-local \
-  --network kichain-net \
-  --env-file docker.local.env \
-  -p 5173:5173 \
-  -p 3000:3000 \
-  kichain-dev:local
-```
-
-The app will be available at:
-
-`http://localhost:5173`
-
-### 6. Check running containers
-
-In another terminal:
+If ports `3000`, `5173`, or `27017` are already in use, stop the old containers or local processes:
 
 ```bash
 docker ps
+docker rm -f kichain-db kichain-dev-local 2>/dev/null || true
 ```
 
-You should see both containers running:
+### 14.4 Environment variables appear outdated
 
-```bash
-kichain-db
-kichain-dev-local
-```
-
-### 7. Stop the containers
-
-To stop the app container:
-
-```bash
-docker stop kichain-dev-local
-```
-
-To stop MongoDB:
-
-```bash
-docker stop kichain-db
-```
-
-To remove the MongoDB container if needed:
-
-```bash
-docker rm kichain-db
-```
-
-### 8. Reset local MongoDB container
-
-If you need a clean MongoDB container:
-
-```bash
-docker stop kichain-db
-docker rm kichain-db
-```
-
-Then start MongoDB again:
-
-```bash
-docker run -d \
-  --name kichain-db \
-  --network kichain-net \
-  -p 27017:27017 \
-  mongo:latest
-```
+After changing `.env`, restart the relevant process or Docker container. Vite and the backend read environment variables at process startup.

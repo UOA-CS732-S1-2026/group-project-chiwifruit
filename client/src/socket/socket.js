@@ -4,7 +4,7 @@ import { getStoredAuthToken } from "../api/axios"
 import SOCKET_EVENTS from "./socketEvents"
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
-const SOCKET_URL = API_URL.replace(/\/?api\/?$/, "")
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? API_URL.replace(/\/?api\/?$/, "")
 
 let socket
 
