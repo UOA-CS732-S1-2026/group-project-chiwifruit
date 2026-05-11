@@ -2,7 +2,9 @@
 jest.mock('../src/config/env', () => ({
   port: 3000,
   frontendOrigin: 'http://localhost:5173',
+  mongodbUri: 'mongodb://localhost:27017/kichain-test',
   jwtSecret: 'testSecret',
+  jwtExpiresIn: '1d',
 }));
 
 // Mock mongoose to prevent actual DB connection
@@ -54,10 +56,6 @@ jest.mock('socket.io', () => ({
     emit: jest.fn(),
   })),
 }));
-
-// Mock AWS S3 if needed
-jest.mock('@aws-sdk/client-s3');
-jest.mock('@aws-sdk/s3-request-presigner');
 
 // Mock jsonwebtoken
 jest.mock('jsonwebtoken', () => ({

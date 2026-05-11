@@ -1,21 +1,20 @@
+const path = require('path');
 const dotenv = require('dotenv');
 
-dotenv.config();
+// Always load the repository-level .env file so local scripts work whether they
+// are started from the root workspace or from the server workspace.
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const requiredVars = [
   'MONGODB_URI',
   'JWT_SECRET',
-  'FRONTEND_ORIGIN',
-  'AWS_REGION',
-  'AWS_ACCESS_KEY_ID',
-  'AWS_SECRET_ACCESS_KEY',
-  'AWS_S3_BUCKET'
+  'FRONTEND_ORIGIN'
 ];
 
 requiredVars.forEach((key) => {
   if (!process.env[key]) {
     // eslint-disable-next-line no-console
-    console.warn(`[env] Missing ${key}. Add it in your .env file.`);
+    console.warn(`[env] Missing ${key}. Add it in the root .env file.`);
   }
 });
 
@@ -24,9 +23,5 @@ module.exports = {
   frontendOrigin: process.env.FRONTEND_ORIGIN || '*',
   mongodbUri: process.env.MONGODB_URI,
   jwtSecret: process.env.JWT_SECRET,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
-  awsRegion: process.env.AWS_REGION,
-  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  awsS3Bucket: process.env.AWS_S3_BUCKET
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d'
 };

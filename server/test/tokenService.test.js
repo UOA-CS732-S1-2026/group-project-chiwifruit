@@ -21,7 +21,7 @@ describe('tokenService', () => {
         isGuest: false,
       },
       'testSecret',
-      { expiresIn: undefined }
+      { expiresIn: '1d' }
     );
   });
 
@@ -35,7 +35,7 @@ describe('tokenService', () => {
         isGuest: true,
       },
       'testSecret',
-      { expiresIn: undefined }
+      { expiresIn: '1d' }
     );
   });
 });
