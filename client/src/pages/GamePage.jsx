@@ -262,9 +262,12 @@ export default function GamePage() {
 	const lastBroadcastEventKeyRef = React.useRef(null)
 	const broadcastClearTimeoutRef = React.useRef(null)
 	const familiarAutoDurationMs = React.useMemo(() => {
-		const serverDuration = Number(socketGame?.familiarAutoDurationMs)
-		if (Number.isFinite(serverDuration) && serverDuration >= 0) {
-			return serverDuration
+		const rawServerDuration = socketGame?.familiarAutoDurationMs
+		if (rawServerDuration !== null && rawServerDuration !== undefined) {
+			const serverDuration = Number(rawServerDuration)
+			if (Number.isFinite(serverDuration) && serverDuration >= 0) {
+				return serverDuration
+			}
 		}
 		if (!Array.isArray(noteDurationsMs) || noteDurationsMs.length === 0) {
 			return padCount > 0 ? padCount * FAMILIARIZE_AUTOPLAY_GAP_MS : 0
