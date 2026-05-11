@@ -6,7 +6,7 @@ const { buildAvatarUrl } = require('../controllers/authController');
 // would add complexity (cleanup, contention) without benefit for this project.
 
 const TURN_MS = 20_000;
-const FAMILIARIZE_AUTOPLAY_MS = 900;
+const FAMILIARIZE_AUTOPLAY_MS = 1_000;
 const FAMILIARIZE_FREE_PLAY_MS = 20_000;
 const GAME_TTL_MS = 10 * 60_000;
 
@@ -14,10 +14,12 @@ const gamesByRoom = new Map();
 const timeoutsByRoom = new Map();
 
 function normalizeRoomMode(mode) {
-  if (mode === 'bird') return 'kiwi';
-  if (mode === 'Kiwi') return 'kiwi';
-  if (mode === 'Piano') return 'piano';
-  return mode === 'piano' ? 'piano' : 'kiwi';
+  const normalized = String(mode || '').trim().toLowerCase();
+  if (normalized === 'bird') return 'kiwi';
+  if (['kiwi', 'piano', 'maori', 'animal', 'aussie'].includes(normalized)) {
+    return normalized;
+  }
+  return 'kiwi';
 }
 
 function getPadCountByDifficulty(difficulty) {
@@ -145,6 +147,7 @@ function serializeGame(game) {
     difficulty: game.difficulty,
     padCount: game.padCount,
     audioSeed: game.audioSeed,
+    familiarAutoDurationMs: game.familiarAutoDurationMs,
     players: game.players,
     participantsOrder: game.participantsOrder,
     familiarReadyUserIds: [...game.familiarReadyUserIds],
@@ -193,6 +196,7 @@ function startGame({ room, requestedByUserId }) {
     gameId: crypto.randomUUID(),
     status: 'familiarizing',
     startedAt: Date.now(),
+    familiarAutoDurationMs: null,
     mode: normalizeRoomMode(room.mode),
     difficulty,
     padCount,
@@ -266,7 +270,28 @@ function forceStartPlaying({ roomCode, reason }) {
 }
 
 function getFamiliarizeEndsAt(game) {
-  return Number(game.startedAt) + Number(game.padCount) * FAMILIARIZE_AUTOPLAY_MS + FAMILIARIZE_FREE_PLAY_MS;
+  const reportedAutoDurationMs = Number(game?.familiarAutoDurationMs);
+  const fallbackAutoDurationMs = Number(game?.padCount) * FAMILIARIZE_AUTOPLAY_MS;
+  const autoDurationMs = Number.isFinite(reportedAutoDurationMs) && reportedAutoDurationMs >= 0
+    ? reportedAutoDurationMs
+    : fallbackAutoDurationMs;
+  return Number(game.startedAt) + autoDurationMs + FAMILIARIZE_FREE_PLAY_MS;
+}
+
+function setFamiliarAutoDuration({ roomCode, familiarAutoDurationMs }) {
+  const game = getGame(roomCode);
+  if (!game) return { ok: false, error: 'No active game.' };
+  if (game.status !== 'familiarizing') {
+    return { ok: false, error: 'Game is no longer familiarizing.' };
+  }
+
+  const nextDurationMs = Number(familiarAutoDurationMs);
+  if (!Number.isFinite(nextDurationMs) || nextDurationMs < 0) {
+    return { ok: false, error: 'Invalid familiar auto duration.' };
+  }
+
+  game.familiarAutoDurationMs = Math.round(nextDurationMs);
+  return { ok: true, game: serializeGame(game) };
 }
 
 function getAliveParticipantIds(game) {
@@ -489,6 +514,7 @@ module.exports = {
   getGame,
   startGame,
   markFamiliarReady,
+  setFamiliarAutoDuration,
   forceStartPlaying,
   getFamiliarizeEndsAt,
   forfeitPlayer,

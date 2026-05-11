@@ -20,6 +20,7 @@ import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import useSoundStore from "../store/useSoundStore"
 import { useRankingQuery } from "../hooks/queries/useRoomQuery"
 import {
+	emitGameFamiliarTiming,
 	emitGameFamiliarPadPress,
 	emitGameFamiliarReady,
 	emitGamePadPress,
@@ -28,7 +29,7 @@ import {
 	leaveSocketRoom,
 	reconnectSocket,
 } from "../socket/socket"
-import { pickGameNoteUrls, playGameNote } from "../lib/gameAudio"
+import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, stopGameNote } from "../lib/gameAudio"
 
 import logo from "../assets/branding/logo.png"
 import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
@@ -40,9 +41,17 @@ const PHASE = {
 	PLAYING: "playing",
 }
 
-const FAMILIARIZE_AUTOPLAY_MS = 2000
+const FAMILIARIZE_AUTOPLAY_GAP_MS = 1000
 const FREE_PLAY_MS = 20_000
 // const COUNTDOWN_MS = 5_000
+
+function waitForMs(ms) {
+	const safeDelay = Math.max(0, Number(ms) || 0)
+	if (safeDelay === 0) return Promise.resolve()
+	return new Promise((resolve) => {
+		window.setTimeout(resolve, safeDelay)
+	})
+}
 
 function shouldExitToLanding(errorCode) {
 	return errorCode === "GAME_NOT_PARTICIPANT" || errorCode === "NO_ACTIVE_GAME"
@@ -58,7 +67,6 @@ export default function GamePage() {
 	const navigate = useNavigate()
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
-	const lastFamiliarAutoPlayedPadRef = React.useRef({ gameId: null, index: null, at: 0 })
 	const acknowledgedOutGameIdRef = React.useRef(null)
 	const browserBackGuardArmedRef = React.useRef(false)
 	const browserBackConfirmedRef = React.useRef(false)
@@ -89,6 +97,7 @@ export default function GamePage() {
 	const [gameLoadError, setGameLoadError] = React.useState("")
 	const [isGameLoading, setIsGameLoading] = React.useState(true)
 	const [serverOffsetMs, setServerOffsetMs] = React.useState(0)
+	const [noteDurationsMs, setNoteDurationsMs] = React.useState([])
 	const isSocketDriven = Boolean(socketGame?.gameId)
 	const gamePlayers = React.useMemo(
 		() => (Array.isArray(socketGame?.players) ? socketGame.players : []),
@@ -191,8 +200,6 @@ export default function GamePage() {
 			const padIndex = Number(payload?.padIndex)
 			if (!Number.isInteger(padIndex) || padIndex < 0 || padIndex >= noteUrls.length) return
 			playGameNote(noteUrls[padIndex])
-			// NOTE (2026-04-29): The remote pad sound has already played once, so the automatic playback effect should not play again.
-			lastFamiliarAutoPlayedPadRef.current = { gameId: null, index: padIndex, at: Date.now() }
 			setActivePadIndex(padIndex)
 			window.setTimeout(() => setActivePadIndex(null), 180)
 		}
@@ -254,6 +261,20 @@ export default function GamePage() {
 	const [broadcastEvent, setBroadcastEvent] = React.useState(null)
 	const lastBroadcastEventKeyRef = React.useRef(null)
 	const broadcastClearTimeoutRef = React.useRef(null)
+	const familiarAutoDurationMs = React.useMemo(() => {
+		const serverDuration = Number(socketGame?.familiarAutoDurationMs)
+		if (Number.isFinite(serverDuration) && serverDuration >= 0) {
+			return serverDuration
+		}
+		if (!Array.isArray(noteDurationsMs) || noteDurationsMs.length === 0) {
+			return padCount > 0 ? padCount * FAMILIARIZE_AUTOPLAY_GAP_MS : 0
+		}
+		return noteDurationsMs.reduce((total, duration, index) => {
+			const safeDuration = Math.max(0, Number(duration) || 0)
+			const gapMs = index < noteDurationsMs.length - 1 ? FAMILIARIZE_AUTOPLAY_GAP_MS : 0
+			return total + safeDuration + gapMs
+		}, 0)
+	}, [noteDurationsMs, padCount, socketGame?.familiarAutoDurationMs])
 	const rankingQuery = useRankingQuery(roomCode, isResultsModalOpen)
 	const displayRanking = React.useMemo(() => {
 		const ranking = Array.isArray(rankingQuery.data?.ranking) ? rankingQuery.data.ranking : []
@@ -305,11 +326,44 @@ export default function GamePage() {
 	}, [currentGamePlayer, socketGame])
 
 	React.useEffect(() => {
+		if (!isSocketDriven || noteUrls.length === 0) {
+			setNoteDurationsMs([])
+			return
+		}
+
+		let isCancelled = false
+
+		void Promise.all(noteUrls.map((url) => getGameNoteDurationMs(url)))
+			.then((durations) => {
+				if (isCancelled) return
+				setNoteDurationsMs(durations)
+
+				const totalDurationMs = durations.reduce((total, duration, index) => {
+					const safeDuration = Math.max(0, Number(duration) || 0)
+					const gapMs = index < durations.length - 1 ? FAMILIARIZE_AUTOPLAY_GAP_MS : 0
+					return total + safeDuration + gapMs
+				}, 0)
+
+				if (roomCode && totalDurationMs > 0) {
+					emitGameFamiliarTiming(roomCode, totalDurationMs)
+				}
+			})
+			.catch(() => {
+				if (isCancelled) return
+				setNoteDurationsMs([])
+			})
+
+		return () => {
+			isCancelled = true
+		}
+	}, [isSocketDriven, noteUrls, roomCode])
+
+	React.useEffect(() => {
 		if (!isSocketDriven) return
 		const startedAt = Number(socketGame?.startedAt)
 		if (!Number.isFinite(startedAt) || startedAt <= 0) return
 
-		const autoEndsAt = startedAt + padCount * FAMILIARIZE_AUTOPLAY_MS
+		const autoEndsAt = startedAt + familiarAutoDurationMs
 		const freeEndsAt = autoEndsAt + FREE_PLAY_MS
 
 		const intervalId = window.setInterval(() => {
@@ -321,9 +375,6 @@ export default function GamePage() {
 
 			if (now < autoEndsAt) {
 				setPhase(PHASE.FAMILIARIZE_AUTO)
-				const nextIndex = Math.min(padCount - 1, Math.max(0, Math.floor((now - startedAt) / FAMILIARIZE_AUTOPLAY_MS)))
-				setAutoPlayIndex(nextIndex)
-				setActivePadIndex(nextIndex)
 				return
 			}
 
@@ -341,7 +392,7 @@ export default function GamePage() {
 		}, 100)
 
 		return () => window.clearInterval(intervalId)
-	}, [isCurrentUserWaiting, isSocketDriven, padCount, serverOffsetMs, socketGame?.startedAt, socketGame?.status])
+	}, [familiarAutoDurationMs, isCurrentUserWaiting, isSocketDriven, padCount, serverOffsetMs, socketGame?.startedAt, socketGame?.status])
 
 	React.useEffect(() => {
 		if (!socketGame?.turnEndsAt) return
@@ -353,6 +404,51 @@ export default function GamePage() {
 		}, 250)
 		return () => window.clearInterval(intervalId)
 	}, [serverOffsetMs, socketGame?.status, socketGame?.turnEndsAt])
+
+	React.useEffect(() => {
+		if (!isSocketDriven) return
+		if (socketGame?.status !== "familiarizing") return
+		if (phase !== PHASE.FAMILIARIZE_AUTO) return
+		if (noteUrls.length === 0) return
+		if (noteDurationsMs.length !== noteUrls.length) return
+
+		let isCancelled = false
+		let currentUrl = null
+
+		const runAutoplay = async () => {
+			for (let index = 0; index < noteUrls.length; index += 1) {
+				if (isCancelled) return
+
+				const url = noteUrls[index]
+				currentUrl = url
+				setAutoPlayIndex(index)
+				setActivePadIndex(index)
+
+				await playGameNoteAsync(url)
+				if (isCancelled) return
+
+				setActivePadIndex(null)
+				currentUrl = null
+
+				if (index < noteUrls.length - 1) {
+					await waitForMs(FAMILIARIZE_AUTOPLAY_GAP_MS)
+				}
+			}
+
+			if (!isCancelled) {
+				setActivePadIndex(null)
+			}
+		}
+
+		void runAutoplay()
+
+		return () => {
+			isCancelled = true
+			if (currentUrl) {
+				stopGameNote(currentUrl)
+			}
+		}
+	}, [isSocketDriven, noteDurationsMs, noteUrls, phase, socketGame?.status])
 
 	const players = React.useMemo(() => {
 		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
@@ -555,22 +651,6 @@ export default function GamePage() {
 		(phase === PHASE.PLAYING &&
 			socketGame?.status === "playing" &&
 			(Boolean(!currentUserId) || (socketGame.currentTurnUserId && currentUserId !== socketGame.currentTurnUserId)))
-
-	React.useEffect(() => {
-		if (phase !== PHASE.FAMILIARIZE_AUTO) return
-		if (activePadIndex == null) return
-		if (activePadIndex < 0 || activePadIndex >= noteUrls.length) return
-
-		const now = Date.now()
-		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
-		const last = lastFamiliarAutoPlayedPadRef.current
-		// NOTE (2026-04-29): Within a 250ms window, treat this as the same trigger (StrictMode/re-render/event jitter).
-		if (last?.gameId === currentGameId && last?.index === activePadIndex && now - Number(last?.at ?? 0) < 250) {
-			return
-		}
-		lastFamiliarAutoPlayedPadRef.current = { gameId: currentGameId, index: activePadIndex, at: now }
-		playGameNote(noteUrls[activePadIndex])
-	}, [activePadIndex, noteUrls, phase, socketGame?.gameId])
 
 	const leftPlayers = players.filter((p) => p.side === "left")
 	const rightPlayers = players.filter((p) => p.side === "right")

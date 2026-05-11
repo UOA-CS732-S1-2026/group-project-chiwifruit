@@ -8,6 +8,7 @@ const {
   getGame,
   startGame,
   markFamiliarReady,
+  setFamiliarAutoDuration,
   forceStartPlaying,
   forfeitPlayer,
   registerFamiliarPadPress,
@@ -387,6 +388,40 @@ function initSocket(httpServer, frontendOrigin) {
       if (result.game.status === 'playing') {
         scheduleTurnTimer(code);
       }
+    });
+
+    socket.on('game_familiar_timing', async (payload = {}, ack) => {
+      const { roomCode, familiarAutoDurationMs } = payload;
+      const userId = socket.user?.sub ? String(socket.user.sub) : null;
+
+      if (!roomCode) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Missing room code.' });
+        return;
+      }
+
+      const code = String(roomCode).toUpperCase();
+      const internal = getGame(code);
+      if (!internal) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'No active game.' });
+        return;
+      }
+
+      if (!userId || !internal.participantsOrder.includes(userId)) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Not a game participant.' });
+        return;
+      }
+
+      const result = setFamiliarAutoDuration({ roomCode: code, familiarAutoDurationMs });
+      if (!result.ok) {
+        if (typeof ack === 'function') ack(result);
+        return;
+      }
+
+      io.to(code).emit('game_state', result.game);
+      clearRoomTimeout(code);
+      scheduleFamiliarAutoStart(code);
+
+      if (typeof ack === 'function') ack({ ok: true, game: result.game });
     });
 
     socket.on('game_familiar_pad_press', async (payload = {}) => {

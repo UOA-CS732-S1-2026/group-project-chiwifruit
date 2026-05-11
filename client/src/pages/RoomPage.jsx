@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-<<<<<<< audio-update
 import {
 	Check,
 	CircleDot,
@@ -10,13 +9,9 @@ import {
 	LogOut,
 	Music,
 	PawPrint,
-	Play,
 	Users,
 	Zap,
 } from "lucide-react"
-=======
-import { Check, CircleDot, Copy, Flame, LogOut, Music, Users, Zap } from "lucide-react"
->>>>>>> ui_integration
 
 import Background from "../components/Common/Background"
 import BrandLockup from "../components/Common/BrandLockup"

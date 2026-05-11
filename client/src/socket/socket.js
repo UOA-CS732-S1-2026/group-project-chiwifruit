@@ -83,6 +83,12 @@ export function emitGameRequestState(roomCode, ack) {
 	s.emit(SOCKET_EVENTS.GAME_REQUEST_STATE, { roomCode }, ack)
 }
 
+export function emitGameFamiliarTiming(roomCode, familiarAutoDurationMs, ack) {
+	if (!roomCode) return
+	const s = reconnectSocket()
+	s.emit(SOCKET_EVENTS.GAME_FAMILIAR_TIMING, { roomCode, familiarAutoDurationMs }, ack)
+}
+
 export function emitGameFamiliarReady(roomCode, ack) {
 	if (!roomCode) return
 	const s = reconnectSocket()

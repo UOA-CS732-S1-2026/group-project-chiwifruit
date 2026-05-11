@@ -13,6 +13,7 @@ export const SOCKET_EVENTS = {
 	GAME_START: "game_start",
 	GAME_REQUEST_STATE: "game_request_state",
 	GAME_STATE: "game_state",
+	GAME_FAMILIAR_TIMING: "game_familiar_timing",
 	GAME_FAMILIAR_READY: "game_familiar_ready",
 	GAME_FAMILIAR_PAD_PRESS: "game_familiar_pad_press",
 	GAME_PAD_SOUND: "game_pad_sound",

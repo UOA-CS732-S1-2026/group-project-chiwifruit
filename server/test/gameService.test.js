@@ -89,6 +89,35 @@ describe('gameService state machine', () => {
       expect(result.game.players[0].userId).toBe('user1');
       expect(result.game.players[1].userId).toBe('user2');
     });
+
+    it('should preserve newly added room modes when starting a game', () => {
+      const result = gameService.startGame({
+        room: room({ roomCode: 'START_MAORI', mode: 'maori' }),
+        requestedByUserId: 'user1',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.game.mode).toBe('maori');
+    });
+
+    it('should use client-reported familiar auto duration when calculating familiarize end time', () => {
+      const start = gameService.startGame({ room: room({ roomCode: 'START_TIMING' }), requestedByUserId: 'user1' });
+
+      expect(start.ok).toBe(true);
+
+      const updated = gameService.setFamiliarAutoDuration({
+        roomCode: 'START_TIMING',
+        familiarAutoDurationMs: 12345,
+      });
+
+      expect(updated.ok).toBe(true);
+      expect(updated.game.familiarAutoDurationMs).toBe(12345);
+
+      const internal = gameService.getGame('START_TIMING');
+      expect(gameService.getFamiliarizeEndsAt(internal)).toBe(
+        Number(internal.startedAt) + 12345 + gameService.FAMILIARIZE_FREE_PLAY_MS,
+      );
+    });
   });
 
   describe('familiarization phase', () => {

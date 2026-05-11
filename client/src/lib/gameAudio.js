@@ -2,12 +2,27 @@ import { Howl } from "howler"
 
 import useSoundStore from "../store/useSoundStore"
 
-const kiwiAudioModules = import.meta.glob("../assets/audio/kiwiAudio/*.mp3", {
+const kiwiAudioModules = import.meta.glob("../assets/audio/birdAudio/*.mp3", {
 	eager: true,
 	import: "default",
 })
 
 const pianoAudioModules = import.meta.glob("../assets/audio/pianoAudio/*.mp3", {
+	eager: true,
+	import: "default",
+})
+
+const maoriAudioModules = import.meta.glob("../assets/audio/maoriAudio/*.mp3", {
+	eager: true,
+	import: "default",
+})
+
+const animalAudioModules = import.meta.glob("../assets/audio/animalAudio/*.mp3", {
+	eager: true,
+	import: "default",
+})
+
+const aussieAudioModules = import.meta.glob("../assets/audio/auSlang/*.mp3", {
 	eager: true,
 	import: "default",
 })
@@ -25,6 +40,9 @@ function normalizeEntries(modules) {
 const AUDIO_ENTRIES = {
 	kiwi: normalizeEntries(kiwiAudioModules),
 	piano: normalizeEntries(pianoAudioModules),
+	maori: normalizeEntries(maoriAudioModules),
+	animal: normalizeEntries(animalAudioModules),
+	aussie: normalizeEntries(aussieAudioModules),
 }
 
 function hashStringToUint32(value) {
@@ -58,7 +76,7 @@ function seededShuffle(items, seed) {
 }
 
 export function pickGameNoteUrls({ mode, padCount, seed }) {
-	const key = mode === "piano" ? "piano" : "kiwi"
+	const key = Object.hasOwn(AUDIO_ENTRIES, mode) ? mode : "kiwi"
 	const entries = AUDIO_ENTRIES[key]
 	if (!Array.isArray(entries) || entries.length === 0) return []
 
@@ -70,10 +88,7 @@ export function pickGameNoteUrls({ mode, padCount, seed }) {
 
 const howlCache = new Map()
 
-export function playGameNote(url) {
-	if (!url) return
-	if (useSoundStore.getState().muted) return
-
+function getOrCreateHowl(url) {
 	let howl = howlCache.get(url)
 	if (!howl) {
 		howl = new Howl({
@@ -83,7 +98,81 @@ export function playGameNote(url) {
 		})
 		howlCache.set(url, howl)
 	}
+	return howl
+}
+
+function ensureHowlLoaded(howl) {
+	if (!howl) return Promise.resolve()
+	if (howl.state() === "loaded") return Promise.resolve()
+
+	return new Promise((resolve) => {
+		const handleLoad = () => {
+			howl.off("loaderror", handleLoadError)
+			resolve()
+		}
+		const handleLoadError = () => {
+			howl.off("load", handleLoad)
+			resolve()
+		}
+
+		howl.once("load", handleLoad)
+		howl.once("loaderror", handleLoadError)
+		howl.load()
+	})
+}
+
+export async function getGameNoteDurationMs(url) {
+	if (!url) return 0
+	const howl = getOrCreateHowl(url)
+	await ensureHowlLoaded(howl)
+	const durationSeconds = Number(howl.duration())
+	if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0
+	return Math.round(durationSeconds * 1000)
+}
+
+export function playGameNote(url) {
+	if (!url) return
+	if (useSoundStore.getState().muted) return
+
+	const howl = getOrCreateHowl(url)
 
 	howl.stop()
 	howl.play()
+}
+
+export async function playGameNoteAsync(url, options = {}) {
+	if (!url) return
+	if (useSoundStore.getState().muted) return
+
+	const howl = getOrCreateHowl(url)
+	await ensureHowlLoaded(howl)
+
+	const seekMs = Math.max(0, Number(options.seekMs) || 0)
+
+	await new Promise((resolve) => {
+		howl.stop()
+		const soundId = howl.play()
+		if (seekMs > 0) {
+			howl.seek(seekMs / 1000, soundId)
+		}
+
+		const handleEnd = () => {
+			howl.off("playerror", handlePlayError, soundId)
+			resolve()
+		}
+		const handlePlayError = () => {
+			howl.off("end", handleEnd, soundId)
+			resolve()
+		}
+
+		howl.once("end", handleEnd, soundId)
+		howl.once("playerror", handlePlayError, soundId)
+	})
+}
+
+export function stopGameNote(url) {
+	if (!url) return
+	const howl = howlCache.get(url)
+	if (!howl) return
+	howl.stop()
 }
