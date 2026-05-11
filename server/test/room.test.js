@@ -571,6 +571,22 @@ describe('Room API', () => {
       expect(room.mode).toBe('kiwi');
       expect(room.participants[0].isReady).toBe(false);
     });
+
+    it('should accept newly added sound modes', async () => {
+      const room = buildRoom({ participants: [rawUserParticipant('userId123', 'Host', { isReady: true })] });
+
+      Room.findOne.mockResolvedValueOnce(room);
+      mockRoomState(room);
+
+      await request(app)
+        .patch('/api/rooms/ABC/mode')
+        .set('Authorization', token)
+        .send({ mode: 'maori' })
+        .expect(200);
+
+      expect(room.mode).toBe('maori');
+      expect(room.participants[0].isReady).toBe(false);
+    });
   });
 
   describe('PATCH /api/rooms/:roomCode/difficulty', () => {

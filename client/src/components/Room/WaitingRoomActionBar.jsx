@@ -12,7 +12,7 @@ export default function WaitingRoomActionBar({
 }) {
 	return (
 		<div
-			className="fixed inset-x-0 bottom-0 z-50 flex justify-center border-t border-border/40 bg-background/95 px-6 py-4 shadow-[0_-10px_30px_rgba(15,23,42,0.06)] backdrop-blur"
+			className="fixed inset-x-0 bottom-0 z-50 flex justify-center border-t border-border/40 bg-transparent px-6 py-4 shadow-[0_-10px_30px_rgba(15,23,42,0.06)]"
 			style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
 		>
 			{isHost ? (

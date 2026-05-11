@@ -8,22 +8,25 @@ export default function GameStatusBroadcast({
 	currentTurnIndex = 0,
 	inputCount = 0,
 	sequenceLength = 0,
-	isSpectating = false,
 	isMyTurn = false,
 	status,
 	actorName,
+	reason,
 	currentUserName,
-	fallbackMessage,
 	className,
 }) {
 	const currentPlayerName = players[currentTurnIndex]?.name ?? "Player"
 	const displayName = actorName ?? currentPlayerName
-	const outPlayerName = actorName ?? currentUserName ?? currentPlayerName
-	let message = fallbackMessage ?? "Familiarize yourself with the notes!"
+	let message = ""
 	let variant = "default"
 
-	if (status === "out" || isSpectating) {
-		message = `${outPlayerName} is OUT! Pressed the wrong note!`
+	if (status === "out-self") {
+		message = reason === "timeout" ? "Time out!" : "Pressed the wrong note!"
+		variant = "danger"
+	}
+
+	if (status === "out-other") {
+		message = `${displayName} is out! ${reason === "timeout" ? "(time out)" : "(Press a wrong note)"}`
 		variant = "danger"
 	}
 
@@ -31,21 +34,47 @@ export default function GameStatusBroadcast({
 		message = `${displayName} added a note! Turn over.`
 	}
 
-	if (status === "listen") {
+	if (status === "familiar-listen") {
 		message = "Listen to the buttons..."
 	}
 
-	if (!status && !isSpectating && (phase === "familiarize:auto" || phase === "familiarize:free" || phase === "familiarize:waiting")) {
-		message = "Familiarize yourself with the notes!"
+	if (status === "familiar-practice") {
+		message = "Now it's your turn to practice!"
 	}
 
-	if (!status && !isSpectating && phase === "playing") {
+	if (status === "repeat-self") {
+		message = "Your turn! Watch and repeat."
+	}
+
+	if (status === "repeat-complete-self") {
+		message = `${currentUserName ?? currentPlayerName} repeated correctly! Now add a note.`
+	}
+
+	if (status === "watch-other") {
+		message = `${currentPlayerName}'s turn. Watch and listen.`
+	}
+
+	if (!status && phase === "familiarize:auto") {
+		message = "Listen to the buttons..."
+	}
+
+	if (!status && phase === "familiarize:free") {
+		message = "Now it's your turn to practice!"
+	}
+
+	if (!status && phase === "familiarize:waiting") {
+		message = "Waiting for other players to get ready..."
+	}
+
+	if (!status && phase === "playing") {
 		if (isMyTurn && sequenceLength === 0 && inputCount === 0) {
 			message = "Game started! You go first. Press any note."
+		} else if (isMyTurn && inputCount >= sequenceLength && sequenceLength > 0) {
+			message = `${currentUserName ?? currentPlayerName} repeated correctly! Now add a note.`
 		} else if (isMyTurn && inputCount < sequenceLength) {
-			message = "Listen to the buttons..."
+			message = "Your turn! Watch and repeat."
 		} else if (!isMyTurn) {
-			message = `${currentPlayerName}'s turn! Watch and repeat.`
+			message = `${currentPlayerName}'s turn. Watch and listen.`
 		}
 	}
 
