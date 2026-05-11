@@ -1,22 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-<<<<<<< audio-update
-import {
-	Check,
-	CircleDot,
-	Copy,
-	Flame,
-	Landmark,
-	LogOut,
-	Music,
-	PawPrint,
-	Play,
-	Users,
-	Zap,
-} from "lucide-react"
-=======
 import { Check, CircleDot, Copy, Flame, LogOut, Music, Users, Zap } from "lucide-react"
->>>>>>> ui_integration
 
 import Background from "../components/Common/Background"
 import BrandLockup from "../components/Common/BrandLockup"
@@ -42,7 +26,6 @@ import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../ap
 import { WAITING_ROOM_STICKERS } from "../components/Common/floatingStickerConfigs"
 
 import birdIcon from "../assets/icons/bird.svg"
-import kangarooIcon from "../assets/icons/kangaroo.svg"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import { emitGameRequestState, emitGameStart, joinSocketRoom, reconnectSocket } from "../socket/socket"
 
@@ -63,23 +46,6 @@ function BirdIcon({ className, ...props }) {
 			style={{
 				filter: isActive ? "brightness(0) invert(1)" : "none",
 			}}
-		/>
-	)
-}
-
-function AussieIcon({ className, ...props }) {
-	const isActive = Boolean(props["data-active"])
-
-	return (
-		<img
-			src={kangarooIcon}
-			alt=""
-			aria-hidden="true"
-			className={className}
-			style={{
-				filter: isActive ? "brightness(0) invert(1)" : "none",
-			}}
-			{...props}
 		/>
 	)
 }
@@ -437,9 +403,6 @@ export default function RoomPage() {
 									options={[
 										{ value: "kiwi", label: "Kiwi", Icon: BirdIcon },
 										{ value: "piano", label: "Piano", Icon: Music },
-										{ value: "maori", label: "Maori", Icon: Landmark },
-										{ value: "animal", label: "Animal", Icon: PawPrint },
-										{ value: "aussie", label: "Aussie", Icon: AussieIcon },
 									]}
 								/>
 							</div>

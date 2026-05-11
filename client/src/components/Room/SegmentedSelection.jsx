@@ -4,7 +4,7 @@ export default function SegmentedSelection({ value, options, onChange, disabled,
 	return (
 		<div
 			className={cn(
-				"flex items-center rounded-[22px] border border-[#F1F5F9] bg-card p-2 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_8px_18px_rgba(15,23,42,0.06)]",
+				"flex items-center gap-2 rounded-full border border-border bg-card p-1 shadow-sm",
 				className,
 			)}
 		>
@@ -19,14 +19,14 @@ export default function SegmentedSelection({ value, options, onChange, disabled,
 						disabled={disabled}
 						onClick={() => onChange(option.value)}
 						className={cn(
-							"flex h-12 min-w-[120px] items-center justify-center gap-2 rounded-[15px] px-5 text-base font-bold transition",
+							"flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition",
 							disabled ? "cursor-not-allowed opacity-60" : "hover:bg-muted",
 							isActive
-								? "bg-[linear-gradient(135deg,#4A5EED_0%,#7B5EED_100%)] text-primary-foreground shadow-[0_8px_18px_rgba(74,94,237,0.28)]"
+								? "bg-primary text-primary-foreground shadow"
 								: "text-muted-foreground",
 						)}
 					>
-						{Icon ? <Icon className="size-5" data-active={isActive} /> : null}
+							{Icon ? <Icon className="size-4" data-active={isActive} /> : null}
 						{option.label}
 					</button>
 				)
