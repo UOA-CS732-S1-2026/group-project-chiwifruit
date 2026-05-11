@@ -1,4 +1,9 @@
 const request = require('supertest');
+jest.mock('../src/socket', () => ({
+  emitRoomUpdate: jest.fn(),
+}));
+
+const { emitRoomUpdate } = require('../src/socket');
 const app = require('../src/app');
 const Room = require('../src/models/Room');
 
@@ -47,12 +52,14 @@ function populatedRoomCopy(room) {
   };
 }
 
-function mockRoomState(roomOrFactory) {
-  Room.findOne.mockReturnValueOnce({
-    populate: jest.fn().mockImplementation(async () => {
-      const room = typeof roomOrFactory === 'function' ? roomOrFactory() : roomOrFactory;
-      return room ? populatedRoomCopy(room) : null;
-    }),
+function mockRoomState(roomOrFactory, times = 1) {
+  Array.from({ length: times }).forEach(() => {
+    Room.findOne.mockReturnValueOnce({
+      populate: jest.fn().mockImplementation(async () => {
+        const room = typeof roomOrFactory === 'function' ? roomOrFactory() : roomOrFactory;
+        return room ? populatedRoomCopy(room) : null;
+      }),
+    });
   });
 }
 
@@ -79,15 +86,45 @@ function buildRoom(overrides = {}) {
   return room;
 }
 
+function countParticipantsByIdentity(participants, identity) {
+  return participants.filter((participant) => {
+    if (identity.isGuest) {
+      return participant.guestId === identity.sub;
+    }
+
+    if (participant.user && typeof participant.user === 'object') {
+      return String(participant.user._id) === String(identity.sub);
+    }
+
+    return String(participant.user) === String(identity.sub);
+  }).length;
+}
+
 describe('Room API', () => {
   const token = 'Bearer test-token';
+  const userIdentity = { sub: 'userId123', isGuest: false };
+  const guestToken = 'Bearer guest-token';
+  const guestIdentity = { sub: 'guest-9', username: 'Guest Nine', isGuest: true };
 
   beforeEach(() => {
-    ['findOne', 'create', 'exists', 'updateOne', 'deleteOne'].forEach((method) => {
+    ['findOne', 'find', 'create', 'exists', 'updateOne', 'deleteOne'].forEach((method) => {
       if (!Room[method]) {
         Room[method] = jest.fn();
       }
       Room[method].mockReset();
+    });
+
+    emitRoomUpdate.mockReset();
+
+    Room.find.mockResolvedValue([]);
+
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockImplementation((value) => {
+      if (value === 'guest-token') {
+        return guestIdentity;
+      }
+
+      return { ...userIdentity, username: 'testuser' };
     });
   });
 
@@ -101,7 +138,7 @@ describe('Room API', () => {
 
       Room.exists.mockResolvedValue(false);
       Room.create.mockResolvedValue(room);
-      mockRoomState(room);
+      mockRoomState(room, 2);
 
       const response = await request(app)
         .post('/api/rooms')
@@ -116,6 +153,40 @@ describe('Room API', () => {
       }));
     });
 
+    it('should broadcast the old room update when creating a new room removes the same user from a previous room', async () => {
+      const previousRoom = buildRoom({
+        _id: 'room-old-create',
+        roomCode: 'OLD333',
+        host: 'userId123',
+        participants: [
+          rawUserParticipant('userId123', 'Host'),
+          guestParticipant('guest-2', 'Guest Two'),
+        ],
+      });
+      const createdRoom = buildRoom({
+        _id: 'room-created',
+        roomCode: 'NEW333',
+        host: 'userId123',
+        participants: [rawUserParticipant('userId123', 'Host')],
+      });
+
+      Room.exists.mockResolvedValue(false);
+      Room.find.mockResolvedValue([previousRoom]);
+      Room.create.mockResolvedValue(createdRoom);
+      mockRoomState(() => previousRoom);
+      mockRoomState(() => createdRoom);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', token)
+        .send({})
+        .expect(201);
+
+      expect(countParticipantsByIdentity(previousRoom.participants, userIdentity)).toBe(0);
+      expect(emitRoomUpdate).toHaveBeenCalledWith(undefined, 'OLD333', expect.objectContaining({ roomCode: 'OLD333' }));
+      expect(emitRoomUpdate).toHaveBeenCalledWith(undefined, 'NEW333', expect.objectContaining({ roomCode: 'NEW333' }));
+    });
+
     it('should join an existing room and add the participant', async () => {
       const roomBeforeSave = buildRoom({
         roomCode: 'XYZ',
@@ -123,7 +194,8 @@ describe('Room API', () => {
       });
 
       Room.findOne.mockResolvedValueOnce(roomBeforeSave);
-      mockRoomState(() => roomBeforeSave);
+      Room.find.mockResolvedValue([]);
+      mockRoomState(() => roomBeforeSave, 2);
 
       const response = await request(app)
         .post('/api/rooms')
@@ -143,7 +215,7 @@ describe('Room API', () => {
       });
 
       Room.findOne.mockResolvedValueOnce(room);
-      mockRoomState(room);
+      mockRoomState(room, 2);
 
       await request(app)
         .post('/api/rooms')
@@ -167,7 +239,7 @@ describe('Room API', () => {
       });
 
       Room.findOne.mockResolvedValueOnce(room);
-      mockRoomState(room);
+      mockRoomState(room, 2);
 
       await request(app)
         .post('/api/rooms')
@@ -177,6 +249,84 @@ describe('Room API', () => {
 
       expect(room.participants).toHaveLength(1);
       expect(room.save).not.toHaveBeenCalled();
+    });
+
+    it('should collapse duplicate entries for the same user when rejoining the same room', async () => {
+      const room = buildRoom({
+        participants: [
+          rawUserParticipant('userId123', 'Host'),
+          rawUserParticipant('userId123', 'Host Duplicate'),
+          guestParticipant('guest-2', 'Guest Two'),
+        ],
+      });
+
+      Room.findOne.mockResolvedValueOnce(room);
+      mockRoomState(room, 2);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', token)
+        .send({ joinRoomCode: 'ABC' })
+        .expect(200);
+
+      expect(countParticipantsByIdentity(room.participants, userIdentity)).toBe(1);
+      expect(room.participants).toHaveLength(2);
+      expect(room.save).toHaveBeenCalled();
+    });
+
+    it('should preserve the current user readiness when only other participants are normalized', async () => {
+      const room = buildRoom({
+        participants: [
+          rawUserParticipant('userId123', 'Host', { isReady: true, correctCount: 3 }),
+          guestParticipant('guest-2', 'Guest Two', { isReady: true }),
+          guestParticipant('guest-2', 'Guest Two Duplicate', { isReady: false }),
+        ],
+      });
+
+      Room.findOne.mockResolvedValueOnce(room);
+      mockRoomState(room, 2);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', token)
+        .send({ joinRoomCode: 'ABC' })
+        .expect(200);
+
+      expect(countParticipantsByIdentity(room.participants, userIdentity)).toBe(1);
+      expect(room.participants).toHaveLength(2);
+      expect(room.participants.find((participant) => String(participant.user) === 'userId123')?.isReady).toBe(true);
+      expect(room.participants.find((participant) => String(participant.user) === 'userId123')?.correctCount).toBe(3);
+      expect(room.save).toHaveBeenCalled();
+    });
+
+    it('should persistently collapse duplicate participants written by concurrent join requests', async () => {
+      const roomBeforeSave = buildRoom({
+        participants: [guestParticipant('guest-2', 'Guest Two')],
+      });
+      const persistedRoom = buildRoom({
+        participants: [
+          guestParticipant('guest-2', 'Guest Two'),
+          rawUserParticipant('userId123', 'Host'),
+          rawUserParticipant('userId123', 'Host Duplicate'),
+        ],
+      });
+
+      Room.findOne
+        .mockResolvedValueOnce(roomBeforeSave)
+        .mockResolvedValueOnce(persistedRoom);
+      Room.find.mockResolvedValue([]);
+      mockRoomState(() => persistedRoom);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', token)
+        .send({ joinRoomCode: 'ABC' })
+        .expect(200);
+
+      expect(roomBeforeSave.save).toHaveBeenCalled();
+      expect(persistedRoom.save).toHaveBeenCalled();
+      expect(countParticipantsByIdentity(persistedRoom.participants, userIdentity)).toBe(1);
+      expect(persistedRoom.participants).toHaveLength(2);
     });
 
     it('should reject joining a full room', async () => {
@@ -205,6 +355,80 @@ describe('Room API', () => {
         .expect(404);
 
       expect(response.body.message).toBe('Room not found');
+    });
+
+    it('should remove the same user from another room before joining the target room', async () => {
+      const previousRoom = buildRoom({
+        _id: 'room-old',
+        roomCode: 'OLD111',
+        host: 'userId123',
+        participants: [
+          rawUserParticipant('userId123', 'Host'),
+          guestParticipant('guest-2', 'Guest Two'),
+        ],
+      });
+      const targetRoom = buildRoom({
+        _id: 'room-new',
+        roomCode: 'NEW111',
+        host: 'guest-2',
+        participants: [guestParticipant('guest-2', 'Guest Two')],
+      });
+
+      Room.findOne.mockResolvedValueOnce(targetRoom);
+      Room.find.mockResolvedValue([previousRoom, targetRoom]);
+      mockRoomState(() => previousRoom);
+      mockRoomState(() => targetRoom, 2);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', token)
+        .send({ joinRoomCode: 'new111' })
+        .expect(200);
+
+      expect(countParticipantsByIdentity(previousRoom.participants, userIdentity)).toBe(0);
+      expect(countParticipantsByIdentity(targetRoom.participants, userIdentity)).toBe(1);
+      expect(previousRoom.host).toBe('guest-2');
+      expect(previousRoom.save).toHaveBeenCalled();
+      expect(targetRoom.save).toHaveBeenCalled();
+      expect(emitRoomUpdate).toHaveBeenCalledWith(undefined, 'OLD111', expect.objectContaining({ roomCode: 'OLD111' }));
+      expect(emitRoomUpdate).toHaveBeenCalledWith(undefined, 'NEW111', expect.objectContaining({ roomCode: 'NEW111' }));
+    });
+
+    it('should remove the same guest from another room before joining the target room without duplicates', async () => {
+      const previousRoom = buildRoom({
+        _id: 'room-old-guest',
+        roomCode: 'OLD222',
+        host: 'guest-9',
+        participants: [
+          guestParticipant('guest-9', 'Guest Nine'),
+          rawUserParticipant('userId123', 'Host'),
+        ],
+      });
+      const targetRoom = buildRoom({
+        _id: 'room-new-guest',
+        roomCode: 'NEW222',
+        host: 'userId123',
+        participants: [rawUserParticipant('userId123', 'Host')],
+      });
+
+      Room.findOne.mockResolvedValueOnce(targetRoom);
+      Room.find.mockResolvedValue([previousRoom, targetRoom]);
+      mockRoomState(() => previousRoom);
+      mockRoomState(() => targetRoom, 2);
+
+      await request(app)
+        .post('/api/rooms')
+        .set('Authorization', guestToken)
+        .send({ joinRoomCode: 'new222' })
+        .expect(200);
+
+      expect(countParticipantsByIdentity(previousRoom.participants, guestIdentity)).toBe(0);
+      expect(countParticipantsByIdentity(targetRoom.participants, guestIdentity)).toBe(1);
+      expect(previousRoom.host).toBe('userId123');
+      expect(previousRoom.save).toHaveBeenCalled();
+      expect(targetRoom.save).toHaveBeenCalled();
+      expect(emitRoomUpdate).toHaveBeenCalledWith(undefined, 'OLD222', expect.objectContaining({ roomCode: 'OLD222' }));
+      expect(emitRoomUpdate).toHaveBeenCalledWith(undefined, 'NEW222', expect.objectContaining({ roomCode: 'NEW222' }));
     });
   });
 
@@ -270,6 +494,28 @@ describe('Room API', () => {
       });
     });
 
+    it('should collapse duplicate participants in returned room state', async () => {
+      const room = buildRoom({
+        participants: [
+          rawUserParticipant('userId123', 'Host', { isReady: false }),
+          rawUserParticipant('userId123', 'Host Duplicate', { isReady: true }),
+          guestParticipant('guest-2', 'Guest Two', { isReady: true }),
+        ],
+      });
+
+      Room.exists.mockResolvedValue(true);
+      mockRoomState(room);
+
+      const response = await request(app)
+        .get('/api/rooms/ABC/ready')
+        .set('Authorization', token)
+        .expect(200);
+
+      expect(response.body.participantCount).toBe(2);
+      expect(response.body.participants).toHaveLength(2);
+      expect(response.body.participants.filter((participant) => String(participant.userId) === 'userId123')).toHaveLength(1);
+    });
+
     it('should return 404 when reading readiness for missing room', async () => {
       Room.exists.mockResolvedValue(false);
 
@@ -322,7 +568,7 @@ describe('Room API', () => {
         .send({ mode: 'bird' })
         .expect(200);
 
-      expect(room.mode).toBe('bird');
+      expect(room.mode).toBe('kiwi');
       expect(room.participants[0].isReady).toBe(false);
     });
   });
@@ -472,6 +718,28 @@ describe('Room API', () => {
         .expect(403);
 
       expect(response.body.message).toBe('Join the room first before leaving');
+    });
+
+    it('should remove all duplicate entries for the same user when leaving room', async () => {
+      const room = buildRoom({
+        participants: [
+          rawUserParticipant('userId123', 'Host'),
+          rawUserParticipant('userId123', 'Host Duplicate'),
+          guestParticipant('guest-2', 'Guest Two'),
+        ],
+      });
+
+      Room.findOne.mockResolvedValueOnce(room);
+      mockRoomState(room);
+
+      const response = await request(app)
+        .delete('/api/rooms/ABC')
+        .set('Authorization', token)
+        .expect(200);
+
+      expect(countParticipantsByIdentity(room.participants, userIdentity)).toBe(0);
+      expect(room.participants).toHaveLength(1);
+      expect(response.body).toMatchObject({ message: 'Left room', roomCode: 'ABC', hostId: 'guest-2' });
     });
   });
 });

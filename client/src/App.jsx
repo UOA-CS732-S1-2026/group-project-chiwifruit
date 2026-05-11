@@ -1,15 +1,56 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
 import GamePage from './pages/GamePage'
 import LandingPage from './pages/LandingPage'
 import RoomPage from './pages/RoomPage'
 import useGlobalButtonClickSound from './hooks/useGlobalButtonClickSound'
+import { getStoredAuthToken } from './api/axios'
+import { leaveRoomKeepalive } from './api/rooms'
 
 // NOTE (2026-04-29): App 级别只做“全局能力”挂载（如按钮点击音效）与路由定义。
 // 具体的房间/游戏同步逻辑在各自页面内处理，避免跨页面副作用。
 
+function getRoomCodeFromPath(pathname) {
+  const match = /^\/room\/([^/]+)$/i.exec(String(pathname ?? ''));
+  return match?.[1] ? String(match[1]).trim().toUpperCase() : '';
+}
+
+function isGamePathForRoom(pathname, roomCode) {
+  if (!roomCode) return false;
+  return String(pathname ?? '').toUpperCase() === `/GAME/${roomCode}`;
+}
+
 function App() {
   // Global click sound for all buttons across the app.
 	useGlobalButtonClickSound()
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const previousPathRef = useRef(location.pathname)
+  const backLeaveInFlightRef = useRef(false)
+
+  useEffect(() => {
+    const previousPath = previousPathRef.current
+    const nextPath = location.pathname
+    const previousRoomCode = getRoomCodeFromPath(previousPath)
+
+    if (
+      navigationType === 'POP' &&
+      previousRoomCode &&
+      previousPath !== nextPath &&
+      !isGamePathForRoom(nextPath, previousRoomCode) &&
+      !backLeaveInFlightRef.current
+    ) {
+      const token = getStoredAuthToken()
+      if (token) {
+        backLeaveInFlightRef.current = true
+        void leaveRoomKeepalive(previousRoomCode, token).finally(() => {
+          backLeaveInFlightRef.current = false
+        })
+      }
+    }
+
+    previousPathRef.current = nextPath
+  }, [location.pathname, navigationType])
 
   return (
     <Routes>

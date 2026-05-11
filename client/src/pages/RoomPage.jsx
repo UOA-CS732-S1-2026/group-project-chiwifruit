@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+<<<<<<< audio-update
 import {
 	Check,
 	CircleDot,
@@ -13,6 +14,9 @@ import {
 	Users,
 	Zap,
 } from "lucide-react"
+=======
+import { Check, CircleDot, Copy, Flame, LogOut, Music, Users, Zap } from "lucide-react"
+>>>>>>> ui_integration
 
 import Background from "../components/Common/Background"
 import BrandLockup from "../components/Common/BrandLockup"
@@ -21,7 +25,9 @@ import RoomPill from "../components/Room/RoomPill"
 import RoomSectionLabel from "../components/Room/RoomSectionLabel"
 import SegmentedSelection from "../components/Room/SegmentedSelection"
 import PlayerSlotCard from "../components/Room/PlayerSlotCard"
+import WaitingRoomActionBar from "../components/Room/WaitingRoomActionBar"
 import { Button } from "../components/ui/button"
+import ErrorToast from "../components/ui/ErrorToast"
 import SoundToggleButton from "../components/ui/SoundToggleButton"
 import { useRoomSocketUpdates } from "../hooks/useSocketListeners"
 import {
@@ -33,11 +39,12 @@ import {
 } from "../hooks/mutations/useRoomMutations"
 import { useRoomQuery } from "../hooks/queries/useRoomQuery"
 import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../api/axios"
+import { WAITING_ROOM_STICKERS } from "../components/Common/floatingStickerConfigs"
 
 import birdIcon from "../assets/icons/bird.svg"
 import kangarooIcon from "../assets/icons/kangaroo.svg"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
-import { emitGameRequestState, emitGameStart, joinSocketRoom, leaveSocketRoom, reconnectSocket } from "../socket/socket"
+import { emitGameRequestState, emitGameStart, joinSocketRoom, reconnectSocket } from "../socket/socket"
 
 // NOTE (2026-04-29): The waiting room relies on two systems:
 // - REST: join/leave room, ready/mode/difficulty — room participants and configuration
@@ -93,6 +100,7 @@ export default function RoomPage() {
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
 	const copyResetTimerRef = useRef(null)
+	const pageLeaveSentRef = useRef(false)
 
 	useEffect(() => {
 		startedSetupRef.current = false
@@ -126,14 +134,14 @@ export default function RoomPage() {
 
 		if (!requestedJoinCode) {
 			setSetupError("Missing room code. Please go back and join/create from landing page.")
-			navigate("/", { replace: true })
+			navigate("/")
 			return
 		}
 
 		const token = getStoredAuthToken()
 		if (!token) {
 			setSetupError("Missing session. Please join from the home page.")
-			navigate("/", { replace: true })
+			navigate("/")
 			return
 		}
 
@@ -188,6 +196,21 @@ export default function RoomPage() {
 		(player) => Boolean(identity?.sub) && String(player.id) === identity.sub,
 	)
 	const currentUserReady = Boolean(currentUserPlayer?.isReady)
+	const activeRoomCode = String(roomCode || requestedJoinCode || "").trim().toUpperCase()
+
+	const leaveRoomAndReturnHome = useCallback(() => {
+		if (!activeRoomCode) {
+			navigate("/")
+			return
+		}
+
+		leaveRoomMutation.mutate(activeRoomCode, {
+			onSuccess: () => {
+				pageLeaveSentRef.current = true
+				navigate("/")
+			},
+		})
+	}, [activeRoomCode, leaveRoomMutation, navigate])
 
 	const handleStartGame = () => {
 		if (!isHost) return
@@ -204,7 +227,7 @@ export default function RoomPage() {
 				return
 			}
 
-			navigate(`/game/${roomCode}`, { state: { difficulty, soundMode: mode, roomCode } })
+				navigate(`/game/${roomCode}`, { replace: true, state: { difficulty, soundMode: mode, roomCode } })
 		})
 	}
 
@@ -265,6 +288,10 @@ export default function RoomPage() {
 	}, [roomCode])
 
 	useEffect(() => {
+		pageLeaveSentRef.current = false
+	}, [activeRoomCode])
+
+	useEffect(() => {
 		if (!roomCode) return
 		const socket = reconnectSocket()
 
@@ -289,7 +316,7 @@ export default function RoomPage() {
 
 			if (hasNavigatedToGameRef.current) return
 			hasNavigatedToGameRef.current = true
-			navigate(`/game/${roomCode}`)
+			navigate(`/game/${roomCode}`, { replace: true })
 		}
 
 		const requestStateOnce = () => {
@@ -319,7 +346,8 @@ export default function RoomPage() {
 	}, [identity?.sub, navigate, roomCode])
 
 	return (
-		<Background>
+		<Background stickers={WAITING_ROOM_STICKERS}>
+			<ErrorToast message={errorMessage} onDismiss={() => setSetupError("")} />
 			<div className="min-h-screen">
 				<header className="flex items-center justify-between px-8 py-5">
 					<BrandLockup />
@@ -328,20 +356,7 @@ export default function RoomPage() {
 						<LoginButton avatarUrl={avatarUrl} label={loginLabel} />
 						<Button
 							type="button"
-							onClick={() => {
-								if (!roomCode) {
-									navigate("/")
-									return
-								}
-								// NOTE (2026-04-29): First call REST leaveRoom() to remove the player from participants and broadcast room_update;
-								// then emit socket leave_room (which has the game-side meaning of "leave the match").
-								leaveRoomMutation.mutate(roomCode, {
-									onSuccess: () => {
-										leaveSocketRoom(roomCode)
-										navigate("/")
-									},
-								})
-							}}
+							onClick={leaveRoomAndReturnHome}
 							variant="outline"
 							className="rounded-full bg-card px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm hover:bg-muted"
 						>
@@ -351,7 +366,7 @@ export default function RoomPage() {
 					</div>
 				</header>
 
-				<main className="mx-auto max-w-6xl px-6 pb-12">
+				<main className="mx-auto max-w-6xl px-6 pb-28">
 					<h1 className="text-center text-4xl font-bold text-foreground md:text-5xl">Waiting Room</h1>
 
 					{isSettingUpRoom || isRoomLoading ? (
@@ -360,7 +375,6 @@ export default function RoomPage() {
 
 					{errorMessage ? (
 						<div className="mt-4 text-center">
-							<p className="text-sm font-semibold text-destructive">{errorMessage}</p>
 							<Button
 								type="button"
 								variant="outline"
@@ -459,43 +473,19 @@ export default function RoomPage() {
 						))}
 					</div>
 
-					<div className="mt-10 flex justify-center">
-						{isHost ? (
-							<Button
-								type="button"
-								onClick={handleStartGame}
-								disabled={!canStartGame || isStartingGame}
-								className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"
-							>
-								<Play className="size-4 fill-current" />
-								{isStartingGame ? "Starting..." : "Start Game"}
-							</Button>
-						) : (
-							<Button
-								type="button"
-								onClick={handleReady}
-								disabled={setReadyMutation.isPending}
-								variant={currentUserReady ? "default" : "outline"}
-								className={
-									currentUserReady
-										? "h-12 rounded-full px-12 text-base font-semibold ready-gradient-theme ready-shadow-theme"
-										: "h-12 rounded-full px-12 text-base font-semibold shadow-lg"
-								}
-							>
-								{currentUserReady ? (
-									<>
-										<Check className="size-4" />
-										Ready!
-									</>
-								) : (
-									"Click to Ready"
-								)}
-							</Button>
-						)}
-					</div>
 					</>
 				) : null}
 				</main>
+				{shouldShowRoomContent ? (
+					<WaitingRoomActionBar
+						isHost={isHost}
+						canStartGame={canStartGame && !isStartingGame}
+						currentUserReady={currentUserReady}
+						isReadyPending={setReadyMutation.isPending}
+						onStartGame={handleStartGame}
+						onReady={handleReady}
+					/>
+				) : null}
 			</div>
 		</Background>
 	)

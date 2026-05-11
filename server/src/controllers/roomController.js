@@ -3,7 +3,15 @@ const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
 const { getGame } = require('../services/gameService');
 const { buildAvatarUrl } = require('./authController');
-const { removeParticipantFromRoom, getRoomState, getParticipantSelector, MAX_ROOM_PARTICIPANTS } = require('../services/roomStateService');
+const {
+  removeParticipantFromRoom,
+  getRoomState,
+  getParticipantSelector,
+  normalizeRoomParticipants,
+  normalizePersistedRoomParticipants,
+  ensureSingleRoomMembership,
+  MAX_ROOM_PARTICIPANTS
+} = require('../services/roomStateService');
 
 function createParticipant(identity) {
   if (identity.isGuest) {
@@ -22,32 +30,32 @@ function createParticipant(identity) {
   };
 }
 
+function emitCleanedRoomUpdates(io, cleanedRooms = []) {
+  cleanedRooms.forEach(({ roomCode, roomState }) => {
+    emitRoomUpdate(io, roomCode, roomState ?? null);
+  });
+}
+
 function buildRanking(room, gamePlayers = null) {
   if (gamePlayers) {
-    // Use game players for fair ranking
-    const sortedByScore = [...gamePlayers].sort((a, b) => b.score - a.score);
-    const rankMap = new Map();
-    sortedByScore.forEach((player, index) => {
-      rankMap.set(player.userId, index + 1);
-    });
-
-    return gamePlayers.map((player) => {
-      const rank = rankMap.get(player.userId);
-      const roundScore = player.score * 5;
-      const failureBonus = Math.max(0, Number(player.failureLength || 0) - 1);
-      const totalScore = roundScore + failureBonus;
-
-      return {
+    const sortedByScore = [...gamePlayers]
+      .map((player) => ({
         userId: player.userId,
         username: player.username,
         isGuest: player.isGuest,
-        correctCount: totalScore,
         avatarUrl: player.avatarUrl,
-        rank,
-        totalScore,
-      };
-    }).sort((a, b) => b.totalScore - a.totalScore).map((entry, index) => ({
+        totalScore: Number(player.score || 0),
+        initialOrder: Number(player.initialOrder || 0),
+      }))
+      .sort((a, b) => {
+        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+        if (b.initialOrder !== a.initialOrder) return b.initialOrder - a.initialOrder;
+        return String(a.userId || '').localeCompare(String(b.userId || ''));
+      });
+
+    return sortedByScore.map(({ initialOrder, ...entry }, index) => ({
       ...entry,
+      correctCount: entry.totalScore,
       rank: index + 1,
     }));
   }
@@ -90,45 +98,80 @@ async function generateUniqueRoomCode() {
 async function createRoom(req, res) {
   const identity = req.user;
   const { joinRoomCode } = req.body;
+  const io = req.app.get('io');
 
   if (joinRoomCode) {
     const room = await Room.findOne({ roomCode: joinRoomCode.toUpperCase() });
+    let didPersistJoin = false;
 
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    const alreadyJoined = room.participants.some(getParticipantSelector(identity));
+    const roomNormalized = normalizeRoomParticipants(room);
+
+    const participantSelector = getParticipantSelector(identity);
+    const matchingParticipants = room.participants.filter(participantSelector);
+    const alreadyJoined = matchingParticipants.length > 0;
+    const normalizedParticipants = room.participants.filter((participant) => !participantSelector(participant));
+    const currentUserNeedsNormalization = matchingParticipants.length !== 1;
 
     if (!alreadyJoined) {
-      if (room.participants.length >= MAX_ROOM_PARTICIPANTS) {
+      if (normalizedParticipants.length >= MAX_ROOM_PARTICIPANTS) {
         return res.status(409).json({
           message: `Room is full. Maximum ${MAX_ROOM_PARTICIPANTS} participants are allowed`
         });
       }
 
+      const { cleanedRooms } = await ensureSingleRoomMembership({ identity, targetRoomCode: room.roomCode });
+      room.participants = normalizedParticipants;
       room.participants.push(createParticipant(identity));
       await room.save();
+      didPersistJoin = true;
+
+      emitCleanedRoomUpdates(io, cleanedRooms);
+    } else if (currentUserNeedsNormalization) {
+      const freshParticipant = createParticipant(identity);
+      const participantToKeep = matchingParticipants.find((participant) => participant.isReady) || matchingParticipants[0];
+
+      room.participants = normalizedParticipants;
+      room.participants.push({
+        ...freshParticipant,
+        isReady: participantToKeep?.isReady ?? freshParticipant.isReady,
+        correctCount: participantToKeep?.correctCount ?? freshParticipant.correctCount,
+      });
+      await room.save();
+      didPersistJoin = true;
+    } else if (roomNormalized) {
+      await room.save();
+      didPersistJoin = true;
+    }
+
+    if (didPersistJoin) {
+      await normalizePersistedRoomParticipants(room.roomCode, room);
     }
 
     const roomState = await getRoomState(room.roomCode);
     if (roomState) {
-      emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+      emitRoomUpdate(io, room.roomCode, roomState);
     }
 
     return res.json({ message: 'Joined room', roomCode: room.roomCode, roomId: room._id });
   }
 
   const roomCode = await generateUniqueRoomCode();
+  const { cleanedRooms } = await ensureSingleRoomMembership({ identity });
   const room = await Room.create({
     roomCode,
     host: identity.sub,
     participants: [createParticipant(identity)]
   });
 
+  emitCleanedRoomUpdates(io, cleanedRooms);
+
   const roomState = await getRoomState(room.roomCode);
   if (roomState) {
-    emitRoomUpdate(req.app.get('io'), room.roomCode, roomState);
+    emitRoomUpdate(io, room.roomCode, roomState);
   }
 
   return res.status(201).json({ message: 'Room created', roomCode: roomCode, roomId: room._id });
