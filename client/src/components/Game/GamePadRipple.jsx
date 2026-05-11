@@ -3,13 +3,15 @@ import { motion } from "framer-motion"
 
 const MotionSpan = motion.span
 
-const RIPPLE_LIFETIME_MS = 720
-
 const rippleRings = [
 	{ delay: 0, duration: 0.52, sizeClassName: "h-[92%] w-[92%]", peakOpacity: 0.78, borderWidth: 2 },
 	{ delay: 0.08, duration: 0.6, sizeClassName: "h-[118%] w-[118%]", peakOpacity: 0.56, borderWidth: 2 },
 	{ delay: 0.16, duration: 0.68, sizeClassName: "h-[146%] w-[146%]", peakOpacity: 0.36, borderWidth: 1.5 },
 ]
+
+const RIPPLE_LIFETIME_MS = Math.ceil(
+	Math.max(0.62, ...rippleRings.map((ring) => ring.delay + ring.duration)) * 1000 + 60,
+)
 
 export default function GamePadRipple({ active = false }) {
 	const [pulseIds, setPulseIds] = React.useState([])
