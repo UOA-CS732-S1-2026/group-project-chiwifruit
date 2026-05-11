@@ -11,13 +11,103 @@ This repository contains:
 - An Express + MongoDB backend in [server](server)
 - A birdcall metadata CSV used as reference data at the repository root
 
+## Architecture Overview
+
+The project follows a **modular monorepo** architecture with clear separation between presentation, API, domain logic, and infrastructure concerns:
+
+- **Frontend (`client/`)**: React + Vite SPA focused on UI state, routing, and websocket/API integration.
+- **Backend (`server/`)**: Express REST API + Socket-based real-time game coordination.
+- **Database**: MongoDB Atlas for cloud persistence of users, rooms, and game-related entities (local MongoDB is used for local development).
+- **Deployment target**: Backend service is deployed on AWS EC2.
+- **CI/CD**: GitHub Actions validates code quality and build health before merge/deploy.
+- **Shared contract by convention**: frontend calls backend endpoints under `/api` and listens to socket events exposed by the server.
+
+### High-level Runtime View
+
+```text
+Browser (React/Vite)
+   |
+   | HTTP (REST) + WebSocket
+   v
+Express API + Realtime Gateway (Socket helpers)
+   |
+   | service/repository calls
+   v
+MongoDB
+```
+
+### Delivery & Deployment Architecture
+
+```text
+GitHub PR/Push
+   |
+   | GitHub Actions (lint/build/test/smoke/docker-build)
+   v
+Protected branch (dev/main)
+   |
+   | deployment pipeline/release step
+   v
+AWS EC2 (Express backend runtime)
+   |
+   | MONGODB_URI (Atlas connection string)
+   v
+MongoDB Atlas
+```
+
+- **CI/CD guardrails**: PRs to `dev`/`main` run validation jobs to reduce regression risk before integration.
+- **Runtime hosting**: EC2 is used as the backend compute host for the Express + realtime server.
+- **Managed data layer**: MongoDB Atlas provides managed cloud database capabilities for production data.
+- **Environment split**: local development can use local MongoDB; deployed environment points to Atlas via environment variables.
+
+### Backend Layering (Architectural Intent)
+
+To keep the codebase clean and maintainable, backend code is organized with layered responsibilities:
+
+- **Routes/Controllers**: request parsing, validation handoff, response shaping.
+- **Services (domain logic)**: core game rules (turn progression, elimination, timeout, forfeit), token logic, and business workflows.
+- **Data access/models**: MongoDB schema/model interactions.
+- **Infrastructure utilities**: auth/token helpers, socket helpers, environment and integration glue.
+
+This separation supports easier unit testing and reduces coupling between transport (HTTP/socket) and domain rules.
+
+### Frontend Responsibilities
+
+The frontend is intentionally kept as a client of backend contracts:
+
+- Handles user interaction, room/game UI state, and realtime event rendering.
+- Delegates authority for game-rule decisions to backend services (server is source of truth).
+- Uses environment-based configuration for API/socket endpoints for local vs container workflows.
+
+### Architectural Decisions and Best-practice Rationale
+
+1. **Monorepo with npm workspaces**
+   - One repository for coordinated frontend/backend evolution.
+   - Root scripts reduce onboarding friction and make CI command execution consistent.
+
+2. **Backend as authoritative game engine**
+   - Prevents divergent client-side rule implementations.
+   - Improves fairness and consistency for multiplayer scenarios.
+
+3. **REST + realtime split**
+   - REST endpoints for CRUD/auth/room lifecycle operations.
+   - Socket flows for latency-sensitive multiplayer state updates.
+
+4. **Test strategy aligned to architecture**
+   - API contract tests validate route behavior.
+   - Service tests validate deterministic game logic.
+   - Focused helper tests cover realtime utilities without over-coupled integration suites.
+
+5. **CI gate on quality signals**
+   - Lint/build/test/smoke + image build verification protect `dev` and `main` from regressions.
+
 ## Project Structure
 
 ```text
 group-project-chiwifruit/
 ├── client/                  # React frontend
 ├── server/                  # Node/Express backend
-├── birdscall_data - Sheet1.csv
+├── Dockerfile
+├── package.json
 └── README.md
 ```
 
