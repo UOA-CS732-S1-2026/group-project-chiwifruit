@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Check, CircleDot, Copy, Flame, LogOut, Music, Play, Users, Zap } from "lucide-react"
+import { Check, CircleDot, Copy, Flame, LogOut, Music, Users, Zap } from "lucide-react"
 
 import Background from "../components/Common/Background"
 import BrandLockup from "../components/Common/BrandLockup"
@@ -9,7 +9,9 @@ import RoomPill from "../components/Room/RoomPill"
 import RoomSectionLabel from "../components/Room/RoomSectionLabel"
 import SegmentedSelection from "../components/Room/SegmentedSelection"
 import PlayerSlotCard from "../components/Room/PlayerSlotCard"
+import WaitingRoomActionBar from "../components/Room/WaitingRoomActionBar"
 import { Button } from "../components/ui/button"
+import ErrorToast from "../components/ui/ErrorToast"
 import SoundToggleButton from "../components/ui/SoundToggleButton"
 import { useRoomSocketUpdates } from "../hooks/useSocketListeners"
 import {
@@ -311,6 +313,7 @@ export default function RoomPage() {
 
 	return (
 		<Background stickers={WAITING_ROOM_STICKERS}>
+			<ErrorToast message={errorMessage} onDismiss={() => setSetupError("")} />
 			<div className="min-h-screen">
 				<header className="flex items-center justify-between px-8 py-5">
 					<BrandLockup />
@@ -329,7 +332,7 @@ export default function RoomPage() {
 					</div>
 				</header>
 
-				<main className="mx-auto max-w-6xl px-6 pb-12">
+				<main className="mx-auto max-w-6xl px-6 pb-28">
 					<h1 className="text-center text-4xl font-bold text-foreground md:text-5xl">Waiting Room</h1>
 
 					{isSettingUpRoom || isRoomLoading ? (
@@ -338,7 +341,6 @@ export default function RoomPage() {
 
 					{errorMessage ? (
 						<div className="mt-4 text-center">
-							<p className="text-sm font-semibold text-destructive">{errorMessage}</p>
 							<Button
 								type="button"
 								variant="outline"
@@ -434,43 +436,19 @@ export default function RoomPage() {
 						))}
 					</div>
 
-					<div className="mt-10 flex justify-center">
-						{isHost ? (
-							<Button
-								type="button"
-								onClick={handleStartGame}
-								disabled={!canStartGame || isStartingGame}
-								className="h-12 rounded-full px-12 text-base font-semibold shadow-lg"
-							>
-								<Play className="size-4 fill-current" />
-								{isStartingGame ? "Starting..." : "Start Game"}
-							</Button>
-						) : (
-							<Button
-								type="button"
-								onClick={handleReady}
-								disabled={setReadyMutation.isPending}
-								variant={currentUserReady ? "default" : "outline"}
-								className={
-									currentUserReady
-										? "h-12 rounded-full px-12 text-base font-semibold ready-gradient-theme ready-shadow-theme"
-										: "h-12 rounded-full px-12 text-base font-semibold shadow-lg"
-								}
-							>
-								{currentUserReady ? (
-									<>
-										<Check className="size-4" />
-										Ready!
-									</>
-								) : (
-									"Click to Ready"
-								)}
-							</Button>
-						)}
-					</div>
 					</>
 				) : null}
 				</main>
+				{shouldShowRoomContent ? (
+					<WaitingRoomActionBar
+						isHost={isHost}
+						canStartGame={canStartGame && !isStartingGame}
+						currentUserReady={currentUserReady}
+						isReadyPending={setReadyMutation.isPending}
+						onStartGame={handleStartGame}
+						onReady={handleReady}
+					/>
+				) : null}
 			</div>
 		</Background>
 	)

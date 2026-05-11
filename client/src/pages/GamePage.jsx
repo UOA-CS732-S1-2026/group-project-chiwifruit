@@ -8,11 +8,12 @@ import { BACKGROUND_STICKERS } from "../components/Common/floatingStickerConfigs
 import ExitGameModal from "../components/Game/ExitGameModal"
 import GamePlayerCard from "../components/Game/GamePlayerCard"
 import GameResultsModal from "../components/Game/GameResultsModal"
-import GameToast from "../components/Game/GameToast"
+import GameStatusBroadcast from "../components/Game/GameStatusBroadcast"
 import GameWheel from "../components/Game/GameWheel"
 import YoureOutModal from "../components/Game/YoureOutModal"
 import LoginButton from "../components/AuthComponent/LoginButton"
 import { Button } from "../components/ui/button"
+import ErrorToast from "../components/ui/ErrorToast"
 import { getStoredAuthUser } from "../api/axios"
 import { leaveRoom } from "../api/rooms"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
@@ -244,33 +245,15 @@ export default function GamePage() {
 	const [inputCount, setInputCount] = React.useState(0)
 	const requiredInputCount = Math.max(1, sequence.length + 1)
 
-	const [toastMessage, setToastMessage] = React.useState("Familiarize yourself with the notes!")
-	React.useEffect(() => {
-		if (!socketError) return
-		setToastMessage(socketError)
-	}, [socketError])
-
-	React.useEffect(() => {
-		if (!isSocketDriven) return
-		if (phase === PHASE.FAMILIARIZE_AUTO || phase === PHASE.FAMILIARIZE_FREE) {
-			setToastMessage("Familiarize yourself with the notes!")
-			return
-		}
-		if (phase === PHASE.FAMILIARIZE_WAITING) {
-			setToastMessage("Waiting for other players to get ready...")
-			return
-		}
-		if (phase === PHASE.PLAYING) {
-			setToastMessage("Game started! Follow the sequence.")
-		}
-	}, [isSocketDriven, phase])
-
 	const [currentTurnIndex, setCurrentTurnIndex] = React.useState(0)
 	const [turnSeconds, setTurnSeconds] = React.useState(20)
 	const [isExitModalOpen, setIsExitModalOpen] = React.useState(false)
 	const [isOutModalOpen, setIsOutModalOpen] = React.useState(false)
 	const [isResultsModalOpen, setIsResultsModalOpen] = React.useState(false)
 	const [isSpectating, setIsSpectating] = React.useState(false)
+	const [broadcastEvent, setBroadcastEvent] = React.useState(null)
+	const lastBroadcastEventKeyRef = React.useRef(null)
+	const broadcastClearTimeoutRef = React.useRef(null)
 	const rankingQuery = useRankingQuery(roomCode, isResultsModalOpen)
 	const displayRanking = React.useMemo(() => {
 		const ranking = Array.isArray(rankingQuery.data?.ranking) ? rankingQuery.data.ranking : []
@@ -284,6 +267,14 @@ export default function GamePage() {
 			}
 		})
 	}, [currentUserId, rankingQuery.data?.ranking])
+
+	React.useEffect(() => {
+		return () => {
+			if (broadcastClearTimeoutRef.current) {
+				window.clearTimeout(broadcastClearTimeoutRef.current)
+			}
+		}
+	}, [])
 
 	React.useEffect(() => {
 		if (!socketGame) return
@@ -384,6 +375,10 @@ export default function GamePage() {
 					score: Number(player.score ?? 0) || 0,
 					isEliminated: Boolean(player.isEliminated),
 					leftDuringGame: Boolean(player.leftDuringGame),
+					status:
+						Boolean(player.isEliminated) || Boolean(player.leftDuringGame)
+							? "ELIMINATED"
+							: "WAITING",
 				}
 			})
 			.filter(Boolean)
@@ -403,7 +398,6 @@ export default function GamePage() {
 		setPhase(PHASE.FAMILIARIZE_AUTO)
 		setAutoPlayIndex(0)
 		setFreePlaySeconds(20)
-		setToastMessage("Familiarize yourself with the notes!")
 		setCurrentTurnIndex(0)
 		setTurnSeconds(20)
 		setIsExitModalOpen(false)
@@ -426,7 +420,6 @@ export default function GamePage() {
 
 		setIsSpectating(true)
 		setIsOutModalOpen(true)
-		setToastMessage("You're out! You can keep spectating.")
 	}, [currentTurnIndex, isOutModalOpen, isSpectating, phase, socketGame?.status, turnSeconds])
 
 	const isFamiliarize =
@@ -581,16 +574,71 @@ export default function GamePage() {
 
 	const leftPlayers = players.filter((p) => p.side === "left")
 	const rightPlayers = players.filter((p) => p.side === "right")
+	const playerNameById = React.useMemo(
+		() => new Map(players.map((player) => [String(player.id), player.name])),
+		[players],
+	)
+	const isMyTurn =
+		phase === PHASE.PLAYING &&
+		Boolean(currentUserId) &&
+		String(players[currentTurnIndex]?.id ?? "") === String(currentUserId)
 
 	const showAddNote = inputCount >= sequence.length
+
+	React.useEffect(() => {
+		if (phase !== PHASE.PLAYING) {
+			setBroadcastEvent(null)
+			return
+		}
+
+		const event = socketGame?.lastEvent
+		const eventKey = event
+			? `${event.type}:${event.at ?? ""}:${event.userId ?? ""}:${event.reason ?? ""}`
+			: null
+
+		if (!eventKey || eventKey === lastBroadcastEventKeyRef.current) return
+		lastBroadcastEventKeyRef.current = eventKey
+
+		if (broadcastClearTimeoutRef.current) {
+			window.clearTimeout(broadcastClearTimeoutRef.current)
+			broadcastClearTimeoutRef.current = null
+		}
+
+		const actorUserId = event?.userId ? String(event.userId) : null
+		const actorName = actorUserId ? playerNameById.get(actorUserId) ?? "Player" : null
+
+		if (event?.type === "player_eliminated") {
+			setBroadcastEvent({
+				status: actorUserId && currentUserId && actorUserId === String(currentUserId) ? "out-self" : "out-other",
+				actorName,
+				reason: event.reason ?? null,
+			})
+			broadcastClearTimeoutRef.current = window.setTimeout(() => {
+				setBroadcastEvent(null)
+				broadcastClearTimeoutRef.current = null
+			}, 2200)
+			return
+		}
+
+		if (event?.type === "note_added") {
+			setBroadcastEvent({ status: "turn-over", actorName, reason: null })
+			broadcastClearTimeoutRef.current = window.setTimeout(() => {
+				setBroadcastEvent(null)
+				broadcastClearTimeoutRef.current = null
+			}, 1800)
+			return
+		}
+
+		setBroadcastEvent(null)
+	}, [currentUserId, phase, playerNameById, socketGame?.lastEvent])
 
 	if (!socketGame) {
 		return (
 			<Background>
+				<ErrorToast message={gameLoadError} onDismiss={() => setGameLoadError("")} />
 				<div className="flex min-h-screen items-center justify-center px-6 text-center">
 					{gameLoadError && !isGameLoading ? (
 						<div>
-							<p className="text-sm font-semibold text-destructive">{gameLoadError}</p>
 							<Button
 								type="button"
 								variant="outline"
@@ -610,6 +658,13 @@ export default function GamePage() {
 
 	return (
 		<Background stickers={BACKGROUND_STICKERS}>
+			<ErrorToast
+				message={socketError || gameLoadError}
+				onDismiss={() => {
+					setSocketError("")
+					setGameLoadError("")
+				}}
+			/>
 			<ExitGameModal
 				open={isExitModalOpen}
 				onCancel={() => setIsExitModalOpen(false)}
@@ -742,7 +797,7 @@ export default function GamePage() {
 									name={player.name}
 									avatarUrl={player.avatarUrl}
 									score={player.score}
-									status="WAITING"
+									status={player.status}
 									isCurrentTurn={isCurrentTurn}
 									turnSeconds={isCurrentTurn ? turnSeconds : undefined}
 								/>
@@ -777,7 +832,7 @@ export default function GamePage() {
 									name={player.name}
 									avatarUrl={player.avatarUrl}
 									score={player.score}
-									status="WAITING"
+									status={player.status}
 									isCurrentTurn={isCurrentTurn}
 									turnSeconds={isCurrentTurn ? turnSeconds : undefined}
 								/>
@@ -786,7 +841,19 @@ export default function GamePage() {
 					</div>
 				</div>
 
-				<GameToast message={toastMessage} className="mt-8" />
+				<GameStatusBroadcast
+					phase={phase}
+					players={players}
+					currentTurnIndex={currentTurnIndex}
+					inputCount={inputCount}
+					sequenceLength={sequence.length}
+					isMyTurn={isMyTurn}
+					status={broadcastEvent?.status}
+					actorName={broadcastEvent?.actorName}
+					reason={broadcastEvent?.reason}
+					currentUserName={currentGamePlayer?.username}
+					className="mt-8"
+				/>
 			</div>
 		</Background>
 	)

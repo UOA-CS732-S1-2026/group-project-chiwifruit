@@ -3,6 +3,7 @@ import bigLogo from "../assets/branding/biglogo.png"
 import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
+import ErrorToast from "../components/ui/ErrorToast"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
 import { useState } from "react"
 import AuthModal from "../components/AuthComponent/AuthModal"
@@ -59,6 +60,7 @@ export default function LandingPage() {
 
 	return (
 	  <>
+		<ErrorToast message={actionError} onDismiss={clearActionError} />
         <AuthModal open={showAuthModal} onClose={() => setShowAuthModal(false)} />
 		<Background stickers={HOME_STICKERS}>
 
@@ -132,9 +134,6 @@ export default function LandingPage() {
 							</Button>
 						</div>
 
-						{actionError ? (
-							<p className="text-sm font-medium text-destructive">{actionError}</p>
-						) : null}
 					</div>
 
 					<div className="relative flex items-center justify-center lg:justify-end lg:pr-2">
