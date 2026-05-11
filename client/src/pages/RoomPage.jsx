@@ -21,6 +21,7 @@ import {
 } from "../hooks/mutations/useRoomMutations"
 import { useRoomQuery } from "../hooks/queries/useRoomQuery"
 import { getApiErrorMessage, getStoredAuthToken, getStoredAuthUser } from "../api/axios"
+import { WAITING_ROOM_STICKERS } from "../components/Common/floatingStickerConfigs"
 
 import birdIcon from "../assets/icons/bird.svg"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
@@ -309,7 +310,7 @@ export default function RoomPage() {
 	}, [identity?.sub, navigate, roomCode])
 
 	return (
-		<Background>
+		<Background stickers={WAITING_ROOM_STICKERS}>
 			<div className="min-h-screen">
 				<header className="flex items-center justify-between px-8 py-5">
 					<BrandLockup />

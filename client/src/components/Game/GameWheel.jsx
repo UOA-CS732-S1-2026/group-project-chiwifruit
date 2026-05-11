@@ -43,7 +43,9 @@ export default function GameWheel({
 							"--pad-glow": pad.glow,
 						}}
 					>
-						<GamePadRipple active={activePadIndex === index} />
+						<span className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[3.75rem] w-[3.75rem] -translate-x-1/2 -translate-y-1/2 overflow-visible">
+							<GamePadRipple active={activePadIndex === index} />
+						</span>
 
 						<button
 							type="button"
