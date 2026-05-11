@@ -314,6 +314,15 @@ export default function GamePage() {
 	}, [currentUserId, rankingQuery.data?.ranking, roomStateQuery.data?.participants])
 
 	React.useEffect(() => {
+		if (isResultsModalOpen) return
+		resultsRejoinAttemptRef.current = null
+	}, [isResultsModalOpen])
+
+	React.useEffect(() => {
+		resultsRejoinAttemptRef.current = null
+	}, [roomCode, socketGame?.gameId])
+
+	React.useEffect(() => {
 		if (!isResultsModalOpen) return
 		if (!roomCode) return
 
@@ -362,11 +371,7 @@ export default function GamePage() {
 		if (joinRoomMutation.isPending) return
 
 		resultsRejoinAttemptRef.current = rejoinKey
-		joinRoomMutation.mutate(roomCode, {
-			onError: () => {
-				resultsRejoinAttemptRef.current = null
-			},
-		})
+		joinRoomMutation.mutate(roomCode)
 	}, [
 		currentGamePlayer,
 		currentUserId,
