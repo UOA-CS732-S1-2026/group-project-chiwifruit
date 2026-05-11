@@ -1,9 +1,5 @@
 # KiChain - Group Project Chiwifruit
 
-[![CI/CD](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/UOA-CS732-S1-2026/group-project-chiwifruit/actions/workflows/ci.yml)
-![Backend tests](https://img.shields.io/badge/backend_tests-Jest%20%2B%20Supertest-blue)
-![API coverage](https://img.shields.io/badge/API%20coverage-auth%20%7C%20rooms%20%7C%20game%20state-green)
-
 KiChain is a full-stack multiplayer memory game built for COMPSCI 732. Players join a shared room, listen to sound options, and take turns reproducing an increasingly long sound sequence. The project is implemented as a React + Vite client, an Express + MongoDB backend, and Socket.IO realtime communication.
 
 > [!TIP]
@@ -49,7 +45,51 @@ KiChain is a full-stack multiplayer memory game built for COMPSCI 732. Players j
 > [!NOTE]
 > Audio files are handled as frontend static assets for the MVP. The backend no longer depends on S3 audio delivery for local development.
 
-## 3. Project Structure
+## 3. Architecture and Design Rationale
+
+KiChain follows a modular monorepo structure with a clear separation between frontend presentation, backend API/socket coordination, domain logic, and database persistence.
+
+### 3.1 High-level runtime view
+
+```text
+Browser (React + Vite)
+   |
+   | HTTP REST + Socket.IO
+   v
+Express API + Realtime Gateway
+   |
+   | service/model calls
+   v
+MongoDB / MongoDB Atlas
+```
+
+### 3.2 Architectural decisions
+
+1. **Monorepo with npm workspaces**
+   - The client and server evolve together in one repository.
+   - Root scripts make local setup and validation easier for the team.
+
+2. **Backend as the authoritative game engine**
+   - The server owns room state, game lifecycle, turn progression, elimination, forfeit handling, and results.
+   - This avoids each browser making its own rule decisions in a multiplayer game.
+
+3. **REST plus realtime split**
+   - REST APIs handle authentication and room lifecycle operations.
+   - Socket.IO handles latency-sensitive multiplayer updates such as room state, familiarisation, active turns, pad presses, and results.
+
+4. **Service-oriented backend logic**
+   - Controllers and socket handlers should stay focused on transport-level coordination.
+   - Reusable domain rules live in backend services, which makes the game logic easier to test.
+
+5. **Environment-based deployment configuration**
+   - Local CLI development can use a host-machine MongoDB URI.
+   - Local Docker development can use a container-network MongoDB URI.
+   - The shared remote environment uses MongoDB Atlas through environment variables.
+
+> [!IMPORTANT]
+> GitHub Actions deployment is currently manual through `workflow_dispatch`. Do not assume every PR or push is automatically protected by a full CI/CD gate. Run the documented validation commands locally before merging significant changes.
+
+## 4. Project Structure
 
 ```text
 group-project-chiwifruit/
@@ -60,17 +100,17 @@ group-project-chiwifruit/
 └── README.md                # Main project setup and delivery guide
 ```
 
-## 4. Prerequisites
+## 5. Prerequisites
 
 1. Node.js 18+ and npm.
 2. Docker, if using the Docker-based local setup.
 3. MongoDB, either running directly on your machine or as a Docker container.
 
-## 5. Environment Configuration
+## 6. Environment Configuration
 
 This project uses one shared environment file at the repository root.
 
-### 5.1 Create the root `.env` file
+### 6.1 Create the root `.env` file
 
 ```bash
 cp .env.example .env
@@ -81,7 +121,7 @@ Do not create separate `client/.env` or `server/.env` files. The frontend Vite c
 > [!IMPORTANT]
 > The root `.env` file is intentionally ignored by Git. Commit `.env.example`, but do not commit real secrets or local machine-specific values.
 
-### 5.2 Default local environment values
+### 6.2 Default local environment values
 
 The default local configuration is designed for running the client and server directly from the command line:
 
@@ -96,11 +136,11 @@ JWT_SECRET=replace_with_long_random_secret
 JWT_EXPIRES_IN=1d
 ```
 
-### 5.3 MongoDB URI: host machine vs Docker container
+### 6.3 MongoDB URI: host machine vs Docker container
 
 The main value that changes between local run modes is `MONGODB_URI`.
 
-#### 5.3.1 Backend running on the host machine
+#### 6.3.1 Backend running on the host machine
 
 Use this when the backend is started through npm, for example `npm run dev`, `npm run dev:server`, or `npm run start`:
 
@@ -110,7 +150,7 @@ MONGODB_URI=mongodb://localhost:27017/kichain-db
 
 Here, `localhost` means your Mac / host machine. This works when MongoDB is installed locally, or when MongoDB is running in Docker with port `27017` exposed to the host machine.
 
-#### 5.3.2 Backend running inside a Docker container
+#### 6.3.2 Backend running inside a Docker container
 
 Use this when the backend itself runs inside the app container and MongoDB runs in another Docker container:
 
@@ -120,7 +160,7 @@ MONGODB_URI=mongodb://kichain-db:27017/kichain-db
 
 Here, `localhost` would mean the app container itself, not the MongoDB container. The hostname `kichain-db` works only when the app container and MongoDB container are attached to the same user-defined Docker network, `kichain-net`.
 
-#### 5.3.3 Why the Docker command overrides `MONGODB_URI`
+#### 6.3.3 Why the Docker command overrides `MONGODB_URI`
 
 The README keeps `.env` suitable for normal CLI development by default:
 
@@ -139,7 +179,7 @@ This means you do not need to edit `.env` every time you switch between CLI deve
 > [!TIP]
 > If you already changed `.env` to use `MONGODB_URI=mongodb://kichain-db:27017/kichain-db`, you can omit the `-e MONGODB_URI=...` line from `docker run`.
 
-## 6. Workspace Scripts
+## 7. Workspace Scripts
 
 Run these commands from the repository root.
 
@@ -152,11 +192,11 @@ Run these commands from the repository root.
 | `npm run start` | Start the backend in non-dev mode |
 | `npm run ci` | Run client and server validation checks |
 
-## 7. Local Setup Option 1: CLI Development
+## 8. Local Setup Option 1: CLI Development
 
 Use this option when you want to run the frontend and backend directly from your terminal with npm.
 
-### 7.1 Summary
+### 8.1 Summary
 
 In this setup:
 
@@ -166,7 +206,7 @@ In this setup:
 4. The backend should use `mongodb://localhost:27017/kichain-db`.
 5. A Docker network is not required, because the backend is not running inside Docker.
 
-### 7.2 Steps
+### 8.2 Steps
 
 #### Step 1: Install dependencies
 
@@ -249,11 +289,11 @@ A useful manual smoke test is:
 4. Join the room from the other tab.
 5. Confirm that room updates appear in real time.
 
-## 8. Local Setup Option 2: Docker Development
+## 9. Local Setup Option 2: Docker Development
 
 Use this option when you want to build and run the app inside Docker. This is closer to the shared deployment setup than the CLI option.
 
-### 8.1 Summary
+### 9.1 Summary
 
 In this setup:
 
@@ -263,7 +303,7 @@ In this setup:
 4. The app container should use `mongodb://kichain-db:27017/kichain-db`.
 5. The Docker network must be created before starting the MongoDB and app containers.
 
-### 8.2 Steps
+### 9.2 Steps
 
 #### Step 1: Create the Docker network
 
@@ -373,11 +413,11 @@ Remove MongoDB if you want a clean database next time:
 docker rm kichain-db
 ```
 
-## 9. Clean Up and Reset Local Docker Environment
+## 10. Clean Up and Reset Local Docker Environment
 
 Use this section when the local Docker environment becomes confusing, for example old containers are still running, ports are already in use, or the app appears to be using stale data.
 
-### 9.1 Project-only reset
+### 10.1 Project-only reset
 
 This removes only the containers, image, and network used by this project. It does not remove unrelated Docker resources from other projects.
 
@@ -417,7 +457,7 @@ docker run --rm \
   kichain-dev:local
 ```
 
-### 9.2 Reset only the MongoDB data
+### 10.2 Reset only the MongoDB data
 
 Use this if the app image is fine but you want an empty local database.
 
@@ -435,7 +475,7 @@ docker run -d \
 
 This deletes the data stored inside that MongoDB container. This is safe for local development data, but do not use it for any database container that contains data you need to keep.
 
-### 9.3 Optional aggressive Docker cleanup
+### 10.3 Optional aggressive Docker cleanup
 
 Use this only if Docker itself is cluttered and you are comfortable deleting unused Docker resources across your machine.
 
@@ -450,7 +490,7 @@ docker system prune -a
 > [!WARNING]
 > Do not use `docker system prune -a` if you want to keep images from other projects.
 
-## 10. Testing and Coverage
+## 11. Testing and Coverage
 
 Backend tests are written with Jest and Supertest. They cover:
 
@@ -460,7 +500,7 @@ Backend tests are written with Jest and Supertest. They cover:
 4. Token service unit tests.
 5. Focused socket helper tests.
 
-### 10.1 Backend tests
+### 11.1 Backend tests
 
 Run backend tests:
 
@@ -486,7 +526,7 @@ The coverage report is generated locally under:
 server/coverage/lcov-report/index.html
 ```
 
-### 10.2 Frontend validation
+### 11.2 Frontend validation
 
 Run frontend validation:
 
@@ -494,7 +534,7 @@ Run frontend validation:
 npm run ci --workspace=client
 ```
 
-### 10.3 Full workspace checks
+### 11.3 Full workspace checks
 
 Run all configured workspace checks:
 
@@ -502,7 +542,7 @@ Run all configured workspace checks:
 npm run ci
 ```
 
-## 11. Deployment Overview
+## 12. Deployment Overview
 
 The shared development/demo environment is deployed as a Dockerized full-stack app.
 
@@ -516,7 +556,7 @@ The shared development/demo environment is deployed as a Dockerized full-stack a
 > [!NOTE]
 > GitHub repository secrets are used for AWS deployment credentials. These deployment secrets are separate from the local `.env` file.
 
-## 12. Additional Documentation
+## 13. Additional Documentation
 
 The root README is the main setup and delivery guide. Subdirectory READMEs provide implementation details only.
 
@@ -524,7 +564,7 @@ The root README is the main setup and delivery guide. Subdirectory READMEs provi
 2. [Backend technical notes](server/README.md)
 3. [Backend test notes](server/test/README.md)
 
-## 13. GitHub Actions CI/CD
+## 14. GitHub Actions CI/CD
 
 The workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) is manual-only:
 
@@ -535,9 +575,9 @@ on:
 
 This avoids unnecessary GitHub Actions usage during rapid debugging. The current deployment job is intended for the `dev2` branch and uses GitHub repository secrets for AWS deployment credentials.
 
-## 14. Troubleshooting
+## 15. Troubleshooting
 
-### 14.1 Backend cannot connect to MongoDB in CLI mode
+### 15.1 Backend cannot connect to MongoDB in CLI mode
 
 Check that MongoDB is reachable from your host machine:
 
@@ -551,7 +591,7 @@ If the backend logs show a MongoDB connection error, confirm that MongoDB is run
 MONGODB_URI=mongodb://localhost:27017/kichain-db
 ```
 
-### 14.2 Backend cannot connect to MongoDB in Docker mode
+### 15.2 Backend cannot connect to MongoDB in Docker mode
 
 If the app container logs show a MongoDB connection error, confirm that both containers are on the same Docker network:
 
@@ -565,7 +605,7 @@ For Docker app-container mode, the app must use:
 MONGODB_URI=mongodb://kichain-db:27017/kichain-db
 ```
 
-### 14.3 Port already in use
+### 15.3 Port already in use
 
 If ports `3000`, `5173`, or `27017` are already in use, stop the old containers or local processes:
 
@@ -574,6 +614,6 @@ docker ps
 docker rm -f kichain-db kichain-dev-local 2>/dev/null || true
 ```
 
-### 14.4 Environment variables appear outdated
+### 15.4 Environment variables appear outdated
 
 After changing `.env`, restart the relevant process or Docker container. Vite and the backend read environment variables at process startup.
