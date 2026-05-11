@@ -21,6 +21,7 @@ export default function SegmentedSelection({ value, options, onChange, disabled,
 						className={cn(
 							"flex h-12 min-w-[120px] items-center justify-center gap-2 rounded-[15px] px-5 text-base font-bold transition",
 							disabled ? "cursor-not-allowed opacity-60" : "hover:bg-muted",
+							!disabled ? "cursor-pointer" : "",
 							isActive
 								? "bg-[linear-gradient(135deg,#4A5EED_0%,#7B5EED_100%)] text-primary-foreground shadow-[0_8px_18px_rgba(74,94,237,0.28)]"
 								: "text-muted-foreground",

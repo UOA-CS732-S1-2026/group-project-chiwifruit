@@ -88,7 +88,7 @@ export default function JoinRoomModal({ open, onOpenChange, onJoin, isSubmitting
 								className={
 									"h-[60px] w-full rounded-[14px] text-center text-[18px] font-bold leading-7 text-white shadow-[0px_4px_14px_0px_rgba(74,94,237,0.3)] transition-colors " +
 									(canJoin
-										? "bg-[#4a5eed] hover:bg-[#3f53e6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
+										? "cursor-pointer bg-[#4a5eed] hover:bg-[#3f53e6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
 										: "cursor-not-allowed bg-[#4a5eed] opacity-50")
 								}
 							>

@@ -643,7 +643,7 @@ export default function GamePage() {
 						if (!isSocketDriven) return
 						emitGameFamiliarReady(roomCode)
 					}}
-					className="inline-flex items-center justify-center gap-1 text-center text-[10px] font-bold leading-[15px] tracking-[1px] text-[#90a1b9] uppercase"
+					className="inline-flex cursor-pointer items-center justify-center gap-1 text-center text-[10px] font-bold leading-[15px] tracking-[1px] text-[#90a1b9] uppercase"
 				>
 					<span>Click to Skip</span>
 					<ChevronsRight className="size-3" />

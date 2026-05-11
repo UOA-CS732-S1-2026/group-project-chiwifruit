@@ -1,17 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import {
-	Check,
-	CircleDot,
-	Copy,
-	Flame,
-	Landmark,
-	LogOut,
-	Music,
-	PawPrint,
-	Users,
-	Zap,
-} from "lucide-react"
+import { Check, CircleDot, Copy, Flame, Landmark, LogOut, Music, PawPrint, Play, Users, Zap } from "lucide-react"
 
 import Background from "../components/Common/Background"
 import BrandLockup from "../components/Common/BrandLockup"
@@ -390,7 +379,7 @@ export default function RoomPage() {
 							<button
 								type="button"
 								onClick={handleCopyCode}
-								className="text-muted-foreground hover:text-foreground"
+								className="cursor-pointer text-muted-foreground hover:text-foreground"
 								aria-label="Copy room code"
 								title={
 									copyState === "success"
