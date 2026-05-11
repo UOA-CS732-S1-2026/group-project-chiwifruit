@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { ArrowLeft, ChevronsRight } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams } from "react-router-dom"
 
 import Background from "../components/Common/Background"
@@ -17,8 +18,9 @@ import ErrorToast from "../components/ui/ErrorToast"
 import { getStoredAuthUser } from "../api/axios"
 import { leaveRoom } from "../api/rooms"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
+import { useJoinRoomMutation } from "../hooks/mutations/useRoomMutations"
 import useSoundStore from "../store/useSoundStore"
-import { useRankingQuery } from "../hooks/queries/useRoomQuery"
+import { useRankingQuery, useRoomQuery } from "../hooks/queries/useRoomQuery"
 import {
 	emitGameFamiliarTiming,
 	emitGameFamiliarPadPress,
@@ -29,6 +31,7 @@ import {
 	leaveSocketRoom,
 	reconnectSocket,
 } from "../socket/socket"
+import SOCKET_EVENTS from "../socket/socketEvents"
 import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, stopGameNote } from "../lib/gameAudio"
 
 import logo from "../assets/branding/logo.png"
@@ -64,6 +67,7 @@ function coerceDifficulty(value) {
 }
 
 export default function GamePage() {
+	const queryClient = useQueryClient()
 	const navigate = useNavigate()
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
@@ -261,6 +265,12 @@ export default function GamePage() {
 	const [broadcastEvent, setBroadcastEvent] = React.useState(null)
 	const lastBroadcastEventKeyRef = React.useRef(null)
 	const broadcastClearTimeoutRef = React.useRef(null)
+	const resultsRejoinAttemptRef = React.useRef(null)
+	const joinRoomMutation = useJoinRoomMutation({
+		onSuccess: (_, joinedRoomCode) => {
+			queryClient.invalidateQueries({ queryKey: ["room", String(joinedRoomCode).trim().toUpperCase()] })
+		},
+	})
 	const familiarAutoDurationMs = React.useMemo(() => {
 		const rawServerDuration = socketGame?.familiarAutoDurationMs
 		if (rawServerDuration !== null && rawServerDuration !== undefined) {
@@ -279,18 +289,94 @@ export default function GamePage() {
 		}, 0)
 	}, [noteDurationsMs, padCount, socketGame?.familiarAutoDurationMs])
 	const rankingQuery = useRankingQuery(roomCode, isResultsModalOpen)
+	const roomStateQuery = useRoomQuery(roomCode, isResultsModalOpen)
 	const displayRanking = React.useMemo(() => {
 		const ranking = Array.isArray(rankingQuery.data?.ranking) ? rankingQuery.data.ranking : []
+		const participantIds = new Set(
+			Array.isArray(roomStateQuery.data?.participants)
+				? roomStateQuery.data.participants.map((participant) => String(participant.userId))
+				: [],
+		)
 		return ranking.map((player) => {
 			const isCurrentUser = Boolean(currentUserId) && String(player?.userId) === currentUserId
-			if (!isCurrentUser) return player
+			const playerId = player?.userId ? String(player.userId) : null
+			const basePlayer = {
+				...player,
+				isOnline: playerId ? participantIds.has(playerId) : false,
+			}
+			if (!isCurrentUser) return basePlayer
 
 			return {
-				...player,
+				...basePlayer,
 				username: `${player.username} (You)`,
 			}
 		})
-	}, [currentUserId, rankingQuery.data?.ranking])
+	}, [currentUserId, rankingQuery.data?.ranking, roomStateQuery.data?.participants])
+
+	React.useEffect(() => {
+		if (!isResultsModalOpen) return
+		if (!roomCode) return
+
+		const normalizedRoomCode = String(roomCode).trim().toUpperCase()
+		const socket = reconnectSocket()
+
+		const onRoomUpdate = (nextRoomState) => {
+			const nextRoomCode = String(nextRoomState?.roomCode ?? "").trim().toUpperCase()
+			if (!nextRoomCode || nextRoomCode !== normalizedRoomCode) return
+
+			queryClient.setQueryData(["room", normalizedRoomCode], nextRoomState)
+		}
+
+		const onConnect = () => {
+			queryClient.invalidateQueries({ queryKey: ["room", normalizedRoomCode] })
+		}
+
+		socket.on(SOCKET_EVENTS.ROOM_UPDATE, onRoomUpdate)
+		socket.on("connect", onConnect)
+
+		return () => {
+			socket.off(SOCKET_EVENTS.ROOM_UPDATE, onRoomUpdate)
+			socket.off("connect", onConnect)
+		}
+	}, [isResultsModalOpen, queryClient, roomCode])
+
+	React.useEffect(() => {
+		if (!isResultsModalOpen) return
+		if (socketGame?.status !== "finished") return
+		if (!roomCode || !currentUserId) return
+		if (!currentGamePlayer) return
+
+		const participantIds = new Set(
+			Array.isArray(roomStateQuery.data?.participants)
+				? roomStateQuery.data.participants.map((participant) => String(participant.userId))
+				: [],
+		)
+
+		if (participantIds.has(String(currentUserId))) {
+			resultsRejoinAttemptRef.current = null
+			return
+		}
+
+		const rejoinKey = `${roomCode}:${socketGame?.gameId ?? "finished"}:${currentUserId}`
+		if (resultsRejoinAttemptRef.current === rejoinKey) return
+		if (joinRoomMutation.isPending) return
+
+		resultsRejoinAttemptRef.current = rejoinKey
+		joinRoomMutation.mutate(roomCode, {
+			onError: () => {
+				resultsRejoinAttemptRef.current = null
+			},
+		})
+	}, [
+		currentGamePlayer,
+		currentUserId,
+		isResultsModalOpen,
+		joinRoomMutation,
+		roomCode,
+		roomStateQuery.data?.participants,
+		socketGame?.gameId,
+		socketGame?.status,
+	])
 
 	React.useEffect(() => {
 		return () => {

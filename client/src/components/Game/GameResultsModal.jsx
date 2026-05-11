@@ -60,6 +60,9 @@ function ResultsRow({
 
 	const nameClassName =
 		variant === "winner" ? "text-[#a65f00]" : "text-[#314158]"
+	const presenceLabel = isOnline ? "ONLINE" : "OFFLINE"
+	const presenceDotClassName = isOnline ? "bg-[#00c950]" : "bg-[#ff5a5f]"
+	const presenceTextClassName = isOnline ? "text-[#00c950]" : "text-[#ff5a5f]"
 
 	return (
 		<div className={`flex items-center justify-between rounded-[16px] ${rowSizeClassName} ${containerClassName}`}>
@@ -78,15 +81,15 @@ function ResultsRow({
 							{getInitials(name)}
 						</div>
 					)}
-					{isOnline ? (
-						<span className="absolute bottom-0 right-0 size-[10px] rounded-full border-2 border-white bg-[#00c950]" />
-					) : null}
+					<span
+						className={`absolute bottom-0 right-0 size-[10px] rounded-full border-2 border-white ${presenceDotClassName}`}
+					/>
 				</div>
 
 				<div className="flex flex-col">
 					<div className={`text-[14px] font-bold leading-5 ${nameClassName}`}>{name}</div>
-					<div className="text-[10px] font-bold leading-[15px] tracking-[0.5px] text-[#90a1b9] uppercase">
-						ONLINE
+					<div className={`text-[10px] font-bold leading-[15px] tracking-[0.5px] uppercase ${presenceTextClassName}`}>
+						{presenceLabel}
 					</div>
 				</div>
 			</div>
@@ -134,7 +137,7 @@ export default function GameResultsModal({ open, ranking, onBackToRoom, onBackTo
 								name={player.username}
 								points={player.correctCount ?? 0}
 								avatarUrl={player.avatarUrl}
-								isOnline
+								isOnline={Boolean(player.isOnline)}
 								variant={variant}
 							/>
 						)

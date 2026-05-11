@@ -11,13 +11,14 @@ import { leaveRoomKeepalive } from './api/rooms'
 // 具体的房间/游戏同步逻辑在各自页面内处理，避免跨页面副作用。
 
 function getRoomCodeFromPath(pathname) {
-  const match = /^\/room\/([^/]+)$/i.exec(String(pathname ?? ''));
+  const match = /^\/(?:room|game)\/([^/]+)$/i.exec(String(pathname ?? ''));
   return match?.[1] ? String(match[1]).trim().toUpperCase() : '';
 }
 
-function isGamePathForRoom(pathname, roomCode) {
+function isRoomScopedPathForRoom(pathname, roomCode) {
   if (!roomCode) return false;
-  return String(pathname ?? '').toUpperCase() === `/GAME/${roomCode}`;
+  const normalizedPath = String(pathname ?? '').toUpperCase();
+  return normalizedPath === `/GAME/${roomCode}` || normalizedPath === `/ROOM/${roomCode}`;
 }
 
 function App() {
@@ -37,7 +38,7 @@ function App() {
       navigationType === 'POP' &&
       previousRoomCode &&
       previousPath !== nextPath &&
-      !isGamePathForRoom(nextPath, previousRoomCode) &&
+      !isRoomScopedPathForRoom(nextPath, previousRoomCode) &&
       !backLeaveInFlightRef.current
     ) {
       const token = getStoredAuthToken()
