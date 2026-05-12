@@ -22,7 +22,23 @@ const {
   cleanupGameLater,
 } = require('../services/gameService');
 
-const WAITING_ROOM_DISCONNECT_GRACE_MS = 3000;
+const WAITING_ROOM_DISCONNECT_GRACE_MS = 10_000;
+const pendingRoomRosterCleanupTimers = new Map();
+
+function getRoomRosterCleanupKey(roomCode, userId) {
+  return `${String(roomCode).toUpperCase()}::${String(userId)}`;
+}
+
+function cancelPendingRoomRosterCleanup(roomCode, userId) {
+  if (!roomCode || !userId) return;
+
+  const cleanupKey = getRoomRosterCleanupKey(roomCode, userId);
+  const pendingTimer = pendingRoomRosterCleanupTimers.get(cleanupKey);
+  if (!pendingTimer) return;
+
+  clearTimeout(pendingTimer);
+  pendingRoomRosterCleanupTimers.delete(cleanupKey);
+}
 
 function initSocket(httpServer, frontendOrigin) {
   const io = new Server(httpServer, {
@@ -31,23 +47,6 @@ function initSocket(httpServer, frontendOrigin) {
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     }
   });
-
-  const pendingRoomRosterCleanupTimers = new Map();
-
-  function getRoomRosterCleanupKey(roomCode, userId) {
-    return `${String(roomCode).toUpperCase()}::${String(userId)}`;
-  }
-
-  function cancelPendingRoomRosterCleanup(roomCode, userId) {
-    if (!roomCode || !userId) return;
-
-    const cleanupKey = getRoomRosterCleanupKey(roomCode, userId);
-    const pendingTimer = pendingRoomRosterCleanupTimers.get(cleanupKey);
-    if (!pendingTimer) return;
-
-    clearTimeout(pendingTimer);
-    pendingRoomRosterCleanupTimers.delete(cleanupKey);
-  }
 
   function schedulePendingRoomRosterCleanup(roomCode, identity) {
     const userId = identity?.sub;
@@ -495,5 +494,6 @@ function emitRoomUpdate(io, roomCode, roomState) {
 
 module.exports = {
   initSocket,
-  emitRoomUpdate
+  emitRoomUpdate,
+  cancelPendingRoomRosterCleanup,
 };

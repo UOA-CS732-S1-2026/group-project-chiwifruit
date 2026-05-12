@@ -1,6 +1,6 @@
 const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
-const { emitRoomUpdate } = require('../socket');
+const { emitRoomUpdate, cancelPendingRoomRosterCleanup } = require('../socket');
 const { getGame, removeGame } = require('../services/gameService');
 const { buildAvatarUrl } = require('./authController');
 const {
@@ -107,6 +107,8 @@ async function createRoom(req, res) {
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
+
+    cancelPendingRoomRosterCleanup(room.roomCode, identity?.sub);
 
     const roomNormalized = normalizeRoomParticipants(room);
 

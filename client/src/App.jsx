@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
-import GamePage from './pages/GamePage'
 import LandingPage from './pages/LandingPage'
 import RoomPage from './pages/RoomPage'
 import useGlobalButtonClickSound from './hooks/useGlobalButtonClickSound'
 import { getStoredAuthToken } from './api/axios'
 import { leaveRoomKeepalive } from './api/rooms'
+
+const GamePage = lazy(() => import('./pages/GamePage'))
 
 // NOTE (2026-04-29): App 级别只做“全局能力”挂载（如按钮点击音效）与路由定义。
 // 具体的房间/游戏同步逻辑在各自页面内处理，避免跨页面副作用。
@@ -54,12 +55,14 @@ function App() {
   }, [location.pathname, navigationType])
 
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/room/:roomCode" element={<RoomPage />} />
-      <Route path="/game/:roomCode" element={<GamePage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense fallback={null}>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/room/:roomCode" element={<RoomPage />} />
+        <Route path="/game/:roomCode" element={<GamePage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
 

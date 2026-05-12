@@ -362,9 +362,8 @@ describe('gameService state machine', () => {
 
       // The newly added note itself must not grant an additional replication point.
       // (Round survival bonus may apply separately at round completion.)
-      expect(addNote.game.scores.user2).toBeGreaterThanOrEqual(1);
-      expect(addNote.game.scores.user2 % 5).toBe(1);
-      expect(addNote.game.scores.user1).toBe(0);
+      expect(addNote.game.scores.user2).toBe(2); // +1 replay +1 round-1 survival
+      expect(addNote.game.scores.user1).toBe(1); // +1 round-1 survival
       expect(addNote.game.sequence).toEqual([3, 4]);
       expect(addNote.game.lastEvent).toMatchObject({ type: 'note_added', userId: 'user2', padIndex: 4 });
     });
@@ -387,28 +386,40 @@ describe('gameService state machine', () => {
       expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
 
-    it('should grant survival bonus to the remaining alive player when elimination happens on the round-closing turn', () => {
-      const roomCode = 'NO_SURVIVAL_ON_INCOMPLETE_FINAL_ROUND';
+    it('should not award a fixed winner bonus when game finishes before round completion', () => {
+      const roomCode = 'NO_FIXED_WINNER_BONUS';
+      startPlayingGame(roomCode);
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 3 });
+
+      const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 4 });
+
+      expect(result.game.status).toBe('finished');
+      expect(result.game.scores.user1).toBe(1);
+      expect(result.game.scores.user2).toBe(0);
+      expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
+    });
+
+    it('should award final-round survival bonus to winner when opponent fails in a two-player decider', () => {
+      const roomCode = 'FINAL_ROUND_SURVIVAL_BONUS';
       startPlayingGame(roomCode);
 
-      // Round 1: P1 adds first note (0 point), P2 replays 1 (+1) then adds.
+      // Round 1
       gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 1 });
       gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 1 });
       gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 2 });
 
-      // Round 2 (in progress): P1 replays 2 (+2) then adds.
+      // Round 2 (decider): P1 completes and adds, P2 fails on the last existing note.
       gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 1 });
       gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 2 });
       gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 3 });
-
-      // P2 replays only first 2 of 3, then fails on 3rd.
       gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 1 });
       gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 2 });
       const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 4 });
 
       expect(result.game.status).toBe('finished');
-      expect(result.game.scores.user1).toBe(12);
-      expect(result.game.scores.user2).toBe(8);
+      expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
+      expect(result.game.scores.user1).toBe(6); // 1(R1 survival) +2(replay) +3(R2 survival)
+      expect(result.game.scores.user2).toBe(4); // 1(replay R1) +1(R1 survival) +2(replay R2)
     });
   });
 
@@ -464,7 +475,7 @@ describe('gameService state machine', () => {
 
       expect(add.ok).toBe(true);
       expect(add.game.roundNumber).toBe(2);
-      expect(add.game.scores.user2).toBe(6); // +1 replay +5 survival
+      expect(add.game.scores.user2).toBe(2); // +1 replay +1 survival (alive=2, round=1)
       expect(add.game.currentTurnUserId).toBe('user1');
     });
 

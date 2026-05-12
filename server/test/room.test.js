@@ -1,13 +1,14 @@
 const request = require('supertest');
 jest.mock('../src/socket', () => ({
   emitRoomUpdate: jest.fn(),
+  cancelPendingRoomRosterCleanup: jest.fn(),
 }));
 jest.mock('../src/services/gameService', () => ({
   getGame: jest.fn(() => null),
   removeGame: jest.fn(),
 }));
 
-const { emitRoomUpdate } = require('../src/socket');
+const { emitRoomUpdate, cancelPendingRoomRosterCleanup } = require('../src/socket');
 const { removeGame } = require('../src/services/gameService');
 const app = require('../src/app');
 const Room = require('../src/models/Room');
@@ -210,6 +211,7 @@ describe('Room API', () => {
 
       expect(roomBeforeSave.participants).toHaveLength(2);
       expect(roomBeforeSave.participants[1]).toMatchObject({ user: 'userId123', isReady: false, correctCount: 0 });
+      expect(cancelPendingRoomRosterCleanup).toHaveBeenCalledWith('XYZ', 'userId123');
       expect(roomBeforeSave.save).toHaveBeenCalled();
       expect(response.body).toMatchObject({ message: 'Joined room', roomCode: 'XYZ', roomId: 'room-1' });
     });
