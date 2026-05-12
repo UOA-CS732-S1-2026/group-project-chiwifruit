@@ -403,7 +403,10 @@ export default function GamePage() {
 	)
 	const isCurrentUserAudioReady = Boolean(currentUserId) && familiarAudioReadyUserIds.includes(String(currentUserId))
 	const familiarAudioReadyCount = familiarAudioReadyUserIds.length
-	const familiarParticipantCount = Array.isArray(socketGame?.participantsOrder) ? socketGame.participantsOrder.length : 0
+	const familiarParticipantCount = React.useMemo(() => {
+		if (!Array.isArray(socketGame?.players)) return 0
+		return socketGame.players.filter((player) => !player?.isEliminated && !player?.leftDuringGame).length
+	}, [socketGame?.players])
 	const syncSocketGameFromAck = React.useCallback((response, isCancelled = false) => {
 		if (!response?.ok || !response.game || isCancelled) return
 		if (typeof response.game?.serverNow === "number") {

@@ -141,7 +141,7 @@ describe('gameService state machine', () => {
       });
 
       expect(second.ok).toBe(true);
-	      expect(second.game.familiarAutoStartedAt).toBe(started.game.familiarAutoStartedAt);
+      expect(second.game.familiarAutoStartedAt).toBe(started.game.familiarAutoStartedAt);
       expect(second.game.familiarAutoDurationMs).toBe(4500);
     });
 
