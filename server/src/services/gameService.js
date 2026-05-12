@@ -96,17 +96,31 @@ function startNewRound(game) {
 
 function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
   const aliveNow = getAliveParticipantIds(game);
+  const survivalBonus = (aliveNow.length * Number(game.roundNumber || 0)) - 1;
   aliveNow.forEach((id) => {
     if (excludedUserId && String(id) === String(excludedUserId)) return;
-    addScore(game, id, 5);
+    addScore(game, id, survivalBonus);
     game.completedSurvivalRounds[id] = (Number(game.completedSurvivalRounds[id]) || 0) + 1;
   });
 }
 
 function finalizeGame(game) {
+  if (Number.isFinite(game.roundNumber) && game.roundNumber > 0) {
+    const aliveAtRoundStartCount = Array.isArray(game.roundStartAliveUserIds) ? game.roundStartAliveUserIds.length : 0;
+    const aliveNow = getAliveParticipantIds(game);
+    const winnerUserId = aliveNow[0] ?? null;
+    const winnerCompletedRounds = winnerUserId ? Number(game.completedSurvivalRounds[winnerUserId] || 0) : 0;
+    const hasUnawardedCurrentRound = winnerUserId && winnerCompletedRounds < Number(game.roundNumber);
+
+    if (hasUnawardedCurrentRound && aliveAtRoundStartCount > 0) {
+      const survivalBonus = (aliveAtRoundStartCount * Number(game.roundNumber)) - 1;
+      addScore(game, winnerUserId, survivalBonus);
+      game.completedSurvivalRounds[winnerUserId] = winnerCompletedRounds + 1;
+    }
+  }
+
   const alive = getAliveParticipantIds(game);
   const winnerUserId = alive[0] ?? null;
-  if (winnerUserId) addScore(game, winnerUserId, 5);
   game.status = 'finished';
   game.turnEndsAt = null;
   game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId };
@@ -372,8 +386,7 @@ function endTurnAdvance(game) {
     game.roundStartAliveUserIds.length > 0 &&
     game.roundTurnTakenUserIds.size >= game.roundStartAliveUserIds.length
   ) {
-    const excludedUserId = game.roundNumber === 1 ? game.firstRoundStarterUserId : null;
-    applyRoundSurvivalBonus(game, { excludedUserId });
+    applyRoundSurvivalBonus(game);
     game.roundNumber += 1;
     startNewRound(game);
   }
