@@ -225,9 +225,9 @@ async function selectMode(req, res) {
   const { mode: rawMode } = req.body;
   const userId = req.user.sub;
 
-  const normalizedMode = rawMode === 'bird' ? 'kiwi' : String(rawMode || '').trim().toLowerCase();
-  if (!['kiwi', 'piano', 'maori', 'animal', 'aussie'].includes(normalizedMode)) {
-    return res.status(400).json({ message: 'mode must be kiwi, piano, maori, animal, or aussie' });
+  const normalizedMode = String(rawMode || '').trim().toLowerCase();
+  if (!['bird', 'piano', 'maori', 'animal', 'aussie'].includes(normalizedMode)) {
+    return res.status(400).json({ message: 'mode must be bird, piano, maori, animal, or aussie' });
   }
 
   const room = await Room.findOne({ roomCode: roomCode.toUpperCase() });

@@ -2,7 +2,7 @@ import { Howl } from "howler"
 
 import useSoundStore from "../store/useSoundStore"
 
-const kiwiAudioModules = import.meta.glob("../assets/audio/birdAudio/*.mp3", {
+const birdAudioModules = import.meta.glob("../assets/audio/birdAudio/*.mp3", {
 	eager: true,
 	import: "default",
 })
@@ -38,7 +38,7 @@ function normalizeEntries(modules) {
 }
 
 const AUDIO_ENTRIES = {
-	kiwi: normalizeEntries(kiwiAudioModules),
+	bird: normalizeEntries(birdAudioModules),
 	piano: normalizeEntries(pianoAudioModules),
 	maori: normalizeEntries(maoriAudioModules),
 	animal: normalizeEntries(animalAudioModules),
@@ -76,7 +76,7 @@ function seededShuffle(items, seed) {
 }
 
 export function pickGameNoteUrls({ mode, padCount, seed }) {
-	const key = Object.hasOwn(AUDIO_ENTRIES, mode) ? mode : "kiwi"
+	const key = Object.hasOwn(AUDIO_ENTRIES, mode) ? mode : "bird"
 	const entries = AUDIO_ENTRIES[key]
 	if (!Array.isArray(entries) || entries.length === 0) return []
 

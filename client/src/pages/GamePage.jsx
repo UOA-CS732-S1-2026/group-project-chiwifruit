@@ -33,6 +33,7 @@ import {
 } from "../socket/socket"
 import SOCKET_EVENTS from "../socket/socketEvents"
 import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, stopGameNote } from "../lib/gameAudio"
+import { playCountdownTickSfx } from "../lib/sound"
 
 import logo from "../assets/branding/logo.png"
 import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
@@ -72,6 +73,7 @@ export default function GamePage() {
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const acknowledgedOutGameIdRef = React.useRef(null)
+	const lastCountdownSfxSecondRef = React.useRef(null)
 	const browserBackGuardArmedRef = React.useRef(false)
 	const browserBackConfirmedRef = React.useRef(false)
 // NOTE (2026-04-29): React 18 StrictMode + socket event timing can cause duplicate familiarization autoplay.
@@ -208,7 +210,7 @@ export default function GamePage() {
 	const noteUrls = React.useMemo(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed) return []
 		return pickGameNoteUrls({ 
-			mode: socketGame.mode || "kiwi", 
+			mode: socketGame.mode || "bird", 
 			padCount, 
 			seed: socketGame.audioSeed 
 		})
@@ -502,6 +504,21 @@ export default function GamePage() {
 			isCancelled = true
 		}
 	}, [isSocketDriven, noteUrls, roomCode])
+
+	React.useEffect(() => {
+		if (phase !== PHASE.PLAYING || socketGame?.status !== "playing") {
+			lastCountdownSfxSecondRef.current = null
+			return
+		}
+		if (!Number.isInteger(turnSeconds) || turnSeconds <= 0 || turnSeconds > 10) {
+			lastCountdownSfxSecondRef.current = null
+			return
+		}
+		if (lastCountdownSfxSecondRef.current === turnSeconds) return
+
+		lastCountdownSfxSecondRef.current = turnSeconds
+		playCountdownTickSfx()
+	}, [phase, socketGame?.status, turnSeconds])
 
 	React.useEffect(() => {
 		if (!isSocketDriven) return
