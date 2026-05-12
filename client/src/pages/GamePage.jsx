@@ -46,7 +46,30 @@ const PHASE = {
 
 const FAMILIARIZE_AUTOPLAY_GAP_MS = 1000
 const FREE_PLAY_MS = 20_000
+const AUTOPLAY_DEDUPE_WINDOW_MS = 400
+const recentAutoplayPlays = new Map()
 // const COUNTDOWN_MS = 5_000
+
+function shouldSkipDuplicateAutoplay(gameId, padIndex) {
+	if (!gameId || !Number.isInteger(padIndex)) return false
+
+	const now = Date.now()
+	const autoplayKey = `${String(gameId)}:${padIndex}`
+	const lastPlayedAt = recentAutoplayPlays.get(autoplayKey)
+
+	for (const [key, playedAt] of recentAutoplayPlays.entries()) {
+		if (now - playedAt > AUTOPLAY_DEDUPE_WINDOW_MS) {
+			recentAutoplayPlays.delete(key)
+		}
+	}
+
+	if (typeof lastPlayedAt === "number" && now - lastPlayedAt < AUTOPLAY_DEDUPE_WINDOW_MS) {
+		return true
+	}
+
+	recentAutoplayPlays.set(autoplayKey, now)
+	return false
+}
 
 function waitForMs(ms) {
 	const safeDelay = Math.max(0, Number(ms) || 0)
@@ -202,16 +225,35 @@ export default function GamePage() {
 		[socketGame?.difficulty],
 	)
 	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : 0
+	const [noteUrls, setNoteUrls] = React.useState([])
 	
 // NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
 // This avoids reshuffling from any non-authoritative client fallback state.
-	const noteUrls = React.useMemo(() => {
-		if (!isSocketDriven || !socketGame?.audioSeed) return []
-		return pickGameNoteUrls({ 
-			mode: socketGame.mode || "kiwi", 
-			padCount, 
-			seed: socketGame.audioSeed 
+	React.useEffect(() => {
+		if (!isSocketDriven || !socketGame?.audioSeed || padCount <= 0) {
+			setNoteUrls([])
+			return
+		}
+
+		let isCancelled = false
+
+		void pickGameNoteUrls({
+			mode: socketGame.mode || "kiwi",
+			padCount,
+			seed: socketGame.audioSeed,
 		})
+			.then((nextNoteUrls) => {
+				if (isCancelled) return
+				setNoteUrls(Array.isArray(nextNoteUrls) ? nextNoteUrls : [])
+			})
+			.catch(() => {
+				if (isCancelled) return
+				setNoteUrls([])
+			})
+
+		return () => {
+			isCancelled = true
+		}
 	}, [isSocketDriven, socketGame?.audioSeed, socketGame?.mode, padCount])
 
 	React.useEffect(() => {
@@ -559,12 +601,16 @@ export default function GamePage() {
 
 		let isCancelled = false
 		let currentUrl = null
+		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
 
 		const runAutoplay = async () => {
 			for (let index = 0; index < noteUrls.length; index += 1) {
 				if (isCancelled) return
 
 				const url = noteUrls[index]
+				if (shouldSkipDuplicateAutoplay(currentGameId, index)) {
+					continue
+				}
 				currentUrl = url
 				setAutoPlayIndex(index)
 				setActivePadIndex(index)
@@ -593,7 +639,7 @@ export default function GamePage() {
 				stopGameNote(currentUrl)
 			}
 		}
-	}, [isSocketDriven, noteDurationsMs, noteUrls, phase, socketGame?.status])
+	}, [isSocketDriven, noteDurationsMs, noteUrls, phase, socketGame?.gameId, socketGame?.status])
 
 	const players = React.useMemo(() => {
 		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []

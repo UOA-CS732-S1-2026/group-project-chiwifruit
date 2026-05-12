@@ -3,27 +3,22 @@ import { Howl } from "howler"
 import useSoundStore from "../store/useSoundStore"
 
 const kiwiAudioModules = import.meta.glob("../assets/audio/birdAudio/*.mp3", {
-	eager: true,
 	import: "default",
 })
 
 const pianoAudioModules = import.meta.glob("../assets/audio/pianoAudio/*.mp3", {
-	eager: true,
 	import: "default",
 })
 
 const maoriAudioModules = import.meta.glob("../assets/audio/maoriAudio/*.mp3", {
-	eager: true,
 	import: "default",
 })
 
 const animalAudioModules = import.meta.glob("../assets/audio/animalAudio/*.mp3", {
-	eager: true,
 	import: "default",
 })
 
 const aussieAudioModules = import.meta.glob("../assets/audio/auSlang/*.mp3", {
-	eager: true,
 	import: "default",
 })
 
@@ -32,9 +27,8 @@ function normalizeEntries(modules) {
 		.sort((a, b) => String(a).localeCompare(String(b)))
 		.map((path) => ({
 			id: path,
-			url: modules[path],
+			load: modules[path],
 		}))
-		.filter((entry) => typeof entry.url === "string")
 }
 
 const AUDIO_ENTRIES = {
@@ -44,6 +38,8 @@ const AUDIO_ENTRIES = {
 	animal: normalizeEntries(animalAudioModules),
 	aussie: normalizeEntries(aussieAudioModules),
 }
+
+const audioEntriesPromiseCache = new Map()
 
 function hashStringToUint32(value) {
 	let hash = 2166136261
@@ -75,9 +71,35 @@ function seededShuffle(items, seed) {
 	return array
 }
 
-export function pickGameNoteUrls({ mode, padCount, seed }) {
+async function resolveAudioEntries(mode) {
 	const key = Object.hasOwn(AUDIO_ENTRIES, mode) ? mode : "kiwi"
-	const entries = AUDIO_ENTRIES[key]
+	const cachedPromise = audioEntriesPromiseCache.get(key)
+	if (cachedPromise) return cachedPromise
+
+	const loadPromise = Promise.all(
+		AUDIO_ENTRIES[key].map(async (entry) => {
+			const url = await entry.load()
+			return typeof url === "string"
+				? {
+					id: entry.id,
+					url,
+				}
+				: null
+		}),
+	)
+		.then((entries) => entries.filter(Boolean))
+		.catch((error) => {
+			audioEntriesPromiseCache.delete(key)
+			throw error
+		})
+
+	audioEntriesPromiseCache.set(key, loadPromise)
+	return loadPromise
+}
+
+export async function pickGameNoteUrls({ mode, padCount, seed }) {
+	const key = Object.hasOwn(AUDIO_ENTRIES, mode) ? mode : "kiwi"
+	const entries = await resolveAudioEntries(key)
 	if (!Array.isArray(entries) || entries.length === 0) return []
 
 	const safePadCount = Math.max(1, Number(padCount) || 1)
@@ -87,6 +109,7 @@ export function pickGameNoteUrls({ mode, padCount, seed }) {
 }
 
 const howlCache = new Map()
+const howlLoadPromiseCache = new WeakMap()
 
 function getOrCreateHowl(url) {
 	let howl = howlCache.get(url)
@@ -94,7 +117,7 @@ function getOrCreateHowl(url) {
 		howl = new Howl({
 			src: [url],
 			volume: 1,
-			preload: true,
+			preload: false,
 		})
 		howlCache.set(url, howl)
 	}
@@ -105,20 +128,30 @@ function ensureHowlLoaded(howl) {
 	if (!howl) return Promise.resolve()
 	if (howl.state() === "loaded") return Promise.resolve()
 
-	return new Promise((resolve) => {
+	const pendingLoad = howlLoadPromiseCache.get(howl)
+	if (pendingLoad) return pendingLoad
+
+	const loadPromise = new Promise((resolve) => {
 		const handleLoad = () => {
 			howl.off("loaderror", handleLoadError)
+			howlLoadPromiseCache.delete(howl)
 			resolve()
 		}
 		const handleLoadError = () => {
 			howl.off("load", handleLoad)
+			howlLoadPromiseCache.delete(howl)
 			resolve()
 		}
 
 		howl.once("load", handleLoad)
 		howl.once("loaderror", handleLoadError)
-		howl.load()
+		if (howl.state() !== "loading") {
+			howl.load()
+		}
 	})
+
+	howlLoadPromiseCache.set(howl, loadPromise)
+	return loadPromise
 }
 
 export async function getGameNoteDurationMs(url) {
