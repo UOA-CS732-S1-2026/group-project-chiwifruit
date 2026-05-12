@@ -398,6 +398,29 @@ describe('gameService state machine', () => {
       expect(result.game.scores.user2).toBe(0);
       expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
     });
+
+    it('should award final-round survival bonus to winner when opponent fails in a two-player decider', () => {
+      const roomCode = 'FINAL_ROUND_SURVIVAL_BONUS';
+      startPlayingGame(roomCode);
+
+      // Round 1
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 1 });
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 1 });
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 2 });
+
+      // Round 2 (decider): P1 completes and adds, P2 fails on the last existing note.
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 1 });
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 2 });
+      gameService.registerPadPress({ roomCode, userId: 'user1', padIndex: 3 });
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 1 });
+      gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 2 });
+      const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 4 });
+
+      expect(result.game.status).toBe('finished');
+      expect(result.game.lastEvent).toMatchObject({ type: 'game_finished', winnerUserId: 'user1' });
+      expect(result.game.scores.user1).toBe(6); // 1(R1 survival) +2(replay) +3(R2 survival)
+      expect(result.game.scores.user2).toBe(4); // 1(replay R1) +1(R1 survival) +2(replay R2)
+    });
   });
 
   describe('timeout and forfeit', () => {

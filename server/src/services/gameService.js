@@ -99,6 +99,20 @@ function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
 }
 
 function finalizeGame(game) {
+  if (Number.isFinite(game.roundNumber) && game.roundNumber > 0) {
+    const aliveAtRoundStartCount = Array.isArray(game.roundStartAliveUserIds) ? game.roundStartAliveUserIds.length : 0;
+    const aliveNow = getAliveParticipantIds(game);
+    const winnerUserId = aliveNow[0] ?? null;
+    const winnerCompletedRounds = winnerUserId ? Number(game.completedSurvivalRounds[winnerUserId] || 0) : 0;
+    const hasUnawardedCurrentRound = winnerUserId && winnerCompletedRounds < Number(game.roundNumber);
+
+    if (hasUnawardedCurrentRound && aliveAtRoundStartCount > 0) {
+      const survivalBonus = (aliveAtRoundStartCount * Number(game.roundNumber)) - 1;
+      addScore(game, winnerUserId, survivalBonus);
+      game.completedSurvivalRounds[winnerUserId] = winnerCompletedRounds + 1;
+    }
+  }
+
   const alive = getAliveParticipantIds(game);
   const winnerUserId = alive[0] ?? null;
   game.status = 'finished';
