@@ -13,7 +13,8 @@ export default function GameWheel({
 	centerContent,
 }) {
 	const count = pads.length
-	const padOrbitRadius = 31.9
+	const padOrbitRadius = count === 10 ? 36 : count === 8 ? 34 : 32
+	const padSizePercent = count === 10 ? 16 : count === 8 ? 18 : 20
 
 	return (
 		<div
@@ -33,17 +34,19 @@ export default function GameWheel({
 				return (
 					<div
 						key={`${pad.base}-${index}`}
-						className="absolute left-0 top-0 aspect-square w-[21.2%] -translate-x-1/2 -translate-y-1/2 overflow-visible"
+						className="absolute left-0 top-0 aspect-square -translate-x-1/2 -translate-y-1/2 overflow-visible"
 						style={{
 							left: `calc(50% + ${x}%)`,
 							top: `calc(50% + ${y}%)`,
+							width: `${padSizePercent}%`,
+							height: `${padSizePercent}%`,
 							"--pad-base": pad.base,
 							"--pad-highlight": pad.highlight,
 							"--pad-shadow": pad.shadow,
 							"--pad-glow": pad.glow,
 						}}
 					>
-						<span className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[3.75rem] w-[3.75rem] -translate-x-1/2 -translate-y-1/2 overflow-visible">
+						<span className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-full w-full -translate-x-1/2 -translate-y-1/2 overflow-visible">
 							<GamePadRipple active={activePadIndex === index} />
 						</span>
 
@@ -60,6 +63,8 @@ export default function GameWheel({
 							style={{
 								left: "50%",
 								top: "50%",
+								width: "100%",
+								height: "100%",
 							}}
 							aria-label={`Sound pad ${index + 1}`}
 						/>
