@@ -138,7 +138,7 @@ export default function RoomPage() {
 	)
 	useRoomSocketUpdates(roomCode)
 
-	const mode = roomState?.mode ?? "kiwi"
+	const mode = roomState?.mode ?? "bird"
 	const difficulty = roomState?.difficulty ?? "easy"
 
 	const identity = useMemo(() => {
@@ -419,7 +419,7 @@ export default function RoomPage() {
 										selectModeMutation.mutate({ roomCode, mode: next })
 									}}
 									options={[
-										{ value: "kiwi", label: "Kiwi", Icon: BirdIcon },
+										{ value: "bird", label: "Bird", Icon: BirdIcon },
 										{ value: "piano", label: "Piano", Icon: Music },
 										{ value: "maori", label: "Maori", Icon: Landmark },
 										{ value: "animal", label: "Animal", Icon: PawPrint },

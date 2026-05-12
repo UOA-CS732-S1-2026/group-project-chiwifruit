@@ -40,8 +40,8 @@ const roomSchema = new mongoose.Schema(
     },
     mode: {
       type: String,
-      enum: ['kiwi', 'piano', 'maori', 'animal', 'aussie'],
-      default: 'kiwi'
+      enum: ['bird', 'piano', 'maori', 'animal', 'aussie'],
+      default: 'bird'
     },
     difficulty: {
       type: String,

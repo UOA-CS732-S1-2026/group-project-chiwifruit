@@ -15,11 +15,10 @@ const timeoutsByRoom = new Map();
 
 function normalizeRoomMode(mode) {
   const normalized = String(mode || '').trim().toLowerCase();
-  if (normalized === 'bird') return 'kiwi';
-  if (['kiwi', 'piano', 'maori', 'animal', 'aussie'].includes(normalized)) {
+  if (['bird', 'piano', 'maori', 'animal', 'aussie'].includes(normalized)) {
     return normalized;
   }
-  return 'kiwi';
+  return 'bird';
 }
 
 function getPadCountByDifficulty(difficulty) {

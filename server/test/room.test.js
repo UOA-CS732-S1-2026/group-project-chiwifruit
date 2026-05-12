@@ -575,7 +575,7 @@ describe('Room API', () => {
         .send({ mode: 'bird' })
         .expect(200);
 
-      expect(room.mode).toBe('kiwi');
+      expect(room.mode).toBe('bird');
       expect(room.participants[0].isReady).toBe(false);
     });
 
