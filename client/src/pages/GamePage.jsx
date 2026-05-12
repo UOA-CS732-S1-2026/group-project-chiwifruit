@@ -33,8 +33,6 @@ import {
 } from "../socket/socket"
 import SOCKET_EVENTS from "../socket/socketEvents"
 import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, stopGameNote } from "../lib/gameAudio"
-import { COUNTDOWN_URGENT_THRESHOLD_SECONDS } from "../lib/gameConstants"
-import { playCountdownTickSfx } from "../lib/sound"
 
 import logo from "../assets/branding/logo.png"
 import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
@@ -97,7 +95,6 @@ export default function GamePage() {
 	const { roomCode: roomCodeParam = "" } = useParams()
 	const roomCode = String(roomCodeParam).trim().toUpperCase()
 	const acknowledgedOutGameIdRef = React.useRef(null)
-	const lastCountdownSfxSecondRef = React.useRef(null)
 	const browserBackGuardArmedRef = React.useRef(false)
 	const browserBackConfirmedRef = React.useRef(false)
 // NOTE (2026-04-29): React 18 StrictMode + socket event timing can cause duplicate familiarization autoplay.
@@ -856,28 +853,6 @@ export default function GamePage() {
 		phase === PHASE.PLAYING &&
 		Boolean(currentUserId) &&
 		String(players[currentTurnIndex]?.id ?? "") === String(currentUserId)
-
-	React.useEffect(() => {
-		// Countdown warning SFX is local-only:
-		// play only for the current user's own turn in the last 10 seconds.
-		if (!isMyTurn || isSpectating || socketGame?.status !== "playing") {
-			lastCountdownSfxSecondRef.current = null
-			return
-		}
-
-		if (
-			!Number.isInteger(turnSeconds) ||
-			turnSeconds <= 0 ||
-			turnSeconds > COUNTDOWN_URGENT_THRESHOLD_SECONDS
-		) {
-			lastCountdownSfxSecondRef.current = null
-			return
-		}
-
-		if (lastCountdownSfxSecondRef.current === turnSeconds) return
-		lastCountdownSfxSecondRef.current = turnSeconds
-		playCountdownTickSfx()
-	}, [isMyTurn, isSpectating, socketGame?.status, turnSeconds])
 
 	const showAddNote = inputCount >= sequence.length
 
