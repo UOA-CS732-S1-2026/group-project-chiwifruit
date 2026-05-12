@@ -112,11 +112,32 @@ describe('gameService state machine', () => {
 
       expect(updated.ok).toBe(true);
       expect(updated.game.familiarAutoDurationMs).toBe(12345);
+      expect(updated.game.familiarAutoStartedAt).toEqual(expect.any(Number));
 
       const internal = gameService.getGame('START_TIMING');
       expect(gameService.getFamiliarizeEndsAt(internal)).toBe(
-        Number(internal.startedAt) + 12345 + gameService.FAMILIARIZE_FREE_PLAY_MS,
+        Number(internal.familiarAutoStartedAt) + 12345 + gameService.FAMILIARIZE_FREE_PLAY_MS,
       );
+    });
+
+    it('should keep the first familiar autoplay start anchor while extending to the longest reported duration', () => {
+      const start = gameService.startGame({ room: room({ roomCode: 'START_TIMING_MAX' }), requestedByUserId: 'user1' });
+
+      expect(start.ok).toBe(true);
+
+      const first = gameService.setFamiliarAutoDuration({
+        roomCode: 'START_TIMING_MAX',
+        familiarAutoDurationMs: 3000,
+      });
+
+      const second = gameService.setFamiliarAutoDuration({
+        roomCode: 'START_TIMING_MAX',
+        familiarAutoDurationMs: 4500,
+      });
+
+      expect(second.ok).toBe(true);
+      expect(second.game.familiarAutoStartedAt).toBe(first.game.familiarAutoStartedAt);
+      expect(second.game.familiarAutoDurationMs).toBe(4500);
     });
   });
 

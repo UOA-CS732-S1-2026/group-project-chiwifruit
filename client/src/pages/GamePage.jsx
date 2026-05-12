@@ -359,6 +359,7 @@ export default function GamePage() {
 	const lastBroadcastEventKeyRef = React.useRef(null)
 	const broadcastClearTimeoutRef = React.useRef(null)
 	const resultsRejoinAttemptRef = React.useRef(null)
+	const familiarAutoplayRunKeyRef = React.useRef(null)
 	const joinRoomMutation = useJoinRoomMutation({
 		onSuccess: (_, joinedRoomCode) => {
 			queryClient.invalidateQueries({ queryKey: ["room", String(joinedRoomCode).trim().toUpperCase()] })
@@ -381,6 +382,7 @@ export default function GamePage() {
 			return total + safeDuration + gapMs
 		}, 0)
 	}, [noteDurationsMs, padCount, socketGame?.familiarAutoDurationMs])
+	const familiarAutoStartedAt = Number(socketGame?.familiarAutoStartedAt)
 	const rankingQuery = useRankingQuery(roomCode, isResultsModalOpen)
 	const roomStateQuery = useRoomQuery(roomCode, isResultsModalOpen)
 	const displayRanking = React.useMemo(() => {
@@ -532,7 +534,13 @@ export default function GamePage() {
 				}, 0)
 
 				if (roomCode && totalDurationMs > 0) {
-					emitGameFamiliarTiming(roomCode, totalDurationMs)
+					emitGameFamiliarTiming(roomCode, totalDurationMs, (response) => {
+						if (!response?.ok || !response.game || isCancelled) return
+						if (typeof response.game?.serverNow === "number") {
+							setServerOffsetMs(response.game.serverNow - Date.now())
+						}
+						setSocketGame(response.game)
+					})
 				}
 			})
 			.catch(() => {
@@ -547,10 +555,9 @@ export default function GamePage() {
 
 	React.useEffect(() => {
 		if (!isSocketDriven) return
-		const startedAt = Number(socketGame?.startedAt)
-		if (!Number.isFinite(startedAt) || startedAt <= 0) return
+		if (!Number.isFinite(familiarAutoStartedAt) || familiarAutoStartedAt <= 0) return
 
-		const autoEndsAt = startedAt + familiarAutoDurationMs
+		const autoEndsAt = familiarAutoStartedAt + familiarAutoDurationMs
 		const freeEndsAt = autoEndsAt + FREE_PLAY_MS
 
 		const intervalId = window.setInterval(() => {
@@ -579,7 +586,7 @@ export default function GamePage() {
 		}, 100)
 
 		return () => window.clearInterval(intervalId)
-	}, [familiarAutoDurationMs, isCurrentUserWaiting, isSocketDriven, padCount, serverOffsetMs, socketGame?.startedAt, socketGame?.status])
+	}, [familiarAutoDurationMs, familiarAutoStartedAt, isCurrentUserWaiting, isSocketDriven, padCount, serverOffsetMs, socketGame?.status])
 
 	React.useEffect(() => {
 		if (!socketGame?.turnEndsAt) return
@@ -598,12 +605,23 @@ export default function GamePage() {
 		if (phase !== PHASE.FAMILIARIZE_AUTO) return
 		if (noteUrls.length === 0) return
 		if (noteDurationsMs.length !== noteUrls.length) return
+		if (!Number.isFinite(familiarAutoStartedAt) || familiarAutoStartedAt <= 0) return
+
+		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
+		const autoplayRunKey = `${String(socketGame?.gameId ?? "")}:${familiarAutoStartedAt}`
 
 		let isCancelled = false
 		let currentUrl = null
-		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
 
 		const runAutoplay = async () => {
+			const autoplayDelayMs = Math.max(0, familiarAutoStartedAt - (Date.now() + serverOffsetMs))
+			if (autoplayDelayMs > 0) {
+				await waitForMs(autoplayDelayMs)
+			}
+			if (isCancelled) return
+			if (familiarAutoplayRunKeyRef.current === autoplayRunKey) return
+			familiarAutoplayRunKeyRef.current = autoplayRunKey
+
 			for (let index = 0; index < noteUrls.length; index += 1) {
 				if (isCancelled) return
 
@@ -639,7 +657,7 @@ export default function GamePage() {
 				stopGameNote(currentUrl)
 			}
 		}
-	}, [isSocketDriven, noteDurationsMs, noteUrls, phase, socketGame?.gameId, socketGame?.status])
+	}, [familiarAutoStartedAt, isSocketDriven, noteDurationsMs, noteUrls, phase, serverOffsetMs, socketGame?.gameId, socketGame?.status])
 
 	const players = React.useMemo(() => {
 		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
@@ -680,6 +698,7 @@ export default function GamePage() {
 	React.useEffect(() => {
 		if (socketGame?.status) return
 		acknowledgedOutGameIdRef.current = null
+		familiarAutoplayRunKeyRef.current = null
 		setSequence([])
 		setInputCount(0)
 		setPhase(PHASE.FAMILIARIZE_AUTO)

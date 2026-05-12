@@ -129,6 +129,7 @@ function initSocket(httpServer, frontendOrigin) {
     if (internal.status !== 'familiarizing') return;
 
     const endsAt = getFamiliarizeEndsAt(internal);
+    if (!Number.isFinite(endsAt)) return;
     const ms = Math.max(0, Number(endsAt) - Date.now());
 
     scheduleRoomTimeout(roomCode, () => {

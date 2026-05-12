@@ -8,6 +8,7 @@ const { buildAvatarUrl } = require('../controllers/authController');
 const TURN_MS = 20_000;
 const FAMILIARIZE_AUTOPLAY_MS = 1_000;
 const FAMILIARIZE_FREE_PLAY_MS = 20_000;
+const FAMILIARIZE_AUTOPLAY_START_BUFFER_MS = 250;
 const GAME_TTL_MS = 10 * 60_000;
 
 const gamesByRoom = new Map();
@@ -167,6 +168,7 @@ function serializeGame(game) {
     padCount: game.padCount,
     audioSeed: game.audioSeed,
     familiarAutoDurationMs: game.familiarAutoDurationMs,
+    familiarAutoStartedAt: game.familiarAutoStartedAt,
     players: game.players,
     participantsOrder: game.participantsOrder,
     familiarReadyUserIds: [...game.familiarReadyUserIds],
@@ -216,6 +218,7 @@ function startGame({ room, requestedByUserId }) {
     status: 'familiarizing',
     startedAt: Date.now(),
     familiarAutoDurationMs: null,
+    familiarAutoStartedAt: null,
     mode: normalizeRoomMode(room.mode),
     difficulty,
     padCount,
@@ -289,12 +292,17 @@ function forceStartPlaying({ roomCode, reason }) {
 }
 
 function getFamiliarizeEndsAt(game) {
+  const familiarAutoStartedAt = Number(game?.familiarAutoStartedAt);
+  if (!Number.isFinite(familiarAutoStartedAt) || familiarAutoStartedAt <= 0) {
+    return null;
+  }
+
   const reportedAutoDurationMs = Number(game?.familiarAutoDurationMs);
   const fallbackAutoDurationMs = Number(game?.padCount) * FAMILIARIZE_AUTOPLAY_MS;
   const autoDurationMs = Number.isFinite(reportedAutoDurationMs) && reportedAutoDurationMs >= 0
     ? reportedAutoDurationMs
     : fallbackAutoDurationMs;
-  return Number(game.startedAt) + autoDurationMs + FAMILIARIZE_FREE_PLAY_MS;
+  return familiarAutoStartedAt + autoDurationMs + FAMILIARIZE_FREE_PLAY_MS;
 }
 
 function setFamiliarAutoDuration({ roomCode, familiarAutoDurationMs }) {
@@ -309,7 +317,16 @@ function setFamiliarAutoDuration({ roomCode, familiarAutoDurationMs }) {
     return { ok: false, error: 'Invalid familiar auto duration.' };
   }
 
-  game.familiarAutoDurationMs = Math.round(nextDurationMs);
+  const roundedDurationMs = Math.round(nextDurationMs);
+  const currentDurationMs = Number(game.familiarAutoDurationMs);
+  if (!Number.isFinite(currentDurationMs) || roundedDurationMs > currentDurationMs) {
+    game.familiarAutoDurationMs = roundedDurationMs;
+  }
+
+  if (!Number.isFinite(Number(game.familiarAutoStartedAt)) || Number(game.familiarAutoStartedAt) <= 0) {
+    game.familiarAutoStartedAt = Date.now() + FAMILIARIZE_AUTOPLAY_START_BUFFER_MS;
+  }
+
   return { ok: true, game: serializeGame(game) };
 }
 
@@ -529,6 +546,7 @@ module.exports = {
   TURN_MS,
   FAMILIARIZE_AUTOPLAY_MS,
   FAMILIARIZE_FREE_PLAY_MS,
+  FAMILIARIZE_AUTOPLAY_START_BUFFER_MS,
   getGame,
   startGame,
   markFamiliarReady,
