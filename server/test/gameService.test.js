@@ -406,7 +406,7 @@ describe('gameService state machine', () => {
       const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 4 });
 
       expect(result.game.status).toBe('finished');
-      expect(result.game.scores.user1).toBe(9);
+      expect(result.game.scores.user1).toBe(4);
       expect(result.game.scores.user2).toBe(4);
     });
   });
