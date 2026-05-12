@@ -101,7 +101,6 @@ function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
 function finalizeGame(game) {
   const alive = getAliveParticipantIds(game);
   const winnerUserId = alive[0] ?? null;
-  if (winnerUserId) addScore(game, winnerUserId, 5);
   game.status = 'finished';
   game.turnEndsAt = null;
   game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId };
