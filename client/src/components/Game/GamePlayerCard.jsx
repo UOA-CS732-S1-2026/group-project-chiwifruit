@@ -11,7 +11,6 @@ export default function GamePlayerCard({
 }) {
 	const isEliminated = status === "OUT OF GAME" || status === "ELIMINATED"
 	const displayStatus = isEliminated ? "ELIMINATED" : status
-	const isUrgentCountdown = isCurrentTurn && typeof turnSeconds === "number" && turnSeconds <= 10
 
 	return (
 		<div
@@ -43,14 +42,7 @@ export default function GamePlayerCard({
 			</div>
 
 			{isCurrentTurn && typeof turnSeconds === "number" ? (
-				<div
-					className={cn(
-						"grid size-11 shrink-0 place-items-center rounded-full text-sm font-extrabold text-white",
-						isUrgentCountdown
-							? "bg-[#ef4444] shadow-[0_10px_24px_rgba(239,68,68,0.4)]"
-							: "bg-[#00BBA7] shadow-[0_10px_24px_rgba(0,187,167,0.35)]",
-					)}
-				>
+				<div className="grid size-11 shrink-0 place-items-center rounded-full bg-[#00BBA7] text-sm font-extrabold text-white shadow-[0_10px_24px_rgba(0,187,167,0.35)]">
 					{turnSeconds}
 				</div>
 			) : null}

@@ -2,7 +2,6 @@ import { Howl } from "howler"
 
 import clickSfxUrl from "../assets/audio/common/click.mp3"
 import backgroundMusicUrl from "../assets/audio/common/backgroundmusic.mp3"
-import countdownSfxUrl from "../assets/audio/common/countdown.mp3"
 import useSoundStore from "../store/useSoundStore"
 
 // NOTE (2026-04-29): 声音播放统一入口（Howler.js）。
@@ -10,7 +9,6 @@ import useSoundStore from "../store/useSoundStore"
 // - backgroundMusic: 处理 autoplay 被拒绝后的 unlock 重试 + 首次用户交互 retry
 
 let clickSound
-let countdownTickSound
 let backgroundSound
 let backgroundVolume = 0.22
 let retryListenersAttached = false
@@ -43,17 +41,6 @@ function getBackgroundSound() {
 		})
 	}
 	return backgroundSound
-}
-
-function getCountdownTickSound() {
-	if (!countdownTickSound) {
-		countdownTickSound = new Howl({
-			src: [countdownSfxUrl],
-			volume: 0.45,
-			preload: true,
-		})
-	}
-	return countdownTickSound
 }
 
 function detachRetryListeners() {
@@ -89,13 +76,6 @@ export function playClickSfx() {
 	if (useSoundStore.getState().muted) return
 	const sound = getClickSound()
 	// Restart from the beginning for consistent feedback on rapid clicks.
-	sound.stop()
-	sound.play()
-}
-
-export function playCountdownTickSfx() {
-	if (useSoundStore.getState().muted) return
-	const sound = getCountdownTickSound()
 	sound.stop()
 	sound.play()
 }
