@@ -24,7 +24,13 @@ jest.mock('../src/services/gameService', () => ({
   serializeGame: jest.fn((g) => g),
   clearRoomTimeout: jest.fn(),
   scheduleRoomTimeout: jest.fn(),
+  removeGame: jest.fn(),
   cleanupGameLater: jest.fn(),
+}));
+
+jest.mock('../src/services/roomStateService', () => ({
+  normalizeRoomParticipants: jest.fn(() => false),
+  removeParticipantFromRoom: jest.fn(),
 }));
 
 // Clear the module cache so the socket module is reloaded with the mock above.
@@ -33,6 +39,7 @@ jest.resetModules();
 const { Server } = require('socket.io');
 const { initSocket } = require('../src/socket');
 const gameService = require('../src/services/gameService');
+const roomStateService = require('../src/services/roomStateService');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,6 +89,7 @@ describe('socket: familiarizing-phase forfeit timer orchestration', () => {
     // Default: getGame returns a familiarizing game so scheduleFamiliarAutoStart proceeds.
     gameService.getGame.mockReturnValue({ status: 'familiarizing', roomCode: 'ROOM1' });
     gameService.getFamiliarizeEndsAt.mockReturnValue(Date.now() + 5000);
+    roomStateService.removeParticipantFromRoom.mockResolvedValue({ ok: true, deleted: false, roomState: { roomCode: 'ROOM1' } });
   });
 
   describe('leave_room forfeit during familiarizing', () => {
@@ -120,6 +128,16 @@ describe('socket: familiarizing-phase forfeit timer orchestration', () => {
       expect(gameService.clearRoomTimeout).not.toHaveBeenCalled();
       expect(gameService.scheduleRoomTimeout).not.toHaveBeenCalled();
       expect(gameService.cleanupGameLater).not.toHaveBeenCalled();
+    });
+
+    it('removes the in-memory game immediately when room deletion succeeds', async () => {
+      gameService.forfeitPlayer.mockReturnValue({ ok: true, game: { status: 'finished', scores: { user1: 2, user2: 0 } } });
+      roomStateService.removeParticipantFromRoom.mockResolvedValue({ ok: true, deleted: true, roomState: null });
+
+      const socket = connectSocket(io, 'user2', 'ROOM1');
+      await getHandler(socket, 'leave_room')({ roomCode: 'ROOM1' });
+
+      expect(gameService.removeGame).toHaveBeenCalledWith('ROOM1');
     });
   });
 

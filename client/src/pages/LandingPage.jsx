@@ -4,8 +4,11 @@ import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
 import ErrorToast from "../components/ui/ErrorToast"
+
+import { useEffect, useState } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy, Users } from "lucide-react"
-import { useState } from "react"
+
 import AuthModal from "../components/AuthComponent/AuthModal"
 import { getStoredAuthUser } from "../api/axios"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
@@ -17,9 +20,12 @@ import { HOME_STICKERS } from "../components/Common/floatingStickerConfigs"
 // If no token exists, create a guest session first (obtain token), then call the room API.
 
 export default function LandingPage() {
+	const location = useLocation()
+	const navigate = useNavigate()
     const [showAuthModal, setShowAuthModal] = useState(
       () => !getStoredAuthUser(),
     )
+	const [routeError, setRouteError] = useState("")
 	// For local development, the build version is set to "local". In dev/prod, 
 	// it should be set to the actual build version via the VITE_BUILD_VERSION environment variable.
 	const buildVersion = import.meta.env.VITE_BUILD_VERSION || "local"
@@ -36,6 +42,15 @@ export default function LandingPage() {
 		createRoomGuarded,
 		joinRoomGuarded,
 	} = useGuardedRoomNavigation()
+
+	useEffect(() => {
+		const nextRouteError =
+			typeof location.state?.errorMessage === "string" ? location.state.errorMessage : ""
+		if (!nextRouteError) return
+
+		setRouteError(nextRouteError)
+		navigate(location.pathname, { replace: true, state: null })
+	}, [location.pathname, location.state, navigate])
 
 	const guideItems = [
 		{
@@ -60,7 +75,16 @@ export default function LandingPage() {
 
 	return (
 	  <>
-		<ErrorToast message={actionError} onDismiss={clearActionError} />
+		<ErrorToast
+			message={routeError || actionError}
+			onDismiss={() => {
+				if (routeError) {
+					setRouteError("")
+					return
+				}
+				clearActionError()
+			}}
+		/>
         <AuthModal open={showAuthModal} onClose={() => setShowAuthModal(false)} />
 		<Background stickers={HOME_STICKERS}>
 

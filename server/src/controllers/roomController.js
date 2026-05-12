@@ -1,7 +1,7 @@
 const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate } = require('../socket');
-const { getGame } = require('../services/gameService');
+const { getGame, removeGame } = require('../services/gameService');
 const { buildAvatarUrl } = require('./authController');
 const {
   removeParticipantFromRoom,
@@ -307,6 +307,7 @@ async function leaveRoom(req, res) {
   }
 
   if (result.deleted) {
+    removeGame(result.roomCode);
     return res.json({ message: 'Left room', roomCode: result.roomCode, deleted: true });
   }
 

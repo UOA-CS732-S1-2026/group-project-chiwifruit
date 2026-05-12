@@ -18,6 +18,7 @@ const {
   registerTurnTimeout,
   clearRoomTimeout,
   scheduleRoomTimeout,
+  removeGame,
   cleanupGameLater,
 } = require('../services/gameService');
 
@@ -65,6 +66,9 @@ function initSocket(httpServer, frontendOrigin) {
       })
         .then((removal) => {
           if (removal?.ok) {
+            if (removal.deleted) {
+              removeGame(normalizedRoomCode);
+            }
             emitRoomUpdate(io, normalizedRoomCode, removal.roomState ?? null);
           }
         })
@@ -204,6 +208,9 @@ function initSocket(httpServer, frontendOrigin) {
         })
           .then((removal) => {
             if (removal?.ok) {
+              if (removal.deleted) {
+                removeGame(code);
+              }
               emitRoomUpdate(io, code, removal.roomState ?? null);
             }
           })
