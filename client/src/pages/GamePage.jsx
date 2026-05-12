@@ -522,6 +522,17 @@ export default function GamePage() {
 
 		let isCancelled = false
 
+		const syncFamiliarTiming = (durationMs) => {
+			if (!roomCode) return
+			emitGameFamiliarTiming(roomCode, Math.max(0, Number(durationMs) || 0), (response) => {
+				if (!response?.ok || !response.game || isCancelled) return
+				if (typeof response.game?.serverNow === "number") {
+					setServerOffsetMs(response.game.serverNow - Date.now())
+				}
+				setSocketGame(response.game)
+			})
+		}
+
 		void Promise.all(noteUrls.map((url) => getGameNoteDurationMs(url)))
 			.then((durations) => {
 				if (isCancelled) return
@@ -533,19 +544,12 @@ export default function GamePage() {
 					return total + safeDuration + gapMs
 				}, 0)
 
-				if (roomCode && totalDurationMs > 0) {
-					emitGameFamiliarTiming(roomCode, totalDurationMs, (response) => {
-						if (!response?.ok || !response.game || isCancelled) return
-						if (typeof response.game?.serverNow === "number") {
-							setServerOffsetMs(response.game.serverNow - Date.now())
-						}
-						setSocketGame(response.game)
-					})
-				}
+				syncFamiliarTiming(totalDurationMs)
 			})
 			.catch(() => {
 				if (isCancelled) return
 				setNoteDurationsMs([])
+				syncFamiliarTiming(0)
 			})
 
 		return () => {
