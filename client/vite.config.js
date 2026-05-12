@@ -16,7 +16,16 @@ const allowedDeploymentHosts = [
 export default defineConfig(({ mode }) => {
   // Vite normally reads env files from the current project root (client/).
   // This project keeps env configuration at repository root instead.
-  const env = loadEnv(mode, rootDir, '')
+  const fileEnv = loadEnv(mode, rootDir, '')
+
+  // In Docker/EC2 deployment, the real root .env file is intentionally excluded
+  // from the image and values are injected at container runtime via --env-file.
+  // Therefore Vite server config must also fall back to process.env.
+  const env = {
+    ...fileEnv,
+    ...process.env,
+  }
+
   const disableHmr = env.VITE_DISABLE_HMR === 'true'
 
   return {
