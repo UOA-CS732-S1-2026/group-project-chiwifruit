@@ -127,6 +127,54 @@ export default function GamePage() {
 	)
 	const isCurrentUserWaiting = Boolean(isCurrentUserActive) && waitingUserIds.includes(String(currentUserId))
 
+	const navigateHomeWithError = React.useCallback(
+		(message) => {
+			navigate("/", {
+				replace: true,
+				state: message
+					? {
+						errorMessage: message,
+					}
+					: undefined,
+			})
+		},
+		[navigate],
+	)
+
+	const requestLatestGameState = React.useCallback(() => {
+		if (!roomCode) return
+
+		emitGameRequestState(roomCode, (response) => {
+			if (response?.ok && response.game) {
+				if (typeof response.game?.serverNow === "number") {
+					setServerOffsetMs(response.game.serverNow - Date.now())
+				}
+				setSocketGame(response.game)
+				setIsGameLoading(false)
+				return
+			}
+
+			const errorCode = typeof response?.errorCode === "string" ? response.errorCode : ""
+			const message =
+				typeof response?.error === "string"
+					? response.error
+					: typeof response?.message === "string"
+						? response.message
+						: "Unable to load game"
+
+			if (shouldExitToLanding(errorCode)) {
+				leaveSocketRoom(roomCode)
+				navigateHomeWithError(
+					errorCode === "NO_ACTIVE_GAME" ? "This game no longer exists." : message,
+				)
+				return
+			}
+
+			setGameLoadError(message)
+			setIsGameLoading(false)
+		})
+	}, [navigateHomeWithError, roomCode])
+
 	React.useEffect(() => {
 		// Browser limitation: we cannot show a custom React modal on refresh/close.
 		// Use the native beforeunload confirmation for any in-game player during an active game.
@@ -146,8 +194,8 @@ export default function GamePage() {
 
 	React.useEffect(() => {
 		if (roomCode) return
-		navigate("/")
-	}, [navigate, roomCode])
+		navigateHomeWithError()
+	}, [navigateHomeWithError, roomCode])
 
 	const difficulty = React.useMemo(
 		() => coerceDifficulty(socketGame?.difficulty),
@@ -171,7 +219,7 @@ export default function GamePage() {
 		if (!currentUserId) {
 			setGameLoadError("Missing session. Please return to home and join again.")
 			setIsGameLoading(false)
-			navigate("/")
+			navigateHomeWithError("Missing session. Please join again.")
 			return
 		}
 
@@ -212,35 +260,38 @@ export default function GamePage() {
 		socket.on("game_error", onGameError)
 		socket.on("game_pad_sound", onGamePadSound)
 
-		emitGameRequestState(roomCode, (response) => {
-			if (response?.ok && response.game) {
-				onGameState(response.game)
-				setIsGameLoading(false)
-				return
-			}
-
-			const errorCode = typeof response?.errorCode === "string" ? response.errorCode : ""
-				const message = typeof response?.error === "string"
-					? response.error
-					: typeof response?.message === "string"
-						? response.message
-						: "Unable to load game"
-				if (shouldExitToLanding(errorCode)) {
-					leaveSocketRoom(roomCode)
-					navigate("/")
-					return
-				}
-
-			setGameLoadError(message)
-			setIsGameLoading(false)
-		})
+		requestLatestGameState()
 
 		return () => {
 			socket.off("game_state", onGameState)
 			socket.off("game_error", onGameError)
 			socket.off("game_pad_sound", onGamePadSound)
 		}
-	}, [currentUserId, navigate, noteUrls, roomCode, socketGame?.status])
+	}, [currentUserId, navigateHomeWithError, noteUrls, requestLatestGameState, roomCode, socketGame?.status])
+
+	React.useEffect(() => {
+		if (!roomCode || !currentUserId) return
+
+		const onPageShow = (event) => {
+			if (!event.persisted) return
+
+			setSocketError("")
+			setGameLoadError("")
+			setSocketGame(null)
+			setIsGameLoading(true)
+			setIsExitModalOpen(false)
+			setIsOutModalOpen(false)
+			setIsResultsModalOpen(false)
+			setIsSpectating(false)
+			reconnectSocket()
+			requestLatestGameState()
+		}
+
+		window.addEventListener("pageshow", onPageShow)
+		return () => {
+			window.removeEventListener("pageshow", onPageShow)
+		}
+	}, [currentUserId, requestLatestGameState, roomCode])
 
 	const [phase, setPhase] = React.useState(PHASE.FAMILIARIZE_AUTO)
 	const padThemes = React.useMemo(

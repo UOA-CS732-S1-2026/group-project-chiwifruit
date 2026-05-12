@@ -2,8 +2,13 @@ const request = require('supertest');
 jest.mock('../src/socket', () => ({
   emitRoomUpdate: jest.fn(),
 }));
+jest.mock('../src/services/gameService', () => ({
+  getGame: jest.fn(() => null),
+  removeGame: jest.fn(),
+}));
 
 const { emitRoomUpdate } = require('../src/socket');
+const { removeGame } = require('../src/services/gameService');
 const app = require('../src/app');
 const Room = require('../src/models/Room');
 
@@ -710,6 +715,7 @@ describe('Room API', () => {
         .expect(200);
 
       expect(Room.deleteOne).toHaveBeenCalledWith({ _id: 'room-1' });
+      expect(removeGame).toHaveBeenCalledWith('ABC');
       expect(response.body).toMatchObject({ message: 'Left room', roomCode: 'ABC', deleted: true });
     });
 

@@ -49,6 +49,12 @@ function cleanupGameLater(roomCode) {
   }, GAME_TTL_MS);
 }
 
+function removeGame(roomCode) {
+  const normalizedRoomCode = String(roomCode).toUpperCase();
+  clearRoomTimeout(normalizedRoomCode);
+  gamesByRoom.delete(normalizedRoomCode);
+}
+
 function participantIdOf(participant) {
   return participant.user?._id ? String(participant.user._id) : participant.guestId ? String(participant.guestId) : null;
 }
@@ -524,5 +530,6 @@ module.exports = {
   registerTurnTimeout,
   clearRoomTimeout,
   scheduleRoomTimeout,
+  removeGame,
   cleanupGameLater,
 };

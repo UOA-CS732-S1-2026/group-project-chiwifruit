@@ -118,14 +118,14 @@ export default function RoomPage() {
 
 		if (!requestedJoinCode) {
 			setSetupError("Missing room code. Please go back and join/create from landing page.")
-			navigate("/")
+			navigate("/", { replace: true })
 			return
 		}
 
 		const token = getStoredAuthToken()
 		if (!token) {
 			setSetupError("Missing session. Please join from the home page.")
-			navigate("/")
+			navigate("/", { replace: true })
 			return
 		}
 
@@ -184,14 +184,14 @@ export default function RoomPage() {
 
 	const leaveRoomAndReturnHome = useCallback(() => {
 		if (!activeRoomCode) {
-			navigate("/")
+			navigate("/", { replace: true })
 			return
 		}
 
 		leaveRoomMutation.mutate(activeRoomCode, {
 			onSuccess: () => {
 				pageLeaveSentRef.current = true
-				navigate("/")
+				navigate("/", { replace: true })
 			},
 		})
 	}, [activeRoomCode, leaveRoomMutation, navigate])
