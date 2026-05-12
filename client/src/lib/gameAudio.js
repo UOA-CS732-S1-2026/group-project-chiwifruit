@@ -86,7 +86,12 @@ async function resolveAudioEntries(mode) {
 				}
 				: null
 		}),
-	).then((entries) => entries.filter(Boolean))
+	)
+		.then((entries) => entries.filter(Boolean))
+		.catch((error) => {
+			audioEntriesPromiseCache.delete(key)
+			throw error
+		})
 
 	audioEntriesPromiseCache.set(key, loadPromise)
 	return loadPromise
@@ -140,7 +145,9 @@ function ensureHowlLoaded(howl) {
 
 		howl.once("load", handleLoad)
 		howl.once("loaderror", handleLoadError)
-		howl.load()
+		if (howl.state() !== "loading") {
+			howl.load()
+		}
 	})
 
 	howlLoadPromiseCache.set(howl, loadPromise)
