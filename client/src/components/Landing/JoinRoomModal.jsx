@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { X } from "lucide-react"
+import { Users, X } from "lucide-react"
 
 import BaseModal from "../ui/BaseModal"
 
@@ -56,6 +56,10 @@ export default function JoinRoomModal({ open, onOpenChange, onJoin, isSubmitting
 					<h2 className="text-[24px] font-bold leading-8 text-[#091149]">Join a Room</h2>
 					<p className="mt-2 text-[16px] font-medium leading-6 text-[#62748e]">
 						Enter the room code shared by your friend to join their game.
+					</p>
+					<p className="mb-6 mt-2 flex items-center gap-1.5 text-sm font-bold text-[#4A5EED]">
+						<Users size={16} />
+						Supports 2 to 6 players
 					</p>
 
 					<div className="mt-6 flex flex-col gap-4">

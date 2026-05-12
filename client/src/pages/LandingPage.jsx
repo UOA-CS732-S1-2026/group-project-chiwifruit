@@ -4,9 +4,11 @@ import LandingTopBar from "../components/Landing/LandingTopBar"
 import GuideCard from "../components/Landing/GuideCard"
 import { Button } from "../components/ui/button"
 import ErrorToast from "../components/ui/ErrorToast"
-import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy } from "lucide-react"
+
 import { useEffect, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
+import { Headphones, LogIn, Play, PlusCircle, Sparkles, Trophy, Users } from "lucide-react"
+
 import AuthModal from "../components/AuthComponent/AuthModal"
 import { getStoredAuthUser } from "../api/axios"
 import JoinRoomModal from "../components/Landing/JoinRoomModal"
@@ -112,8 +114,8 @@ export default function LandingPage() {
 			<section className="relative mx-auto w-full max-w-[90rem] px-4 pb-14 pt-24 md:px-6 md:pt-28 lg:px-8">
 				<div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8">
 					<div className="flex flex-col items-start gap-5 md:gap-6">
-						<div className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-6 text-[0.8rem] font-bold tracking-[0.02em] text-accent-foreground shadow-sm uppercase">
-							<Sparkles className="size-4" />
+						<div className="flex w-fit items-center justify-center gap-2 rounded-full border border-[#4A5EED]/20 bg-white px-5 py-2.5 font-bold text-[#4A5EED] shadow-sm lg:justify-start">
+							<Sparkles className="size-5" />
 							<span>The Ultimate Musical Memory Game</span>
 						</div>
 
@@ -126,10 +128,15 @@ export default function LandingPage() {
 							</h2>
 						</div>
 
-						<p className="text-muted-theme max-w-[40ch] text-[1.02rem] leading-relaxed md:text-[1.08rem]">
+						<p className="mb-3 max-w-2xl text-lg leading-relaxed font-medium text-slate-500 md:text-xl">
 							Test your memory in this multiplayer sound chain game. Listen to the sequence,
 							repeat it perfectly, and add your own beat. One mistake and you&apos;re out!
 						</p>
+
+						<div className="mb-1 flex w-fit items-center justify-center gap-2 rounded-full border border-[#4A5EED]/20 bg-white px-5 py-2.5 font-bold text-[#4A5EED] shadow-sm lg:justify-start">
+							<Users size={20} />
+							<span>Perfect for 2 to 6 players per room</span>
+						</div>
 
 						<div className="flex flex-wrap items-center gap-3 pt-1">
 							<Button
