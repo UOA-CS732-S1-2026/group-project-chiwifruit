@@ -59,6 +59,8 @@ function getCountdownSound() {
 		})
 	}
 	return countdownSound
+}
+
 function getLosingSound() {
 	if (!losingSound) {
 		losingSound = new Howl({
@@ -121,6 +123,10 @@ export function playClickSfx() {
 export function playCountdownTickSfx() {
 	if (useSoundStore.getState().muted) return
 	const sound = getCountdownSound()
+	sound.stop()
+	sound.play()
+}
+
 export function playLosingSfx() {
 	if (useSoundStore.getState().muted) return
 	const sound = getLosingSound()
