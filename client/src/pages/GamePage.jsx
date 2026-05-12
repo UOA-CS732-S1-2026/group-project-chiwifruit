@@ -33,6 +33,7 @@ import {
 } from "../socket/socket"
 import SOCKET_EVENTS from "../socket/socketEvents"
 import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, stopGameNote } from "../lib/gameAudio"
+import { COUNTDOWN_URGENT_THRESHOLD_SECONDS } from "../lib/gameConstants"
 import { playCountdownTickSfx } from "../lib/sound"
 
 import logo from "../assets/branding/logo.png"
@@ -864,7 +865,11 @@ export default function GamePage() {
 			return
 		}
 
-		if (!Number.isInteger(turnSeconds) || turnSeconds <= 0 || turnSeconds > 10) {
+		if (
+			!Number.isInteger(turnSeconds) ||
+			turnSeconds <= 0 ||
+			turnSeconds > COUNTDOWN_URGENT_THRESHOLD_SECONDS
+		) {
 			lastCountdownSfxSecondRef.current = null
 			return
 		}

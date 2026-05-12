@@ -1,4 +1,5 @@
 import { cn } from "../../lib/utils"
+import { COUNTDOWN_URGENT_THRESHOLD_SECONDS } from "../../lib/gameConstants"
 
 export default function GamePlayerCard({
 	name,
@@ -11,7 +12,10 @@ export default function GamePlayerCard({
 }) {
 	const isEliminated = status === "OUT OF GAME" || status === "ELIMINATED"
 	const displayStatus = isEliminated ? "ELIMINATED" : status
-	const isUrgentCountdown = isCurrentTurn && typeof turnSeconds === "number" && turnSeconds <= 10
+	const isUrgentCountdown =
+		isCurrentTurn &&
+		typeof turnSeconds === "number" &&
+		turnSeconds <= COUNTDOWN_URGENT_THRESHOLD_SECONDS
 
 	return (
 		<div
