@@ -1,5 +1,5 @@
 const { Server } = require('socket.io');
-const { initSocket, emitRoomUpdate } = require('../src/socket');
+const { initSocket, emitRoomUpdate, getScheduledFamiliarizeEndsAt } = require('../src/socket');
 
 function mockSocketServer() {
   const io = {
@@ -69,6 +69,43 @@ describe('socket helpers', () => {
           cors: expect.objectContaining({ origin: '*' }),
         })
       );
+    });
+  });
+
+  describe('getScheduledFamiliarizeEndsAt', () => {
+    it('should use the real familiar finish anchor when familiarAutoFinishedAt exists', () => {
+      const game = {
+        startedAt: 10_000,
+        familiarAutoStartedAt: 10_250,
+        familiarAutoFinishedAt: 14_750,
+        familiarAutoDurationMs: 4_500,
+        padCount: 6,
+      };
+
+      expect(getScheduledFamiliarizeEndsAt(game)).toBe(14_750 + 20_000);
+    });
+
+    it('should fall back to a widened familiar timeout when no real finish anchor was reported', () => {
+      const game = {
+        startedAt: 10_000,
+        familiarAutoStartedAt: null,
+        familiarAutoDurationMs: null,
+        padCount: 6,
+      };
+
+      expect(getScheduledFamiliarizeEndsAt(game)).toBe(10_000 + 500 + (6 * 1_000) + 15_000 + 20_000);
+    });
+
+    it('should use the autoplay start time as the base for the failsafe once autoplay has started', () => {
+      const game = {
+        startedAt: 10_000,
+        familiarAutoStartedAt: 12_500,
+        familiarAutoFinishedAt: null,
+        familiarAutoDurationMs: 4_500,
+        padCount: 6,
+      };
+
+      expect(getScheduledFamiliarizeEndsAt(game)).toBe(12_500 + 4_500 + 15_000 + 20_000);
     });
   });
 });

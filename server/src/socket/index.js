@@ -5,10 +5,16 @@ const Room = require('../models/Room');
 const { normalizeRoomParticipants, removeParticipantFromRoom } = require('../services/roomStateService');
 const {
   TURN_MS,
+  FAMILIARIZE_AUTOPLAY_MS,
+  FAMILIARIZE_AUTOPLAY_START_BUFFER_MS,
+  FAMILIARIZE_FREE_PLAY_MS,
   getGame,
   startGame,
+  markFamiliarAudioReady,
   markFamiliarReady,
   setFamiliarAutoDuration,
+  setFamiliarAutoStarted,
+  setFamiliarAutoFinished,
   forceStartPlaying,
   forfeitPlayer,
   registerFamiliarPadPress,
@@ -23,7 +29,38 @@ const {
 } = require('../services/gameService');
 
 const WAITING_ROOM_DISCONNECT_GRACE_MS = 10_000;
+const FAMILIARIZE_FAILSAFE_GRACE_MS = 15_000;
 const pendingRoomRosterCleanupTimers = new Map();
+
+function getScheduledFamiliarizeEndsAt(game) {
+  const anchoredEndsAt = getFamiliarizeEndsAt(game);
+  if (Number.isFinite(anchoredEndsAt)) {
+    return anchoredEndsAt;
+  }
+
+  const familiarAutoStartedAt = Number(game?.familiarAutoStartedAt);
+  const startedAt = Number.isFinite(familiarAutoStartedAt) && familiarAutoStartedAt > 0
+    ? familiarAutoStartedAt
+    : Number(game?.startedAt);
+  if (!Number.isFinite(startedAt) || startedAt <= 0) {
+    return null;
+  }
+
+  const rawReportedAutoDurationMs = game?.familiarAutoDurationMs;
+  const reportedAutoDurationMs = rawReportedAutoDurationMs == null ? NaN : Number(rawReportedAutoDurationMs);
+  const padCount = Number(game?.padCount);
+  const fallbackPadCount = Number.isFinite(padCount) && padCount > 0 ? padCount : 0;
+  const fallbackAutoDurationMs = fallbackPadCount * FAMILIARIZE_AUTOPLAY_MS;
+  const autoDurationMs = Number.isFinite(reportedAutoDurationMs) && reportedAutoDurationMs >= 0
+    ? reportedAutoDurationMs
+    : fallbackAutoDurationMs;
+
+  return startedAt
+    + (Number.isFinite(familiarAutoStartedAt) && familiarAutoStartedAt > 0 ? 0 : FAMILIARIZE_AUTOPLAY_START_BUFFER_MS)
+    + autoDurationMs
+    + FAMILIARIZE_FAILSAFE_GRACE_MS
+    + FAMILIARIZE_FREE_PLAY_MS;
+}
 
 function getRoomRosterCleanupKey(roomCode, userId) {
   return `${String(roomCode).toUpperCase()}::${String(userId)}`;
@@ -128,7 +165,8 @@ function initSocket(httpServer, frontendOrigin) {
     if (!internal) return;
     if (internal.status !== 'familiarizing') return;
 
-    const endsAt = getFamiliarizeEndsAt(internal);
+    const endsAt = getScheduledFamiliarizeEndsAt(internal);
+    if (!Number.isFinite(endsAt)) return;
     const ms = Math.max(0, Number(endsAt) - Date.now());
 
     scheduleRoomTimeout(roomCode, () => {
@@ -430,6 +468,108 @@ function initSocket(httpServer, frontendOrigin) {
       if (typeof ack === 'function') ack({ ok: true, game: result.game });
     });
 
+    socket.on('game_familiar_audio_ready', async (payload = {}, ack) => {
+      const { roomCode } = payload;
+      const userId = socket.user?.sub ? String(socket.user.sub) : null;
+
+      if (!roomCode) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Missing room code.' });
+        return;
+      }
+
+      const code = String(roomCode).toUpperCase();
+      const internal = getGame(code);
+      if (!internal) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'No active game.' });
+        return;
+      }
+
+      if (!userId || !internal.participantsOrder.includes(userId)) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Not a game participant.' });
+        return;
+      }
+
+      const result = markFamiliarAudioReady({ roomCode: code, userId });
+      if (!result.ok) {
+        if (typeof ack === 'function') ack(result);
+        return;
+      }
+
+      io.to(code).emit('game_state', result.game);
+      clearRoomTimeout(code);
+      scheduleFamiliarAutoStart(code);
+
+      if (typeof ack === 'function') ack({ ok: true, game: result.game });
+    });
+
+    socket.on('game_familiar_autoplay_started', async (payload = {}, ack) => {
+      const { roomCode } = payload;
+      const userId = socket.user?.sub ? String(socket.user.sub) : null;
+
+      if (!roomCode) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Missing room code.' });
+        return;
+      }
+
+      const code = String(roomCode).toUpperCase();
+      const internal = getGame(code);
+      if (!internal) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'No active game.' });
+        return;
+      }
+
+      if (!userId || !internal.participantsOrder.includes(userId)) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Not a game participant.' });
+        return;
+      }
+
+      const result = setFamiliarAutoStarted({ roomCode: code });
+      if (!result.ok) {
+        if (typeof ack === 'function') ack(result);
+        return;
+      }
+
+      io.to(code).emit('game_state', result.game);
+      clearRoomTimeout(code);
+      scheduleFamiliarAutoStart(code);
+
+      if (typeof ack === 'function') ack({ ok: true, game: result.game });
+    });
+
+    socket.on('game_familiar_autoplay_finished', async (payload = {}, ack) => {
+      const { roomCode } = payload;
+      const userId = socket.user?.sub ? String(socket.user.sub) : null;
+
+      if (!roomCode) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Missing room code.' });
+        return;
+      }
+
+      const code = String(roomCode).toUpperCase();
+      const internal = getGame(code);
+      if (!internal) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'No active game.' });
+        return;
+      }
+
+      if (!userId || !internal.participantsOrder.includes(userId)) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Not a game participant.' });
+        return;
+      }
+
+      const result = setFamiliarAutoFinished({ roomCode: code });
+      if (!result.ok) {
+        if (typeof ack === 'function') ack(result);
+        return;
+      }
+
+      io.to(code).emit('game_state', result.game);
+      clearRoomTimeout(code);
+      scheduleFamiliarAutoStart(code);
+
+      if (typeof ack === 'function') ack({ ok: true, game: result.game });
+    });
+
     socket.on('game_familiar_pad_press', async (payload = {}) => {
       const { roomCode, padIndex } = payload;
       const userId = socket.user?.sub;
@@ -496,4 +636,5 @@ module.exports = {
   initSocket,
   emitRoomUpdate,
   cancelPendingRoomRosterCleanup,
+  getScheduledFamiliarizeEndsAt,
 };

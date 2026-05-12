@@ -19,9 +19,12 @@ import { getStoredAuthUser } from "../api/axios"
 import { leaveRoom } from "../api/rooms"
 import useBackgroundMusic from "../hooks/useBackgroundMusic"
 import { useJoinRoomMutation } from "../hooks/mutations/useRoomMutations"
+import { cn } from "../lib/utils"
 import useSoundStore from "../store/useSoundStore"
 import { useRankingQuery, useRoomQuery } from "../hooks/queries/useRoomQuery"
 import {
+	emitGameFamiliarAudioReady,
+	emitGameFamiliarAutoplayFinished,
 	emitGameFamiliarTiming,
 	emitGameFamiliarPadPress,
 	emitGameFamiliarReady,
@@ -32,14 +35,14 @@ import {
 	reconnectSocket,
 } from "../socket/socket"
 import SOCKET_EVENTS from "../socket/socketEvents"
-import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, stopGameNote } from "../lib/gameAudio"
+import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, preloadGameNote, stopGameNote } from "../lib/gameAudio"
+import { playLosingSfx, playWinningSfx } from "../lib/sound"
 import { COUNTDOWN_URGENT_THRESHOLD_SECONDS } from "../lib/gameConstants"
-import { playCountdownTickSfx } from "../lib/sound"
-
 import logo from "../assets/branding/logo.png"
 import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
 
 const PHASE = {
+	FAMILIARIZE_LOADING: "familiarize:loading",
 	FAMILIARIZE_AUTO: "familiarize:auto",
 	FAMILIARIZE_FREE: "familiarize:free",
 	FAMILIARIZE_WAITING: "familiarize:waiting",
@@ -229,16 +232,19 @@ export default function GamePage() {
 	)
 	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : 0
 	const [noteUrls, setNoteUrls] = React.useState([])
+	const [noteUrlsResolved, setNoteUrlsResolved] = React.useState(false)
 	
 // NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
 // This avoids reshuffling from any non-authoritative client fallback state.
 	React.useEffect(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed || padCount <= 0) {
 			setNoteUrls([])
+			setNoteUrlsResolved(false)
 			return
 		}
 
 		let isCancelled = false
+		setNoteUrlsResolved(false)
 
 		void pickGameNoteUrls({
 			mode: socketGame.mode || "kiwi",
@@ -248,10 +254,12 @@ export default function GamePage() {
 			.then((nextNoteUrls) => {
 				if (isCancelled) return
 				setNoteUrls(Array.isArray(nextNoteUrls) ? nextNoteUrls : [])
+				setNoteUrlsResolved(true)
 			})
 			.catch(() => {
 				if (isCancelled) return
 				setNoteUrls([])
+				setNoteUrlsResolved(true)
 			})
 
 		return () => {
@@ -338,7 +346,7 @@ export default function GamePage() {
 		}
 	}, [currentUserId, requestLatestGameState, roomCode])
 
-	const [phase, setPhase] = React.useState(PHASE.FAMILIARIZE_AUTO)
+	const [phase, setPhase] = React.useState(PHASE.FAMILIARIZE_LOADING)
 	const padThemes = React.useMemo(
 		() => buildPadThemeSetByPadCount(padCount),
 		// Recompute only when pad count changes.
@@ -360,8 +368,12 @@ export default function GamePage() {
 	const [isSpectating, setIsSpectating] = React.useState(false)
 	const [broadcastEvent, setBroadcastEvent] = React.useState(null)
 	const lastBroadcastEventKeyRef = React.useRef(null)
+	const playedOutcomeEventKeyRef = React.useRef(null)
 	const broadcastClearTimeoutRef = React.useRef(null)
 	const resultsRejoinAttemptRef = React.useRef(null)
+	const familiarAutoplayRunKeyRef = React.useRef(null)
+	const familiarAudioReadyRequestKeyRef = React.useRef(null)
+	const familiarAutoplayFinishKeyRef = React.useRef(null)
 	const joinRoomMutation = useJoinRoomMutation({
 		onSuccess: (_, joinedRoomCode) => {
 			queryClient.invalidateQueries({ queryKey: ["room", String(joinedRoomCode).trim().toUpperCase()] })
@@ -384,6 +396,25 @@ export default function GamePage() {
 			return total + safeDuration + gapMs
 		}, 0)
 	}, [noteDurationsMs, padCount, socketGame?.familiarAutoDurationMs])
+	const familiarAutoStartedAt = Number(socketGame?.familiarAutoStartedAt)
+	const familiarAutoFinishedAt = Number(socketGame?.familiarAutoFinishedAt)
+	const familiarAudioReadyUserIds = React.useMemo(
+		() => (Array.isArray(socketGame?.familiarAudioReadyUserIds) ? socketGame.familiarAudioReadyUserIds.map((id) => String(id)) : []),
+		[socketGame?.familiarAudioReadyUserIds],
+	)
+	const isCurrentUserAudioReady = Boolean(currentUserId) && familiarAudioReadyUserIds.includes(String(currentUserId))
+	const familiarAudioReadyCount = familiarAudioReadyUserIds.length
+	const familiarParticipantCount = React.useMemo(() => {
+		if (!Array.isArray(socketGame?.players)) return 0
+		return socketGame.players.filter((player) => !player?.isEliminated && !player?.leftDuringGame).length
+	}, [socketGame?.players])
+	const syncSocketGameFromAck = React.useCallback((response, isCancelled = false) => {
+		if (!response?.ok || !response.game || isCancelled) return
+		if (typeof response.game?.serverNow === "number") {
+			setServerOffsetMs(response.game.serverNow - Date.now())
+		}
+		setSocketGame(response.game)
+	}, [])
 	const rankingQuery = useRankingQuery(roomCode, isResultsModalOpen)
 	const roomStateQuery = useRoomQuery(roomCode, isResultsModalOpen)
 	const displayRanking = React.useMemo(() => {
@@ -516,17 +547,46 @@ export default function GamePage() {
 	}, [currentGamePlayer, socketGame])
 
 	React.useEffect(() => {
-		if (!isSocketDriven || noteUrls.length === 0) {
+		if (!isSocketDriven) {
 			setNoteDurationsMs([])
 			return
 		}
+		if (!noteUrlsResolved) return
 
 		let isCancelled = false
 
-		void Promise.all(noteUrls.map((url) => getGameNoteDurationMs(url)))
-			.then((durations) => {
+		const syncFamiliarTiming = (durationMs) => {
+			if (!roomCode) return
+			emitGameFamiliarTiming(roomCode, Math.max(0, Number(durationMs) || 0), (response) => {
+				syncSocketGameFromAck(response, isCancelled)
+			})
+		}
+
+		if (noteUrls.length === 0) {
+			setNoteDurationsMs([])
+			syncFamiliarTiming(0)
+			return () => {
+				isCancelled = true
+			}
+		}
+
+		void Promise.all(
+			noteUrls.map(async (url) => {
+				const isLoaded = await preloadGameNote(url)
+				const durationMs = isLoaded ? await getGameNoteDurationMs(url) : 0
+				return { isLoaded, durationMs }
+			}),
+		)
+			.then((results) => {
 				if (isCancelled) return
-				setNoteDurationsMs(durations)
+
+				const allLoaded = results.every((result) => result.isLoaded)
+				const durations = results.map((result) => result.durationMs)
+				setNoteDurationsMs(allLoaded ? durations : [])
+				if (!allLoaded) {
+					syncFamiliarTiming(0)
+					return
+				}
 
 				const totalDurationMs = durations.reduce((total, duration, index) => {
 					const safeDuration = Math.max(0, Number(duration) || 0)
@@ -534,27 +594,52 @@ export default function GamePage() {
 					return total + safeDuration + gapMs
 				}, 0)
 
-				if (roomCode && totalDurationMs > 0) {
-					emitGameFamiliarTiming(roomCode, totalDurationMs)
-				}
+				syncFamiliarTiming(totalDurationMs)
 			})
 			.catch(() => {
 				if (isCancelled) return
 				setNoteDurationsMs([])
+				syncFamiliarTiming(0)
 			})
 
 		return () => {
 			isCancelled = true
 		}
-	}, [isSocketDriven, noteUrls, roomCode])
+	}, [isSocketDriven, noteUrls, noteUrlsResolved, roomCode, syncSocketGameFromAck])
 
 	React.useEffect(() => {
 		if (!isSocketDriven) return
-		const startedAt = Number(socketGame?.startedAt)
-		if (!Number.isFinite(startedAt) || startedAt <= 0) return
+		if (socketGame?.status !== "familiarizing") return
+		if (!roomCode) return
+		if (noteUrls.length === 0) return
+		if (noteDurationsMs.length !== noteUrls.length) return
+		if (isCurrentUserAudioReady) return
 
-		const autoEndsAt = startedAt + familiarAutoDurationMs
-		const freeEndsAt = autoEndsAt + FREE_PLAY_MS
+		const readyRequestKey = `${String(socketGame?.gameId ?? "")}:${noteUrls.length}:${noteDurationsMs.join(",")}`
+		if (familiarAudioReadyRequestKeyRef.current === readyRequestKey) return
+		familiarAudioReadyRequestKeyRef.current = readyRequestKey
+
+		emitGameFamiliarAudioReady(roomCode, (response) => {
+			syncSocketGameFromAck(response)
+		})
+	}, [isCurrentUserAudioReady, isSocketDriven, noteDurationsMs, noteUrls, roomCode, socketGame?.gameId, socketGame?.status, syncSocketGameFromAck])
+
+	React.useEffect(() => {
+		if (!isSocketDriven) return
+		if (socketGame?.status !== "familiarizing") return
+		if (Number.isFinite(familiarAutoStartedAt) && familiarAutoStartedAt > 0) return
+
+		if (!isCurrentUserAudioReady || noteDurationsMs.length !== noteUrls.length) {
+			setPhase(PHASE.FAMILIARIZE_LOADING)
+			return
+		}
+
+		setPhase(PHASE.FAMILIARIZE_WAITING)
+	}, [familiarAutoStartedAt, isCurrentUserAudioReady, isSocketDriven, noteDurationsMs.length, noteUrls.length, socketGame?.status])
+
+	React.useEffect(() => {
+		if (!isSocketDriven) return
+		if (!Number.isFinite(familiarAutoStartedAt) || familiarAutoStartedAt <= 0) return
 
 		const intervalId = window.setInterval(() => {
 			const now = Date.now() + serverOffsetMs
@@ -563,7 +648,14 @@ export default function GamePage() {
 				return
 			}
 
-			if (now < autoEndsAt) {
+			if (!Number.isFinite(familiarAutoFinishedAt) || familiarAutoFinishedAt <= 0) {
+				setPhase(PHASE.FAMILIARIZE_AUTO)
+				return
+			}
+
+			const freeEndsAt = familiarAutoFinishedAt + FREE_PLAY_MS
+
+			if (now < familiarAutoFinishedAt) {
 				setPhase(PHASE.FAMILIARIZE_AUTO)
 				return
 			}
@@ -582,7 +674,7 @@ export default function GamePage() {
 		}, 100)
 
 		return () => window.clearInterval(intervalId)
-	}, [familiarAutoDurationMs, isCurrentUserWaiting, isSocketDriven, padCount, serverOffsetMs, socketGame?.startedAt, socketGame?.status])
+	}, [familiarAutoFinishedAt, familiarAutoStartedAt, isCurrentUserWaiting, isSocketDriven, padCount, serverOffsetMs, socketGame?.status])
 
 	React.useEffect(() => {
 		if (!socketGame?.turnEndsAt) return
@@ -601,12 +693,23 @@ export default function GamePage() {
 		if (phase !== PHASE.FAMILIARIZE_AUTO) return
 		if (noteUrls.length === 0) return
 		if (noteDurationsMs.length !== noteUrls.length) return
+		if (!Number.isFinite(familiarAutoStartedAt) || familiarAutoStartedAt <= 0) return
+
+		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
+		const autoplayRunKey = `${String(socketGame?.gameId ?? "")}:${familiarAutoStartedAt}`
 
 		let isCancelled = false
 		let currentUrl = null
-		const currentGameId = socketGame?.gameId ? String(socketGame.gameId) : null
 
 		const runAutoplay = async () => {
+			const autoplayDelayMs = Math.max(0, familiarAutoStartedAt - (Date.now() + serverOffsetMs))
+			if (autoplayDelayMs > 0) {
+				await waitForMs(autoplayDelayMs)
+			}
+			if (isCancelled) return
+			if (familiarAutoplayRunKeyRef.current === autoplayRunKey) return
+			familiarAutoplayRunKeyRef.current = autoplayRunKey
+
 			for (let index = 0; index < noteUrls.length; index += 1) {
 				if (isCancelled) return
 
@@ -631,6 +734,12 @@ export default function GamePage() {
 
 			if (!isCancelled) {
 				setActivePadIndex(null)
+				if (familiarAutoplayFinishKeyRef.current !== autoplayRunKey) {
+					familiarAutoplayFinishKeyRef.current = autoplayRunKey
+					emitGameFamiliarAutoplayFinished(roomCode, (response) => {
+						syncSocketGameFromAck(response, isCancelled)
+					})
+				}
 			}
 		}
 
@@ -642,7 +751,7 @@ export default function GamePage() {
 				stopGameNote(currentUrl)
 			}
 		}
-	}, [isSocketDriven, noteDurationsMs, noteUrls, phase, socketGame?.gameId, socketGame?.status])
+	}, [familiarAutoStartedAt, isSocketDriven, noteDurationsMs, noteUrls, phase, roomCode, serverOffsetMs, socketGame?.gameId, socketGame?.status, syncSocketGameFromAck])
 
 	const players = React.useMemo(() => {
 		const gamePlayerList = Array.isArray(gamePlayers) ? gamePlayers : []
@@ -683,9 +792,12 @@ export default function GamePage() {
 	React.useEffect(() => {
 		if (socketGame?.status) return
 		acknowledgedOutGameIdRef.current = null
+		familiarAutoplayRunKeyRef.current = null
+		familiarAudioReadyRequestKeyRef.current = null
+		familiarAutoplayFinishKeyRef.current = null
 		setSequence([])
 		setInputCount(0)
-		setPhase(PHASE.FAMILIARIZE_AUTO)
+		setPhase(PHASE.FAMILIARIZE_LOADING)
 		setAutoPlayIndex(0)
 		setFreePlaySeconds(20)
 		setCurrentTurnIndex(0)
@@ -713,22 +825,45 @@ export default function GamePage() {
 	}, [currentTurnIndex, isOutModalOpen, isSpectating, phase, socketGame?.status, turnSeconds])
 
 	const isFamiliarize =
-		phase === PHASE.FAMILIARIZE_AUTO || phase === PHASE.FAMILIARIZE_FREE || phase === PHASE.FAMILIARIZE_WAITING
+		phase === PHASE.FAMILIARIZE_LOADING || phase === PHASE.FAMILIARIZE_AUTO || phase === PHASE.FAMILIARIZE_FREE || phase === PHASE.FAMILIARIZE_WAITING
 
 	const centerPill = isFamiliarize ? (
 		<div className="flex flex-col items-center gap-3">
-			<div className="h-[66px] min-w-[177px] rounded-full border border-[#96f7e4] bg-white shadow-[0px_4px_6px_0px_rgba(0,0,0,0.1),0px_2px_4px_0px_rgba(0,0,0,0.1)]">
+			<div
+				className={cn(
+					"h-[66px] min-w-[177px] rounded-full border border-[#96f7e4] bg-white shadow-[0px_4px_6px_0px_rgba(0,0,0,0.1),0px_2px_4px_0px_rgba(0,0,0,0.1)]",
+					phase === PHASE.FAMILIARIZE_WAITING || phase === PHASE.FAMILIARIZE_LOADING ? "familiar-waiting-glow" : "",
+				)}
+			>
 				<div className="flex size-full flex-col items-center justify-center px-[25px] py-[9px] text-center">
 					<p className="text-[18px] font-bold leading-7 tracking-[0.9px] text-[#00bba7] uppercase">
 						FAMILIARIZE!
 					</p>
 					<p className="-mt-0.5 font-bold text-[#62748e]">
-						{phase === PHASE.FAMILIARIZE_AUTO ? (
+						{phase === PHASE.FAMILIARIZE_LOADING ? (
+							<span className="inline-flex items-center gap-2 text-[14px] leading-5 text-[#00bba7]">
+								<span>
+									Loading sounds {familiarAudioReadyCount} / {Math.max(1, familiarParticipantCount)}
+								</span>
+								<span className="loading-dots" aria-hidden="true">
+									<span />
+									<span />
+									<span />
+								</span>
+							</span>
+						) : phase === PHASE.FAMILIARIZE_AUTO ? (
 							<span className="text-[14px] leading-5">
 								Playing sounds {Math.min(autoPlayIndex + 1, padCount)} / {padCount}
 							</span>
 						) : phase === PHASE.FAMILIARIZE_WAITING ? (
-							<span className="text-[14px] leading-5 text-[#00bba7]">Waiting for other players...</span>
+							<span className="inline-flex items-center gap-2 text-[14px] leading-5 text-[#00bba7]">
+								<span>Waiting for other players</span>
+								<span className="loading-dots" aria-hidden="true">
+									<span />
+									<span />
+									<span />
+								</span>
+							</span>
 						) : (
 							<>
 								<span className="text-[12px] leading-4">Free play ends in </span>
@@ -759,6 +894,7 @@ export default function GamePage() {
 
 	const handlePadPress = (index) => {
 		if (isSocketDriven && !isCurrentUserActive) return
+		if (phase === PHASE.FAMILIARIZE_LOADING) return
 		if (phase === PHASE.FAMILIARIZE_AUTO) return
 		if (phase === PHASE.FAMILIARIZE_WAITING) return
 		if (phase === PHASE.PLAYING && isSpectating) return
@@ -837,6 +973,7 @@ export default function GamePage() {
 	}, [exitRoomAndGameToHome, isCurrentUserActive, isSocketDriven, socketGame?.status])
 
 	const padsDisabled =
+		phase === PHASE.FAMILIARIZE_LOADING ||
 		phase === PHASE.FAMILIARIZE_AUTO ||
 		phase === PHASE.FAMILIARIZE_WAITING ||
 		(phase === PHASE.PLAYING && Boolean(isSpectating)) ||
@@ -927,6 +1064,37 @@ export default function GamePage() {
 
 		setBroadcastEvent(null)
 	}, [currentUserId, phase, playerNameById, socketGame?.lastEvent])
+
+	React.useEffect(() => {
+		const event = socketGame?.lastEvent
+		if (!event || !currentUserId) return
+
+		const eventKey = `${event.type}:${event.at ?? ""}:${event.userId ?? ""}:${event.winnerUserId ?? ""}:${event.losingUserId ?? ""}:${event.reason ?? ""}:${event.losingReason ?? ""}`
+		if (playedOutcomeEventKeyRef.current === eventKey) return
+
+		if (event.type === "player_eliminated") {
+			const eliminatedUserId = event.userId ? String(event.userId) : null
+			if (eliminatedUserId === String(currentUserId)) {
+				playedOutcomeEventKeyRef.current = eventKey
+				playLosingSfx()
+			}
+			return
+		}
+
+		if (event.type === "game_finished") {
+			const winnerUserId = event.winnerUserId ? String(event.winnerUserId) : null
+			const losingUserId = event.losingUserId ? String(event.losingUserId) : null
+			if (losingUserId === String(currentUserId)) {
+				playedOutcomeEventKeyRef.current = eventKey
+				playLosingSfx()
+				return
+			}
+			if (winnerUserId === String(currentUserId)) {
+				playedOutcomeEventKeyRef.current = eventKey
+				playWinningSfx()
+			}
+		}
+	}, [currentUserId, socketGame?.lastEvent])
 
 	if (!socketGame) {
 		return (
@@ -1112,7 +1280,7 @@ export default function GamePage() {
 						/>
 
 						<p className="mt-6 text-center text-xs font-semibold text-muted-foreground">
-							{phase === PHASE.FAMILIARIZE_AUTO
+							{phase === PHASE.FAMILIARIZE_LOADING || phase === PHASE.FAMILIARIZE_AUTO
 								? `Difficulty: ${difficulty.toUpperCase()} • ${padCount} sounds`
 								: ""}
 						</p>

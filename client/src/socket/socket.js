@@ -89,6 +89,24 @@ export function emitGameFamiliarTiming(roomCode, familiarAutoDurationMs, ack) {
 	s.emit(SOCKET_EVENTS.GAME_FAMILIAR_TIMING, { roomCode, familiarAutoDurationMs }, ack)
 }
 
+export function emitGameFamiliarAudioReady(roomCode, ack) {
+	if (!roomCode) return
+	const s = reconnectSocket()
+	s.emit(SOCKET_EVENTS.GAME_FAMILIAR_AUDIO_READY, { roomCode }, ack)
+}
+
+export function emitGameFamiliarAutoplayStarted(roomCode, ack) {
+	if (!roomCode) return
+	const s = reconnectSocket()
+	s.emit(SOCKET_EVENTS.GAME_FAMILIAR_AUTOPLAY_STARTED, { roomCode }, ack)
+}
+
+export function emitGameFamiliarAutoplayFinished(roomCode, ack) {
+	if (!roomCode) return
+	const s = reconnectSocket()
+	s.emit(SOCKET_EVENTS.GAME_FAMILIAR_AUTOPLAY_FINISHED, { roomCode }, ack)
+}
+
 export function emitGameFamiliarReady(roomCode, ack) {
 	if (!roomCode) return
 	const s = reconnectSocket()

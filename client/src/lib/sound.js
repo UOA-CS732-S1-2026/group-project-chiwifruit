@@ -3,6 +3,8 @@ import { Howl } from "howler"
 import clickSfxUrl from "../assets/audio/common/click.mp3"
 import countdownSfxUrl from "../assets/audio/common/countdown.mp3"
 import backgroundMusicUrl from "../assets/audio/common/backgroundmusic.mp3"
+import losingSfxUrl from "../assets/audio/common/losing.mp3"
+import winningSfxUrl from "../assets/audio/common/winning.mp3"
 import useSoundStore from "../store/useSoundStore"
 
 // NOTE (2026-04-29): 声音播放统一入口（Howler.js）。
@@ -13,6 +15,8 @@ import useSoundStore from "../store/useSoundStore"
 let clickSound
 let countdownSound
 let backgroundSound
+let losingSound
+let winningSound
 let backgroundVolume = 0.22
 let retryListenersAttached = false
 
@@ -55,6 +59,26 @@ function getCountdownSound() {
 		})
 	}
 	return countdownSound
+function getLosingSound() {
+	if (!losingSound) {
+		losingSound = new Howl({
+			src: [losingSfxUrl],
+			volume: 0.8,
+			preload: true,
+		})
+	}
+	return losingSound
+}
+
+function getWinningSound() {
+	if (!winningSound) {
+		winningSound = new Howl({
+			src: [winningSfxUrl],
+			volume: 0.8,
+			preload: true,
+		})
+	}
+	return winningSound
 }
 
 function detachRetryListeners() {
@@ -97,6 +121,16 @@ export function playClickSfx() {
 export function playCountdownTickSfx() {
 	if (useSoundStore.getState().muted) return
 	const sound = getCountdownSound()
+export function playLosingSfx() {
+	if (useSoundStore.getState().muted) return
+	const sound = getLosingSound()
+	sound.stop()
+	sound.play()
+}
+
+export function playWinningSfx() {
+	if (useSoundStore.getState().muted) return
+	const sound = getWinningSound()
 	sound.stop()
 	sound.play()
 }
