@@ -33,6 +33,7 @@ import {
 } from "../socket/socket"
 import SOCKET_EVENTS from "../socket/socketEvents"
 import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, stopGameNote } from "../lib/gameAudio"
+import { playLosingSfx, playWinningSfx } from "../lib/sound"
 
 import logo from "../assets/branding/logo.png"
 import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
@@ -357,6 +358,7 @@ export default function GamePage() {
 	const [isSpectating, setIsSpectating] = React.useState(false)
 	const [broadcastEvent, setBroadcastEvent] = React.useState(null)
 	const lastBroadcastEventKeyRef = React.useRef(null)
+	const playedOutcomeEventKeyRef = React.useRef(null)
 	const broadcastClearTimeoutRef = React.useRef(null)
 	const resultsRejoinAttemptRef = React.useRef(null)
 	const familiarAutoplayRunKeyRef = React.useRef(null)
@@ -925,6 +927,37 @@ export default function GamePage() {
 
 		setBroadcastEvent(null)
 	}, [currentUserId, phase, playerNameById, socketGame?.lastEvent])
+
+	React.useEffect(() => {
+		const event = socketGame?.lastEvent
+		if (!event || !currentUserId) return
+
+		const eventKey = `${event.type}:${event.at ?? ""}:${event.userId ?? ""}:${event.winnerUserId ?? ""}:${event.losingUserId ?? ""}:${event.reason ?? ""}:${event.losingReason ?? ""}`
+		if (playedOutcomeEventKeyRef.current === eventKey) return
+
+		if (event.type === "player_eliminated") {
+			const eliminatedUserId = event.userId ? String(event.userId) : null
+			if (eliminatedUserId === String(currentUserId)) {
+				playedOutcomeEventKeyRef.current = eventKey
+				playLosingSfx()
+			}
+			return
+		}
+
+		if (event.type === "game_finished") {
+			const winnerUserId = event.winnerUserId ? String(event.winnerUserId) : null
+			const losingUserId = event.losingUserId ? String(event.losingUserId) : null
+			if (losingUserId === String(currentUserId)) {
+				playedOutcomeEventKeyRef.current = eventKey
+				playLosingSfx()
+				return
+			}
+			if (winnerUserId === String(currentUserId)) {
+				playedOutcomeEventKeyRef.current = eventKey
+				playWinningSfx()
+			}
+		}
+	}, [currentUserId, socketGame?.lastEvent])
 
 	if (!socketGame) {
 		return (

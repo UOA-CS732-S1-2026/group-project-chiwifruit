@@ -105,6 +105,7 @@ function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
 }
 
 function finalizeGame(game) {
+	const previousEvent = game.lastEvent
   if (Number.isFinite(game.roundNumber) && game.roundNumber > 0) {
     const aliveAtRoundStartCount = Array.isArray(game.roundStartAliveUserIds) ? game.roundStartAliveUserIds.length : 0;
     const aliveNow = getAliveParticipantIds(game);
@@ -123,7 +124,13 @@ function finalizeGame(game) {
   const winnerUserId = alive[0] ?? null;
   game.status = 'finished';
   game.turnEndsAt = null;
-  game.lastEvent = { type: 'game_finished', at: Date.now(), winnerUserId };
+  game.lastEvent = {
+    type: 'game_finished',
+    at: Date.now(),
+    winnerUserId,
+    losingUserId: previousEvent?.type === 'player_eliminated' ? previousEvent.userId ?? null : null,
+    losingReason: previousEvent?.type === 'player_eliminated' ? previousEvent.reason ?? null : null,
+  };
   if (winnerUserId) {
     const winnerPlayer = getPlayerByUserId(game, winnerUserId);
     if (winnerPlayer) winnerPlayer.failureLength = 0;
