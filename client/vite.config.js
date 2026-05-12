@@ -17,7 +17,6 @@ export default defineConfig(({ mode }) => {
   // Vite normally reads env files from the current project root (client/).
   // This project keeps env configuration at repository root instead.
   const env = loadEnv(mode, rootDir, '')
-  const disableHmr = env.VITE_DISABLE_HMR === 'true'
 
   return {
     plugins: [react(), tailwindcss()],
@@ -36,11 +35,6 @@ export default defineConfig(({ mode }) => {
     server: {
       allowedHosts: allowedDeploymentHosts,
       port: Number(env.FRONTEND_PORT) || 5173,
-      // The shared remote demo currently runs the Vite dev server behind
-      // CloudFront/Nginx. Vite HMR uses its own websocket, which is not required
-      // for the deployed demo and can fail noisily behind the proxy. Keep HMR on
-      // by default for local development, but allow the remote env to disable it.
-      hmr: disableHmr ? false : undefined,
     },
   }
 })
