@@ -90,9 +90,10 @@ function startNewRound(game) {
 
 function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
   const aliveNow = getAliveParticipantIds(game);
+  const survivalBonus = (aliveNow.length * Number(game.roundNumber || 0)) - 1;
   aliveNow.forEach((id) => {
     if (excludedUserId && String(id) === String(excludedUserId)) return;
-    addScore(game, id, 5);
+    addScore(game, id, survivalBonus);
     game.completedSurvivalRounds[id] = (Number(game.completedSurvivalRounds[id]) || 0) + 1;
   });
 }
@@ -366,8 +367,7 @@ function endTurnAdvance(game) {
     game.roundStartAliveUserIds.length > 0 &&
     game.roundTurnTakenUserIds.size >= game.roundStartAliveUserIds.length
   ) {
-    const excludedUserId = game.roundNumber === 1 ? game.firstRoundStarterUserId : null;
-    applyRoundSurvivalBonus(game, { excludedUserId });
+    applyRoundSurvivalBonus(game);
     game.roundNumber += 1;
     startNewRound(game);
   }

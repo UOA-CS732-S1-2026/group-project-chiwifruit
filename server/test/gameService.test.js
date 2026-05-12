@@ -362,9 +362,8 @@ describe('gameService state machine', () => {
 
       // The newly added note itself must not grant an additional replication point.
       // (Round survival bonus may apply separately at round completion.)
-      expect(addNote.game.scores.user2).toBeGreaterThanOrEqual(1);
-      expect(addNote.game.scores.user2 % 5).toBe(1);
-      expect(addNote.game.scores.user1).toBe(0);
+      expect(addNote.game.scores.user2).toBe(2); // +1 replay +1 round-1 survival
+      expect(addNote.game.scores.user1).toBe(1); // +1 round-1 survival
       expect(addNote.game.sequence).toEqual([3, 4]);
       expect(addNote.game.lastEvent).toMatchObject({ type: 'note_added', userId: 'user2', padIndex: 4 });
     });
@@ -407,8 +406,8 @@ describe('gameService state machine', () => {
       const result = gameService.registerPadPress({ roomCode, userId: 'user2', padIndex: 4 });
 
       expect(result.game.status).toBe('finished');
-      expect(result.game.scores.user1).toBe(12);
-      expect(result.game.scores.user2).toBe(8);
+      expect(result.game.scores.user1).toBe(9);
+      expect(result.game.scores.user2).toBe(4);
     });
   });
 
@@ -464,7 +463,7 @@ describe('gameService state machine', () => {
 
       expect(add.ok).toBe(true);
       expect(add.game.roundNumber).toBe(2);
-      expect(add.game.scores.user2).toBe(6); // +1 replay +5 survival
+      expect(add.game.scores.user2).toBe(2); // +1 replay +1 survival (alive=2, round=1)
       expect(add.game.currentTurnUserId).toBe('user1');
     });
 
