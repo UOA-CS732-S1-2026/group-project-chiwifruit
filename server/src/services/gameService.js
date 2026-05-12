@@ -8,7 +8,7 @@ const { buildAvatarUrl } = require('../controllers/authController');
 const TURN_MS = 20_000;
 const FAMILIARIZE_AUTOPLAY_MS = 1_000;
 const FAMILIARIZE_FREE_PLAY_MS = 20_000;
-const FAMILIARIZE_AUTOPLAY_START_BUFFER_MS = 250;
+const FAMILIARIZE_AUTOPLAY_START_BUFFER_MS = 500;
 const GAME_TTL_MS = 10 * 60_000;
 
 const gamesByRoom = new Map();
@@ -105,7 +105,7 @@ function applyRoundSurvivalBonus(game, { excludedUserId = null } = {}) {
 }
 
 function finalizeGame(game) {
-	const previousEvent = game.lastEvent
+  const previousEvent = game.lastEvent;
   if (Number.isFinite(game.roundNumber) && game.roundNumber > 0) {
     const aliveAtRoundStartCount = Array.isArray(game.roundStartAliveUserIds) ? game.roundStartAliveUserIds.length : 0;
     const aliveNow = getAliveParticipantIds(game);
@@ -175,7 +175,9 @@ function serializeGame(game) {
     padCount: game.padCount,
     audioSeed: game.audioSeed,
     familiarAutoDurationMs: game.familiarAutoDurationMs,
+    familiarAudioReadyUserIds: [...game.familiarAudioReadyUserIds],
     familiarAutoStartedAt: game.familiarAutoStartedAt,
+    familiarAutoFinishedAt: game.familiarAutoFinishedAt,
     players: game.players,
     participantsOrder: game.participantsOrder,
     familiarReadyUserIds: [...game.familiarReadyUserIds],
@@ -226,6 +228,7 @@ function startGame({ room, requestedByUserId }) {
     startedAt: Date.now(),
     familiarAutoDurationMs: null,
     familiarAutoStartedAt: null,
+    familiarAutoFinishedAt: null,
     mode: normalizeRoomMode(room.mode),
     difficulty,
     padCount,
@@ -233,6 +236,7 @@ function startGame({ room, requestedByUserId }) {
     audioSeed: crypto.randomUUID(),
     players,
     participantsOrder,
+    familiarAudioReadyUserIds: [],
     familiarReadyUserIds: [],
     scores: Object.fromEntries(participantsOrder.map((id) => [id, 0])),
     sequence: [],
@@ -299,17 +303,12 @@ function forceStartPlaying({ roomCode, reason }) {
 }
 
 function getFamiliarizeEndsAt(game) {
-  const familiarAutoStartedAt = Number(game?.familiarAutoStartedAt);
-  if (!Number.isFinite(familiarAutoStartedAt) || familiarAutoStartedAt <= 0) {
-    return null;
+  const familiarAutoFinishedAt = Number(game?.familiarAutoFinishedAt);
+  if (Number.isFinite(familiarAutoFinishedAt) && familiarAutoFinishedAt > 0) {
+    return familiarAutoFinishedAt + FAMILIARIZE_FREE_PLAY_MS;
   }
 
-  const reportedAutoDurationMs = Number(game?.familiarAutoDurationMs);
-  const fallbackAutoDurationMs = Number(game?.padCount) * FAMILIARIZE_AUTOPLAY_MS;
-  const autoDurationMs = Number.isFinite(reportedAutoDurationMs) && reportedAutoDurationMs >= 0
-    ? reportedAutoDurationMs
-    : fallbackAutoDurationMs;
-  return familiarAutoStartedAt + autoDurationMs + FAMILIARIZE_FREE_PLAY_MS;
+  return null;
 }
 
 function setFamiliarAutoDuration({ roomCode, familiarAutoDurationMs }) {
@@ -330,8 +329,69 @@ function setFamiliarAutoDuration({ roomCode, familiarAutoDurationMs }) {
     game.familiarAutoDurationMs = roundedDurationMs;
   }
 
+  return { ok: true, game: serializeGame(game) };
+}
+
+function markFamiliarAudioReady({ roomCode, userId }) {
+  const game = getGame(roomCode);
+  if (!game) return { ok: false, error: 'No active game.' };
+  if (game.status !== 'familiarizing') {
+    return { ok: false, error: 'Game is no longer familiarizing.' };
+  }
+
+  const participantId = String(userId);
+  if (!game.participantsOrder.includes(participantId)) {
+    return { ok: false, error: 'Not a game participant.' };
+  }
+
+  if (!game.familiarAudioReadyUserIds.includes(participantId)) {
+    game.familiarAudioReadyUserIds.push(participantId);
+  }
+
+  const aliveParticipantIds = getAliveParticipantIds(game);
+  const allAudioReady = aliveParticipantIds.length > 0
+    && aliveParticipantIds.every((id) => game.familiarAudioReadyUserIds.includes(String(id)));
+
+  if (allAudioReady && (!Number.isFinite(Number(game.familiarAutoStartedAt)) || Number(game.familiarAutoStartedAt) <= 0)) {
+    game.familiarAutoStartedAt = Date.now() + FAMILIARIZE_AUTOPLAY_START_BUFFER_MS;
+    game.lastEvent = {
+      type: 'game_familiar_autoplay_started',
+      at: Date.now(),
+    };
+  }
+
+  return { ok: true, game: serializeGame(game) };
+}
+
+function setFamiliarAutoStarted({ roomCode }) {
+  const game = getGame(roomCode);
+  if (!game) return { ok: false, error: 'No active game.' };
+  if (game.status !== 'familiarizing') {
+    return { ok: false, error: 'Game is no longer familiarizing.' };
+  }
+
   if (!Number.isFinite(Number(game.familiarAutoStartedAt)) || Number(game.familiarAutoStartedAt) <= 0) {
     game.familiarAutoStartedAt = Date.now() + FAMILIARIZE_AUTOPLAY_START_BUFFER_MS;
+  }
+
+  return { ok: true, game: serializeGame(game) };
+}
+
+function setFamiliarAutoFinished({ roomCode }) {
+  const game = getGame(roomCode);
+  if (!game) return { ok: false, error: 'No active game.' };
+  if (game.status !== 'familiarizing') {
+    return { ok: false, error: 'Game is no longer familiarizing.' };
+  }
+
+  if (!Number.isFinite(Number(game.familiarAutoStartedAt)) || Number(game.familiarAutoStartedAt) <= 0) {
+    game.familiarAutoStartedAt = Date.now() + FAMILIARIZE_AUTOPLAY_START_BUFFER_MS;
+  }
+
+  const nextFinishedAt = Math.max(Date.now(), Number(game.familiarAutoStartedAt) || 0);
+  const currentFinishedAt = Number(game.familiarAutoFinishedAt);
+  if (!Number.isFinite(currentFinishedAt) || nextFinishedAt > currentFinishedAt) {
+    game.familiarAutoFinishedAt = nextFinishedAt;
   }
 
   return { ok: true, game: serializeGame(game) };
@@ -556,8 +616,11 @@ module.exports = {
   FAMILIARIZE_AUTOPLAY_START_BUFFER_MS,
   getGame,
   startGame,
+  markFamiliarAudioReady,
   markFamiliarReady,
   setFamiliarAutoDuration,
+  setFamiliarAutoStarted,
+  setFamiliarAutoFinished,
   forceStartPlaying,
   getFamiliarizeEndsAt,
   forfeitPlayer,

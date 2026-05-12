@@ -112,12 +112,14 @@ describe('gameService state machine', () => {
 
       expect(updated.ok).toBe(true);
       expect(updated.game.familiarAutoDurationMs).toBe(12345);
-      expect(updated.game.familiarAutoStartedAt).toEqual(expect.any(Number));
+      expect(updated.game.familiarAutoStartedAt).toBeNull();
+
+      const started = gameService.setFamiliarAutoStarted({ roomCode: 'START_TIMING' });
+      expect(started.ok).toBe(true);
+      expect(started.game.familiarAutoStartedAt).toEqual(expect.any(Number));
 
       const internal = gameService.getGame('START_TIMING');
-      expect(gameService.getFamiliarizeEndsAt(internal)).toBe(
-        Number(internal.familiarAutoStartedAt) + 12345 + gameService.FAMILIARIZE_FREE_PLAY_MS,
-      );
+      expect(gameService.getFamiliarizeEndsAt(internal)).toBeNull();
     });
 
     it('should keep the first familiar autoplay start anchor while extending to the longest reported duration', () => {
@@ -130,14 +132,57 @@ describe('gameService state machine', () => {
         familiarAutoDurationMs: 3000,
       });
 
+      const started = gameService.setFamiliarAutoStarted({ roomCode: 'START_TIMING_MAX' });
+      expect(started.ok).toBe(true);
+
       const second = gameService.setFamiliarAutoDuration({
         roomCode: 'START_TIMING_MAX',
         familiarAutoDurationMs: 4500,
       });
 
       expect(second.ok).toBe(true);
-      expect(second.game.familiarAutoStartedAt).toBe(first.game.familiarAutoStartedAt);
+	      expect(second.game.familiarAutoStartedAt).toBe(started.game.familiarAutoStartedAt);
       expect(second.game.familiarAutoDurationMs).toBe(4500);
+    });
+
+    it('should use the real familiar autoplay finished time when calculating familiarize end time', () => {
+      const start = gameService.startGame({ room: room({ roomCode: 'START_TIMING_FINISHED' }), requestedByUserId: 'user1' });
+
+      expect(start.ok).toBe(true);
+
+      const duration = gameService.setFamiliarAutoDuration({
+        roomCode: 'START_TIMING_FINISHED',
+        familiarAutoDurationMs: 3000,
+      });
+      expect(duration.ok).toBe(true);
+
+      const started = gameService.setFamiliarAutoStarted({ roomCode: 'START_TIMING_FINISHED' });
+      expect(started.ok).toBe(true);
+
+      const finished = gameService.setFamiliarAutoFinished({ roomCode: 'START_TIMING_FINISHED' });
+      expect(finished.ok).toBe(true);
+      expect(finished.game.familiarAutoFinishedAt).toEqual(expect.any(Number));
+
+      const internal = gameService.getGame('START_TIMING_FINISHED');
+      expect(gameService.getFamiliarizeEndsAt(internal)).toBe(
+        Number(internal.familiarAutoFinishedAt) + gameService.FAMILIARIZE_FREE_PLAY_MS,
+      );
+    });
+
+    it('should only set familiar autoplay start after all alive players report audio ready', () => {
+      const start = gameService.startGame({ room: room({ roomCode: 'AUDIO_READY_BARRIER' }), requestedByUserId: 'user1' });
+
+      expect(start.ok).toBe(true);
+
+      const firstReady = gameService.markFamiliarAudioReady({ roomCode: 'AUDIO_READY_BARRIER', userId: 'user1' });
+      expect(firstReady.ok).toBe(true);
+      expect(firstReady.game.familiarAudioReadyUserIds).toEqual(['user1']);
+      expect(firstReady.game.familiarAutoStartedAt).toBeNull();
+
+      const secondReady = gameService.markFamiliarAudioReady({ roomCode: 'AUDIO_READY_BARRIER', userId: 'user2' });
+      expect(secondReady.ok).toBe(true);
+      expect(secondReady.game.familiarAudioReadyUserIds).toEqual(['user1', 'user2']);
+      expect(secondReady.game.familiarAutoStartedAt).toEqual(expect.any(Number));
     });
   });
 

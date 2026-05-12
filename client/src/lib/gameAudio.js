@@ -129,8 +129,8 @@ function getOrCreateHowl(url) {
 }
 
 function ensureHowlLoaded(howl) {
-	if (!howl) return Promise.resolve()
-	if (howl.state() === "loaded") return Promise.resolve()
+	if (!howl) return Promise.resolve(false)
+	if (howl.state() === "loaded") return Promise.resolve(true)
 
 	const pendingLoad = howlLoadPromiseCache.get(howl)
 	if (pendingLoad) return pendingLoad
@@ -139,12 +139,12 @@ function ensureHowlLoaded(howl) {
 		const handleLoad = () => {
 			howl.off("loaderror", handleLoadError)
 			howlLoadPromiseCache.delete(howl)
-			resolve()
+			resolve(true)
 		}
 		const handleLoadError = () => {
 			howl.off("load", handleLoad)
 			howlLoadPromiseCache.delete(howl)
-			resolve()
+			resolve(false)
 		}
 
 		howl.once("load", handleLoad)
@@ -158,10 +158,17 @@ function ensureHowlLoaded(howl) {
 	return loadPromise
 }
 
+export async function preloadGameNote(url) {
+	if (!url) return false
+	const howl = getOrCreateHowl(url)
+	return ensureHowlLoaded(howl)
+}
+
 export async function getGameNoteDurationMs(url) {
 	if (!url) return 0
 	const howl = getOrCreateHowl(url)
-	await ensureHowlLoaded(howl)
+	const didLoad = await ensureHowlLoaded(howl)
+	if (!didLoad) return 0
 	const durationSeconds = Number(howl.duration())
 	if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0
 	return Math.round(durationSeconds * 1000)
@@ -182,7 +189,8 @@ export async function playGameNoteAsync(url, options = {}) {
 	if (useSoundStore.getState().muted) return
 
 	const howl = getOrCreateHowl(url)
-	await ensureHowlLoaded(howl)
+	const didLoad = await ensureHowlLoaded(howl)
+	if (!didLoad) return false
 
 	const seekMs = Math.max(0, Number(options.seekMs) || 0)
 
@@ -205,6 +213,8 @@ export async function playGameNoteAsync(url, options = {}) {
 		howl.once("end", handleEnd, soundId)
 		howl.once("playerror", handlePlayError, soundId)
 	})
+
+	return true
 }
 
 export function stopGameNote(url) {
