@@ -5,7 +5,7 @@ const { buildAvatarUrl } = require('../controllers/authController');
 // Reason: the game is ephemeral and driven by socket events; persisting to Mongo
 // would add complexity (cleanup, contention) without benefit for this project.
 
-const TURN_MS = 20_000;
+const TURN_MS = 30_000;
 const FAMILIARIZE_AUTOPLAY_MS = 1_000;
 const FAMILIARIZE_FREE_PLAY_MS = 20_000;
 const FAMILIARIZE_AUTOPLAY_START_BUFFER_MS = 500;
