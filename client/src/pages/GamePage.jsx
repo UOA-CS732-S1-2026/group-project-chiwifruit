@@ -380,23 +380,7 @@ export default function GamePage() {
 			queryClient.invalidateQueries({ queryKey: ["room", String(joinedRoomCode).trim().toUpperCase()] })
 		},
 	})
-	const familiarAutoDurationMs = React.useMemo(() => {
-		const rawServerDuration = socketGame?.familiarAutoDurationMs
-		if (rawServerDuration !== null && rawServerDuration !== undefined) {
-			const serverDuration = Number(rawServerDuration)
-			if (Number.isFinite(serverDuration) && serverDuration >= 0) {
-				return serverDuration
-			}
-		}
-		if (!Array.isArray(noteDurationsMs) || noteDurationsMs.length === 0) {
-			return padCount > 0 ? padCount * FAMILIARIZE_AUTOPLAY_GAP_MS : 0
-		}
-		return noteDurationsMs.reduce((total, duration, index) => {
-			const safeDuration = Math.max(0, Number(duration) || 0)
-			const gapMs = index < noteDurationsMs.length - 1 ? FAMILIARIZE_AUTOPLAY_GAP_MS : 0
-			return total + safeDuration + gapMs
-		}, 0)
-	}, [noteDurationsMs, padCount, socketGame?.familiarAutoDurationMs])
+
 	const familiarAutoStartedAt = Number(socketGame?.familiarAutoStartedAt)
 	const familiarAutoFinishedAt = Number(socketGame?.familiarAutoFinishedAt)
 	const familiarAudioReadyUserIds = React.useMemo(
