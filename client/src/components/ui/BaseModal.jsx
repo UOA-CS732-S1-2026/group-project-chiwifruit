@@ -1,12 +1,15 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 
-// NOTE (2026-04-29): 用“引用计数”方式锁定 body 滚动。
-// 原因：页面可能出现多个 modal 叠加（例如 YoureOut + Results）。如果每个 modal
-// 都在 unmount 时直接把 overflow 还原，顺序一旦错就会导致页面永久无法滚动。
+// NOTE (2026-04-29): Body scroll locking uses reference counting.
+// Multiple modals can stack in this app, so each modal cannot blindly restore
+// `document.body.style.overflow` during unmount without risking a stuck page.
+
+// Module state: track nested modal locks and the body's pre-modal overflow value.
 let bodyScrollLockCount = 0
 let bodyScrollPrevOverflow = ""
 
+// Helper: apply the shared body scroll lock for one modal instance.
 function lockBodyScroll() {
 	if (typeof document === "undefined") return
 	if (bodyScrollLockCount === 0) {
@@ -16,6 +19,7 @@ function lockBodyScroll() {
 	bodyScrollLockCount += 1
 }
 
+// Helper: release one body scroll lock and restore the original overflow when safe.
 function unlockBodyScroll() {
 	if (typeof document === "undefined") return
 	if (bodyScrollLockCount <= 0) return

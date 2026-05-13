@@ -13,11 +13,14 @@ const RIPPLE_LIFETIME_MS = Math.ceil(
 	Math.max(0.62, ...rippleRings.map((ring) => ring.delay + ring.duration)) * 1000 + 60,
 )
 
+// Component: animate a transient ripple burst around an active game pad.
 export default function GamePadRipple({ active = false }) {
+	// State: keep a short-lived list of pulse ids so repeated activations can overlap cleanly.
 	const [pulseIds, setPulseIds] = React.useState([])
 	const wasActiveRef = React.useRef(false)
 	const timeoutIdsRef = React.useRef(new Set())
 
+	// Effect: clear pending ripple cleanup timers on unmount.
 	React.useEffect(() => {
 		const timeoutIds = timeoutIdsRef.current
 
@@ -27,6 +30,7 @@ export default function GamePadRipple({ active = false }) {
 		}
 	}, [])
 
+	// Effect: create one new ripple burst when the pad transitions from inactive to active.
 	React.useEffect(() => {
 		if (!active) {
 			wasActiveRef.current = false

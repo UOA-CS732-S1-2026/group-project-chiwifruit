@@ -256,7 +256,9 @@ router.get('/:roomCode/ranking', authMiddleware, getRanking);
  */
 router.delete('/:roomCode', authMiddleware, leaveRoom);
 
-// NOTE (2026-04-29): 该 DELETE 接口用于“离开房间名单”（例如 results 回首页），
-// 不等同于 socket 的 leave_room（离开比赛=判负）。
+// NOTE (2026-04-29): This DELETE endpoint removes a player from the room roster
+// (for example when returning home from results).
+// It is not equivalent to socket `leave_room`, which means leaving a live match
+// and forfeiting.
 
 module.exports = router;

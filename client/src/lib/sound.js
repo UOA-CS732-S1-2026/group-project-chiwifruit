@@ -7,10 +7,11 @@ import losingSfxUrl from "../assets/audio/common/losing.mp3"
 import winningSfxUrl from "../assets/audio/common/winning.mp3"
 import useSoundStore from "../store/useSoundStore"
 
-// NOTE (2026-04-29): 声音播放统一入口（Howler.js）。
-// - clickSfx: 需要 stop()->play() 来保证连续点击时每次都从头播放
-// - backgroundMusic: 处理 autoplay 被拒绝后的 unlock 重试 + 首次用户交互 retry
+// NOTE (2026-04-29): Centralized sound playback entrypoint powered by Howler.
+// - `clickSfx` uses stop() -> play() so rapid clicks always restart from frame 0.
+// - `backgroundMusic` retries after autoplay rejection and the next user interaction.
 
+// Module state: lazily created Howler instances and shared background playback flags.
 let clickSound
 let countdownSound
 let backgroundSound
@@ -19,6 +20,7 @@ let winningSound
 let backgroundVolume = 0.22
 let retryListenersAttached = false
 
+// Helper: lazily create the shared button click sound instance.
 function getClickSound() {
 	if (!clickSound) {
 		clickSound = new Howl({
@@ -30,6 +32,7 @@ function getClickSound() {
 	return clickSound
 }
 
+// Helper: lazily create the looping background music instance.
 function getBackgroundSound() {
 	if (!backgroundSound) {
 		backgroundSound = new Howl({
@@ -49,6 +52,7 @@ function getBackgroundSound() {
 	return backgroundSound
 }
 
+// Helper: lazily create the countdown warning sound instance.
 function getCountdownSound() {
 	if (!countdownSound) {
 		countdownSound = new Howl({
@@ -60,6 +64,7 @@ function getCountdownSound() {
 	return countdownSound
 }
 
+// Helper: lazily create the losing result sound instance.
 function getLosingSound() {
 	if (!losingSound) {
 		losingSound = new Howl({
@@ -71,6 +76,7 @@ function getLosingSound() {
 	return losingSound
 }
 
+// Helper: lazily create the winning result sound instance.
 function getWinningSound() {
 	if (!winningSound) {
 		winningSound = new Howl({
@@ -82,6 +88,7 @@ function getWinningSound() {
 	return winningSound
 }
 
+// Helper: tear down one-shot autoplay retry listeners when they are no longer needed.
 function detachRetryListeners() {
 	if (!retryListenersAttached) return
 	document.removeEventListener("pointerdown", onRetryUserInteraction, true)
@@ -90,6 +97,7 @@ function detachRetryListeners() {
 	retryListenersAttached = false
 }
 
+// Helper: retry autoplay after pointer interaction once React click handlers have run.
 function onRetryUserInteraction() {
 	// Defer to next tick so React click handlers (mute toggle) apply first.
 	window.setTimeout(() => {
@@ -98,11 +106,13 @@ function onRetryUserInteraction() {
 	}, 0)
 }
 
+// Helper: retry autoplay on keyboard interaction for accessibility parity.
 function onRetryKeyDown() {
 	startBackgroundMusic()
 	if (backgroundSound?.playing()) detachRetryListeners()
 }
 
+// Helper: register the one-shot autoplay retry listeners.
 function attachRetryListeners() {
 	if (retryListenersAttached) return
 	document.addEventListener("pointerdown", onRetryUserInteraction, true)

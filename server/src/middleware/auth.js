@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 
+// Middleware: require a bearer token, verify it, and attach the decoded identity
+// to `req.user` for downstream controllers.
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
 

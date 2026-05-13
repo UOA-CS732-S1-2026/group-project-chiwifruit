@@ -9,8 +9,9 @@ import {
 	submitRoundResult,
 } from "../../api/rooms"
 
-// NOTE (2026-04-29): 把 room 的写操作统一封装成 React Query mutations。
-// 对会影响 roomState 的操作，在 onSuccess 里 invalidate 对应 room query，保证 UI 及时同步。
+// NOTE (2026-04-29): Room write operations are centralized as React Query mutations.
+// Mutations that affect room state invalidate the matching room query on success
+// so the waiting-room UI stays in sync with the server.
 
 export function useCreateRoomMutation(options = {}) {
 	return useMutation({

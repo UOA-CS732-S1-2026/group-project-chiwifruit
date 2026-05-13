@@ -12,11 +12,13 @@ import medal4Icon from "../../assets/icons/Medal4.svg"
 import medal5Icon from "../../assets/icons/Medal5.svg"
 import medal6Icon from "../../assets/icons/Medal6.svg"
 
-// NOTE (2026-04-29): Results Modal 仅做“展示排名 + 返回操作”。
-// 真实的离房/判负语义由 GamePage 负责（Back to Home 会先 REST leaveRoom 再导航）。
+// NOTE (2026-04-29): The results modal is presentation-only.
+// Match-exit semantics still belong to GamePage, which leaves the room through
+// REST before navigating home.
 
 const MEDAL_BY_RANK = [medal1Icon, medal2Icon, medal3Icon, medal4Icon, medal5Icon, medal6Icon]
 
+// Helper: build a compact fallback avatar label from a player's display name.
 function getInitials(name) {
 	if (!name) return ""
 	const words = name.replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean)
@@ -105,6 +107,7 @@ function ResultsRow({
 }
 
 export default function GameResultsModal({ open, ranking, onBackToRoom, onBackToHome, onClose }) {
+	// Derived state: always render a score-sorted ranking list even if callers pass unsorted data.
 	const sortedPlayers = React.useMemo(() => {
 		const safePlayers = Array.isArray(ranking) ? ranking : []
 		return [...safePlayers].sort((a, b) => (b?.correctCount ?? 0) - (a?.correctCount ?? 0))

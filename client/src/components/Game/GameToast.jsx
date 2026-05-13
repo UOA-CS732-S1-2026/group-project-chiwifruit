@@ -1,6 +1,7 @@
 import { Volume2 } from "lucide-react"
 import { cn } from "../../lib/utils"
 
+// Component: lightweight game message toast used for short non-error prompts.
 export default function GameToast({ message, className }) {
 	if (!message) return null
 

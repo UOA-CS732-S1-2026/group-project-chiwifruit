@@ -57,6 +57,8 @@ const AUTOPLAY_DEDUPE_WINDOW_MS = 400
 const recentAutoplayPlays = new Map()
 // const COUNTDOWN_MS = 5_000
 
+// Helper: suppress duplicate familiarization pad playback caused by overlapping
+// local and remote autoplay events.
 function shouldSkipDuplicateAutoplay(gameId, padIndex) {
 	if (!gameId || !Number.isInteger(padIndex)) return false
 
@@ -78,6 +80,7 @@ function shouldSkipDuplicateAutoplay(gameId, padIndex) {
 	return false
 }
 
+// Helper: normalize timer waits so async playback code can safely await any input.
 function waitForMs(ms) {
 	const safeDelay = Math.max(0, Number(ms) || 0)
 	if (safeDelay === 0) return Promise.resolve()
@@ -86,16 +89,20 @@ function waitForMs(ms) {
 	})
 }
 
+// Helper: decide which server errors should send the player back to Landing.
 function shouldExitToLanding(errorCode) {
 	return errorCode === "GAME_NOT_PARTICIPANT" || errorCode === "NO_ACTIVE_GAME"
 }
 
+// Helper: coerce possibly missing or invalid difficulty values to supported UI options.
 function coerceDifficulty(value) {
 	if (value === "easy") return "easy"
 	if (value === "hard") return "hard"
 	return "medium"
 }
 
+// Page: orchestrates the socket-authoritative game flow, familiarization phases,
+// local audio playback, and room exit behavior for one active player.
 export default function GamePage() {
 	const queryClient = useQueryClient()
 	const navigate = useNavigate()
@@ -157,6 +164,7 @@ export default function GamePage() {
 	)
 	const isCurrentUserWaiting = Boolean(isCurrentUserActive) && waitingUserIds.includes(String(currentUserId))
 
+	// Handler: return to Landing with an optional route-level error message.
 	const navigateHomeWithError = React.useCallback(
 		(message) => {
 			navigate("/", {
@@ -171,6 +179,7 @@ export default function GamePage() {
 		[navigate],
 	)
 
+	// Handler: fetch the latest authoritative game state and recover from stale routes.
 	const requestLatestGameState = React.useCallback(() => {
 		if (!roomCode) return
 
@@ -212,6 +221,7 @@ export default function GamePage() {
 		if (!isSocketDriven) return
 		if (!socketGame?.status || socketGame.status === "finished") return
 
+		// Browser lifecycle handler: warn before refresh/close while the player is still active.
 		const onBeforeUnload = (event) => {
 			event.preventDefault()
 			// Required for Chrome/Safari to show the confirmation dialog.
@@ -234,9 +244,9 @@ export default function GamePage() {
 	const padCount = Number(socketGame?.padCount) > 0 ? Number(socketGame.padCount) : 0
 	const [noteUrls, setNoteUrls] = React.useState([])
 	const [noteUrlsResolved, setNoteUrlsResolved] = React.useState(false)
-	
-// NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
-// This avoids reshuffling from any non-authoritative client fallback state.
+
+	// NOTE (2026-04-29): The audio list is generated only from socket-driven data (audioSeed + padCount).
+	// This avoids reshuffling from any non-authoritative client fallback state.
 	React.useEffect(() => {
 		if (!isSocketDriven || !socketGame?.audioSeed || padCount <= 0) {
 			setNoteUrls([])
@@ -284,6 +294,7 @@ export default function GamePage() {
 		joinSocketRoom(roomCode)
 		const socket = reconnectSocket()
 
+		// Socket handler: accept authoritative game snapshots and align local clock offset.
 		const onGameState = (nextState) => {
 			hasReceivedGameState = true
 			if (typeof nextState?.serverNow === "number") {
@@ -291,6 +302,8 @@ export default function GamePage() {
 			}
 			setSocketGame(nextState)
 		}
+
+		// Socket handler: surface load-time game errors and preserve the first failure reason.
 		const onGameError = (payload) => {
 			const message = typeof payload?.message === "string" ? payload.message : "Game error"
 			setSocketError(message)
@@ -299,6 +312,8 @@ export default function GamePage() {
 				setIsGameLoading(false)
 			}
 		}
+
+		// Socket handler: play remote pad sounds for other players during active turns.
 		const onGamePadSound = (payload) => {
 			if (socketGame?.status !== "playing") return
 			const sourceUserId = typeof payload?.userId === "string" ? payload.userId : null
@@ -326,6 +341,7 @@ export default function GamePage() {
 	React.useEffect(() => {
 		if (!roomCode || !currentUserId) return
 
+		// Browser lifecycle handler: re-request state when the page returns from bfcache.
 		const onPageShow = (event) => {
 			if (!event.persisted) return
 
@@ -395,6 +411,8 @@ export default function GamePage() {
 		if (!Array.isArray(socketGame?.players)) return 0
 		return socketGame.players.filter((player) => !player?.isEliminated && !player?.leftDuringGame).length
 	}, [socketGame?.players])
+
+	// Helper: merge acknowledged socket responses back into local game state safely.
 	const syncSocketGameFromAck = React.useCallback((response, isCancelled = false) => {
 		if (!response?.ok || !response.game || isCancelled) return
 		if (typeof response.game?.serverNow === "number") {
@@ -443,6 +461,7 @@ export default function GamePage() {
 		const normalizedRoomCode = String(roomCode).trim().toUpperCase()
 		const socket = reconnectSocket()
 
+		// Socket handler: keep cached room membership in sync while results are open.
 		const onRoomUpdate = (nextRoomState) => {
 			const nextRoomCode = String(nextRoomState?.roomCode ?? "").trim().toUpperCase()
 			if (!nextRoomCode || nextRoomCode !== normalizedRoomCode) return
@@ -450,6 +469,7 @@ export default function GamePage() {
 			queryClient.setQueryData(["room", normalizedRoomCode], nextRoomState)
 		}
 
+		// Socket handler: refresh the cached room state after reconnect while on results.
 		const onConnect = () => {
 			queryClient.invalidateQueries({ queryKey: ["room", normalizedRoomCode] })
 		}
@@ -542,6 +562,7 @@ export default function GamePage() {
 
 		let isCancelled = false
 
+		// Helper: report the client-computed familiarization autoplay duration to the server.
 		const syncFamiliarTiming = (durationMs) => {
 			if (!roomCode) return
 			emitGameFamiliarTiming(roomCode, Math.max(0, Number(durationMs) || 0), (response) => {
@@ -667,6 +688,7 @@ export default function GamePage() {
 		if (!socketGame?.turnEndsAt) return
 		if (socketGame.status !== "playing") return
 
+		// Helper: derive the current turn countdown from the server timestamp.
 		const syncTurnSeconds = () => {
 			const now = Date.now() + serverOffsetMs
 			const secondsLeft = Math.max(0, Math.ceil((Number(socketGame.turnEndsAt) - now) / 1000))
@@ -888,6 +910,7 @@ export default function GamePage() {
 		</div>
 	) : null
 
+	// Handler: process a local pad press only when the current phase and turn allow it.
 	const handlePadPress = (index) => {
 		if (isSocketDriven && !isCurrentUserActive) return
 		if (phase === PHASE.FAMILIARIZE_LOADING) return
@@ -916,6 +939,7 @@ export default function GamePage() {
 		}
 	}
 
+	// Handler: leave both the room roster and the active match before returning home.
 	const exitRoomAndGameToHome = React.useCallback(() => {
 		if (!roomCode) {
 			navigate("/")
@@ -946,6 +970,7 @@ export default function GamePage() {
 			browserBackGuardArmedRef.current = true
 		}
 
+		// Browser navigation handler: confirm the forfeit before allowing Back navigation.
 		const onPopState = () => {
 			if (browserBackConfirmedRef.current) return
 

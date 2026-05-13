@@ -1,6 +1,8 @@
 import { cn } from "../../lib/utils"
 import { COUNTDOWN_URGENT_THRESHOLD_SECONDS } from "../../lib/gameConstants"
 
+// Component: render one player row in the in-game sidebar, including score,
+// status, avatar, and optional active-turn countdown.
 export default function GamePlayerCard({
 	name,
 	avatarUrl,
@@ -10,8 +12,10 @@ export default function GamePlayerCard({
 	turnSeconds,
 	className,
 }) {
+	// Derived state: normalize all out-of-play statuses into the same eliminated presentation.
 	const isEliminated = status === "OUT OF GAME" || status === "ELIMINATED"
 	const displayStatus = isEliminated ? "ELIMINATED" : status
+	// Derived state: highlight the turn badge when the countdown reaches the urgent threshold.
 	const isUrgentCountdown =
 		isCurrentTurn &&
 		typeof turnSeconds === "number" &&

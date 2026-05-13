@@ -1,6 +1,7 @@
 import { Crown } from "lucide-react"
 import { cn } from "../../lib/utils"
 
+// Component: section label used above room controls, with host-aware wording.
 export default function RoomSectionLabel({ isHost, className }) {
 	return (
 		<div

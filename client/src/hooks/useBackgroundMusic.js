@@ -9,8 +9,9 @@ import {
 	syncBackgroundMusicWithMute,
 } from "../lib/sound"
 
-// NOTE (2026-04-29): 页面级背景音乐 hook。
-// 重点处理：浏览器 autoplay 限制（首次交互后重试）以及与全局 mute 状态同步。
+// NOTE (2026-04-29): Page-level background music hook.
+// It handles browser autoplay restrictions and keeps playback aligned with the
+// global mute preference.
 
 // Plays looping background music for a page.
 // Notes:
@@ -18,6 +19,7 @@ import {
 //   then retry once on first pointerdown/keydown.
 // - The music respects the global mute toggle via `useSoundStore`.
 export default function useBackgroundMusic({ enabled = true, volume = 0.22 } = {}) {
+	// State: subscribe to the global mute flag so playback follows header controls.
 	const muted = useSoundStore((state) => state.muted)
 
 	useEffect(() => {

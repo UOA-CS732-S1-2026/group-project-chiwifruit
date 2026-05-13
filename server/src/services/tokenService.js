@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 
+// Service: create signed JWTs for both registered users and guest identities.
 function createToken(identity) {
   return jwt.sign(
     {

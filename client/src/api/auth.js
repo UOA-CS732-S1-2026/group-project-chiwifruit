@@ -1,7 +1,8 @@
 import api from "./axios"
 
-// NOTE (2026-04-29): auth API 返回 { token, user }，并由上层统一调用 setStoredAuthSession()
-// 写入 storage（guest/sessionStorage, user/localStorage）以及 expiresAt。
+// NOTE (2026-04-29): Auth endpoints return { token, user }.
+// Callers should persist the session via `setStoredAuthSession()` so storage
+// selection (guest/sessionStorage, user/localStorage) and expiry stay aligned.
 
 export async function register({ username, password }) {
 	const { data } = await api.post("/auth/register", { username, password })

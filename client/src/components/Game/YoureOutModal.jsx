@@ -2,10 +2,13 @@ import { ArrowRightFromLine, Play, TriangleAlert } from "lucide-react"
 
 import BaseModal from "../ui/BaseModal"
 
+// Component: present the eliminated player with the choice to spectate or return
+// to the waiting room.
 export default function YoureOutModal({ open, onKeepSpectating, onBackToWaitingRoom }) {
 	return (
 		<BaseModal
 			open={open}
+			// Handler: closing the modal keeps the player in spectate mode.
 			onOpenChange={(nextOpen) => {
 				if (!nextOpen) onKeepSpectating()
 			}}

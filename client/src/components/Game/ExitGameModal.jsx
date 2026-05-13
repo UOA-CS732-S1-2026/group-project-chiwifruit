@@ -1,9 +1,11 @@
 import BaseModal from "../ui/BaseModal"
 
+// Component: confirm that the player wants to leave an in-progress game.
 export default function ExitGameModal({ open, onCancel, onConfirm }) {
 	return (
 		<BaseModal
 			open={open}
+			// Handler: treat backdrop/Escape dismissal the same as pressing Cancel.
 			onOpenChange={(nextOpen) => {
 				if (!nextOpen) onCancel()
 			}}

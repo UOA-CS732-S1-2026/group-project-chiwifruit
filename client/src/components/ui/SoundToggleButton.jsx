@@ -3,12 +3,14 @@ import { Volume2, VolumeX } from "lucide-react"
 import useSoundStore from "../../store/useSoundStore"
 import { Button } from "./button"
 
-// NOTE (2026-04-29): 这是全局 mute 开关，影响：背景音乐 + 点击音效。
-// data-skip-click-sfx 用来避免“点击按钮 -> 又播放点击音”叠加到某些交互上。
+// NOTE (2026-04-29): This is the global mute toggle for background music and
+// click sound effects.
+// `data-skip-click-sfx` prevents the toggle from triggering an extra click sound.
 
 // Global sound toggle (mute/unmute) used in page headers.
 // Muting affects both background music and click SFX.
 export default function SoundToggleButton({ className } = {}) {
+	// State: read the current mute value and toggle action from the shared store.
 	const muted = useSoundStore((state) => state.muted)
 	const toggleMuted = useSoundStore((state) => state.toggleMuted)
 

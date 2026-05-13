@@ -5,7 +5,10 @@ import { cn } from "../../lib/utils"
 
 const DEFAULT_DURATION = 5000
 
+// Component: display a transient top-of-screen error banner and auto-dismiss it
+// after the configured duration when a dismiss handler is provided.
 export default function ErrorToast({ message, duration = DEFAULT_DURATION, onDismiss, className }) {
+	// Effect: auto-close the toast after the caller-provided duration.
 	useEffect(() => {
 		if (!message) return
 		if (!onDismiss) return

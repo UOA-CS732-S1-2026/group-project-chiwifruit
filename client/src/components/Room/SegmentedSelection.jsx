@@ -1,5 +1,7 @@
 import { cn } from "../../lib/utils"
 
+// Component: render a segmented button group for mutually exclusive room settings
+// such as mode and difficulty.
 export default function SegmentedSelection({ value, options, onChange, disabled, className }) {
 	return (
 		<div
@@ -9,6 +11,7 @@ export default function SegmentedSelection({ value, options, onChange, disabled,
 			)}
 		>
 			{options.map((option) => {
+				// Derived state: style the matching option as the currently selected segment.
 				const isActive = option.value === value
 				const Icon = option.Icon
 

@@ -2,6 +2,8 @@ import { CircleAlert, Volume2 } from "lucide-react"
 
 import { cn } from "../../lib/utils"
 
+// Component: resolve the current game-phase/status message into the compact
+// broadcast banner shown above the wheel.
 export default function GameStatusBroadcast({
 	phase,
 	players = [],
@@ -15,6 +17,7 @@ export default function GameStatusBroadcast({
 	currentUserName,
 	className,
 }) {
+	// Derived state: fall back to the current turn player when no explicit actor is supplied.
 	const currentPlayerName = players[currentTurnIndex]?.name ?? "Player"
 	const displayName = actorName ?? currentPlayerName
 	let message = ""

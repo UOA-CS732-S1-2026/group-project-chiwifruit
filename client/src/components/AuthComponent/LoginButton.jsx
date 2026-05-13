@@ -2,6 +2,8 @@ import { UserRound } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 
+// Component: shared account button that shows either an avatar + label or a
+// generic login icon + label.
 export default function LoginButton({
 	avatarUrl,
 	avatarAlt = "User avatar",
@@ -9,6 +11,7 @@ export default function LoginButton({
 	onClick,
 	className,
 }) {
+	// Derived state: switch to avatar presentation only when an avatar URL is available.
 	const isAvatarMode = Boolean(avatarUrl)
 
 	return (
