@@ -16,13 +16,15 @@ test.describe('Room and game flow E2E', () => {
     await expect(page.getByRole('button', { name: /start game/i })).toBeDisabled()
   })
 
-  test('redirects an invalid room code back to landing with an error', async ({ page }) => {
+  test('redirects an invalid room code back to the landing page', async ({ page }) => {
     await createGuestSession(page, 'Invalid Room Guest')
 
     await page.goto('/room/NOPE99')
 
     await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByText(/room not found/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: /build the sequence/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /create a room/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /join with code/i })).toBeVisible()
   })
 
   test('supports two browser sessions joining, readying up, and starting the game', async ({ browser }) => {
