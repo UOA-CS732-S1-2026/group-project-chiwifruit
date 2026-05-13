@@ -86,36 +86,52 @@ async function createStartedGame(browser, playerCount = 2) {
   }
 }
 
+async function hostAddsOpeningNote(game) {
+  await game.hostPage.getByRole('button', { name: /sound pad 3/i }).click()
+}
+
+async function wrongNoteByUi(page) {
+  await expect(page.getByRole('button', { name: /sound pad 4/i })).toBeEnabled({ timeout: 10_000 })
+  await page.getByRole('button', { name: /sound pad 4/i }).click()
+}
+
+async function wrongNoteBySocket(game, playerIndex) {
+  game.sockets[playerIndex].emit('game_pad_press', { roomCode: game.roomCode, padIndex: 3 })
+}
+
+async function expectPlayerOut(page) {
+  await expect(page.getByRole('heading', { name: /you're out/i })).toBeVisible({ timeout: 10_000 })
+}
+
+async function expectGameOver(page) {
+  await expect(page.getByRole('heading', { name: /game over/i })).toBeVisible({ timeout: 10_000 })
+}
+
+async function expectNoGameOver(page) {
+  await expect(page.getByRole('heading', { name: /game over/i })).toHaveCount(0)
+}
+
 async function finishTwoPlayerGameByWrongNote(game) {
-  const { hostPage, guestPage } = game
+  await hostAddsOpeningNote(game)
+  await wrongNoteByUi(game.guestPage)
 
-  await hostPage.getByRole('button', { name: /sound pad 3/i }).click()
-  await expect(guestPage.getByRole('button', { name: /sound pad 4/i })).toBeEnabled({ timeout: 10_000 })
-  await guestPage.getByRole('button', { name: /sound pad 4/i }).click()
-
-  await expect(hostPage.getByRole('heading', { name: /game over/i })).toBeVisible({ timeout: 10_000 })
-  await expect(guestPage.getByRole('heading', { name: /game over/i })).toBeVisible({ timeout: 10_000 })
+  await expectGameOver(game.hostPage)
+  await expectGameOver(game.guestPage)
 }
 
 async function eliminateFirstGuestInThreePlayerGame(game) {
-  const { hostPage, guestPage } = game
+  await hostAddsOpeningNote(game)
+  await wrongNoteByUi(game.guestPage)
 
-  await hostPage.getByRole('button', { name: /sound pad 3/i }).click()
-  await expect(guestPage.getByRole('button', { name: /sound pad 4/i })).toBeEnabled({ timeout: 10_000 })
-  await guestPage.getByRole('button', { name: /sound pad 4/i }).click()
-
-  await expect(guestPage.getByRole('heading', { name: /you're out/i })).toBeVisible({ timeout: 10_000 })
-  await expect(hostPage.getByRole('heading', { name: /game over/i })).toHaveCount(0)
+  await expectPlayerOut(game.guestPage)
+  await expectNoGameOver(game.hostPage)
 }
 
 async function finishThreePlayerGameAfterFirstGuestIsOut(game) {
-  const { hostPage, guestTwoPage } = game
+  await wrongNoteByUi(game.guestTwoPage)
 
-  await expect(guestTwoPage.getByRole('button', { name: /sound pad 4/i })).toBeEnabled({ timeout: 10_000 })
-  await guestTwoPage.getByRole('button', { name: /sound pad 4/i }).click()
-
-  await expect(hostPage.getByRole('heading', { name: /game over/i })).toBeVisible({ timeout: 10_000 })
-  await expect(guestTwoPage.getByRole('heading', { name: /game over/i })).toBeVisible({ timeout: 10_000 })
+  await expectGameOver(game.hostPage)
+  await expectGameOver(game.guestTwoPage)
 }
 
 async function closeGame(game) {
@@ -181,7 +197,7 @@ test.describe('Gameplay and results E2E', () => {
 
       await expect(game.guestPage).toHaveURL(new RegExp(`/room/${game.roomCode}$`, 'i'))
       await expect(game.guestPage.getByRole('heading', { name: /waiting room/i })).toBeVisible()
-      await expect(game.hostPage.getByRole('heading', { name: /game over/i })).toHaveCount(0)
+      await expectNoGameOver(game.hostPage)
     } finally {
       await closeGame(game)
     }
@@ -199,6 +215,49 @@ test.describe('Gameplay and results E2E', () => {
 
       await expect(game.guestTwoPage).toHaveURL(/\/$/)
       await expect(game.guestTwoPage.getByRole('heading', { name: /build the sequence/i })).toBeVisible()
+    } finally {
+      await closeGame(game)
+    }
+  })
+
+  test('continues a four-player game after one player returns to the waiting room and then reaches results', async ({ browser }) => {
+    const game = await createStartedGame(browser, 4)
+
+    try {
+      await hostAddsOpeningNote(game)
+      await wrongNoteByUi(game.pages[1])
+      await expectPlayerOut(game.pages[1])
+      await game.pages[1].getByRole('button', { name: /back to waiting room/i }).click()
+      await expect(game.pages[1]).toHaveURL(new RegExp(`/room/${game.roomCode}$`, 'i'))
+      await expectNoGameOver(game.hostPage)
+
+      await wrongNoteBySocket(game, 2)
+      await expectPlayerOut(game.pages[2])
+      await expectNoGameOver(game.hostPage)
+
+      await wrongNoteBySocket(game, 3)
+      await expectGameOver(game.hostPage)
+      await expect(game.hostPage.getByText(/points/i).first()).toBeVisible()
+    } finally {
+      await closeGame(game)
+    }
+  })
+
+  test('keeps a six-player game alive through cascading eliminations until the final wrong note', async ({ browser }) => {
+    const game = await createStartedGame(browser, 6)
+
+    try {
+      await hostAddsOpeningNote(game)
+
+      for (let playerIndex = 1; playerIndex <= 4; playerIndex += 1) {
+        await wrongNoteBySocket(game, playerIndex)
+        await expectPlayerOut(game.pages[playerIndex])
+        await expectNoGameOver(game.hostPage)
+      }
+
+      await wrongNoteBySocket(game, 5)
+      await expectGameOver(game.hostPage)
+      await expect(game.hostPage.getByText(/points/i).first()).toBeVisible()
     } finally {
       await closeGame(game)
     }
