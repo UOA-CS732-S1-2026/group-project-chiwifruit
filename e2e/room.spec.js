@@ -16,6 +16,26 @@ test.describe('Room and game flow E2E', () => {
     await expect(page.getByRole('button', { name: /start game/i })).toBeDisabled()
   })
 
+  test('copies the room code from the waiting room', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    const roomCode = await createRoomThroughUi(page)
+
+    await page.getByRole('button', { name: /copy room code/i }).click()
+
+    await expect(page.getByText(/^Copied$/i)).toBeVisible()
+    await expect(page.evaluate(() => navigator.clipboard.readText())).resolves.toBe(roomCode)
+  })
+
+  test('allows the host to change sound mode and difficulty before starting', async ({ page }) => {
+    await createRoomThroughUi(page)
+
+    await page.getByRole('button', { name: /^Piano$/i }).click()
+    await page.getByRole('button', { name: /^Hard$/i }).click()
+
+    await expect(page.getByRole('button', { name: /^Piano$/i })).toHaveClass(/text-primary-foreground/)
+    await expect(page.getByRole('button', { name: /^Hard$/i })).toHaveClass(/text-primary-foreground/)
+  })
+
   test('redirects an invalid room code back to the landing page', async ({ page }) => {
     await createGuestSession(page, 'Invalid Room Guest')
 
@@ -25,6 +45,29 @@ test.describe('Room and game flow E2E', () => {
     await expect(page.getByRole('heading', { name: /build the sequence/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /create a room/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /join with code/i })).toBeVisible()
+  })
+
+  test('allows a guest to toggle ready state before the host starts', async ({ browser }) => {
+    const hostContext = await browser.newContext()
+    const guestContext = await browser.newContext()
+    const hostPage = await hostContext.newPage()
+    const guestPage = await guestContext.newPage()
+
+    try {
+      const roomCode = await createRoomThroughUi(hostPage)
+      await joinRoomThroughUi(guestPage, roomCode)
+
+      await guestPage.getByRole('button', { name: /click to ready/i }).click()
+      await expect(guestPage.getByRole('button', { name: /ready!/i })).toBeVisible()
+      await expect(hostPage.getByRole('button', { name: /start game/i })).toBeEnabled()
+
+      await guestPage.getByRole('button', { name: /ready!/i }).click()
+      await expect(guestPage.getByRole('button', { name: /click to ready/i })).toBeVisible()
+      await expect(hostPage.getByRole('button', { name: /start game/i })).toBeDisabled()
+    } finally {
+      await hostContext.close()
+      await guestContext.close()
+    }
   })
 
   test('supports two browser sessions joining, readying up, and starting the game', async ({ browser }) => {
