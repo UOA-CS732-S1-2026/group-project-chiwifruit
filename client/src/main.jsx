@@ -1,3 +1,8 @@
+/**
+ * React application entry point.
+ * Wires global providers that must exist once for the whole client app:
+ * React Router for page routing and React Query for API cache/state management.
+ */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -6,8 +11,8 @@ import './index.css'
 import App from './App.jsx'
 import { queryClient } from './lib/queryClient'
 
-// NOTE (2026-04-29): 统一在入口挂载 React Query，避免各页面各自创建 client。
-// StrictMode 会在开发环境触发某些 effect 的双调用，所以业务逻辑里需要做幂等/去重。
+// NOTE (2026-04-29): Mount React Query at the application entry point so pages do not create their own clients.
+// StrictMode can double-invoke some effects in development, so side-effect logic should remain idempotent.
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

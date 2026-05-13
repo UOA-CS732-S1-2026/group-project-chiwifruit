@@ -1,3 +1,9 @@
+/**
+ * Socket.IO realtime gateway.
+ * Authenticates socket clients with the same JWT as REST, broadcasts room/game
+ * state, coordinates familiarisation and turn timers, and translates disconnects
+ * or explicit leave_room events into authoritative game forfeits.
+ */
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');

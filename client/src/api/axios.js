@@ -1,3 +1,8 @@
+/**
+ * Shared Axios client and frontend auth-session storage helpers.
+ * Keeps guest sessions in sessionStorage and registered-user sessions in localStorage,
+ * adds bearer tokens to API requests, and centralises API error-message extraction.
+ */
 import axios from "axios"
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
@@ -6,12 +11,12 @@ const AUTH_USER_STORAGE_KEY = "kichain:authUser"
 const AUTH_EXPIRES_AT_STORAGE_KEY = "kichain:authExpiresAt"
 const AUTH_TTL_MS = 60 * 60 * 1000
 
-// NOTE (2026-04-29): 统一前端会话持久化策略。
-// - guest：存 sessionStorage（关 tab 立刻失效；刷新不失效）。
-// - user：存 localStorage。
-// - 必须“原子写入 token+user+expiresAt”，否则容易出现只写了 token 导致 API 401/状态错乱。
-// - expiresAt 优先使用 JWT 自带 exp，与后端签发时长保持一致；仅在无法解析 token 时退回前端兜底 TTL。
-// - 读取时会校验过期时间并做向后兼容（老版本没有 expiresAt 时会补写）。
+// NOTE (2026-04-29): Centralised frontend session persistence strategy.
+// - Guests are stored in sessionStorage, so closing the tab ends the session but refresh does not.
+// - Registered users are stored in localStorage.
+// - token + user + expiresAt must be written atomically; otherwise the app can enter partial-auth states.
+// - Prefer the JWT exp timestamp so the frontend stays aligned with the backend token lifetime.
+// - When reading, validate expiry and backfill expiresAt for older stored sessions.
 
 function decodeBase64Url(value) {
 	if (!value || typeof value !== "string") return null
@@ -177,12 +182,12 @@ export function setStoredAuthSession(session) {
 			return
 		}
 
-		// guest vs user 的区分来自后端 JWT payload / user 对象上的 isGuest 字段。
+		// Guest/user separation comes from the backend JWT payload and user.isGuest flag.
 		const isGuest = Boolean(user?.isGuest)
 		const storage = isGuest ? getSafeStorage("session") : getSafeStorage("local")
 		const otherStorage = isGuest ? getSafeStorage("local") : getSafeStorage("session")
 
-		// 同一时间只允许一份有效会话，避免 local/session 同时存在导致读取顺序不确定。
+		// Only one valid session should exist at a time to keep auth read order deterministic.
 		clearStoredAuthInStorage(otherStorage)
 		if (!storage) return
 		storage.setItem(TOKEN_STORAGE_KEY, token)

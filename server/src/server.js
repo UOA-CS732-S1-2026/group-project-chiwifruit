@@ -1,3 +1,8 @@
+/**
+ * Backend process entry point.
+ * Connects to MongoDB, creates the HTTP server, attaches Socket.IO, and then
+ * starts listening on the configured port. Express app wiring lives in app.js.
+ */
 const http = require('http');
 const app = require('./app');
 const connectDatabase = require('./config/db');

@@ -1,3 +1,9 @@
+/**
+ * In-memory active-game state machine.
+ * Room membership is persisted in Mongo, but the live match snapshot lives here:
+ * familiarisation, turn validation, scoring, elimination/forfeit handling, timers,
+ * and the serialised game_state payload sent through Socket.IO.
+ */
 const crypto = require('crypto');
 const { buildAvatarUrl } = require('../controllers/authController');
 
