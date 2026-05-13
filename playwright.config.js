@@ -10,7 +10,7 @@ module.exports = defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:6173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -23,7 +23,7 @@ module.exports = defineConfig({
   ],
   webServer: {
     command: 'node e2e/support/e2eServer.cjs',
-    url: 'http://127.0.0.1:5173',
+    url: 'http://127.0.0.1:6173',
     reuseExistingServer: false,
     timeout: 120_000,
   },
