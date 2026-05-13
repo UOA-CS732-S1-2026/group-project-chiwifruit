@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
-import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import LandingPage from './pages/LandingPage'
 import RoomPage from './pages/RoomPage'
 import useGlobalButtonClickSound from './hooks/useGlobalButtonClickSound'
@@ -63,17 +63,6 @@ function App() {
 
     previousPathRef.current = nextPath
   }, [location.pathname])
-
-  useEffect(() => {
-    const onPageHide = () => {
-      maybeLeaveScopedRoom(previousPathRef.current)
-    }
-
-    window.addEventListener('pagehide', onPageHide)
-    return () => {
-      window.removeEventListener('pagehide', onPageHide)
-    }
-  }, [])
 
   return (
     <Suspense fallback={null}>
