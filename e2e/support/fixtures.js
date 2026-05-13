@@ -1,6 +1,6 @@
 const { expect } = require('@playwright/test')
 
-const BACKEND_ORIGIN = 'http://127.0.0.1:3000'
+const BACKEND_ORIGIN = 'http://127.0.0.1:3100'
 const API_ORIGIN = `${BACKEND_ORIGIN}/api`
 
 async function expectOk(response, label) {
