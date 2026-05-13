@@ -8,6 +8,24 @@ const {
   expectOk,
 } = require('./support/fixtures')
 
+async function joinRoomAs(page, roomCode, username) {
+  const session = await createGuestSession(page, username)
+  const response = await page.request.post(`${API_ORIGIN}/rooms`, {
+    headers: authHeader(session),
+    data: { joinRoomCode: roomCode },
+  })
+  await expectOk(response, `Join room as ${username}`)
+  return session
+}
+
+async function getRoomState(page, roomCode, session) {
+  const response = await page.request.get(`${API_ORIGIN}/rooms/${roomCode}/ready`, {
+    headers: authHeader(session),
+  })
+  await expectOk(response, 'Get room state')
+  return response.json()
+}
+
 test.describe('API-backed E2E contracts', () => {
   test('health endpoint is available in the managed E2E backend', async ({ page }) => {
     const response = await page.request.get(`${BACKEND_ORIGIN}/health`)
@@ -87,6 +105,97 @@ test.describe('API-backed E2E contracts', () => {
     await expect(response.json()).resolves.toEqual(expect.objectContaining({ message: expect.any(String) }))
   })
 
+  test('tracks six participants, readiness, and host-selected settings', async ({ page }) => {
+    const host = await createGuestSession(page, 'Six Player Host')
+    const createResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
+      headers: authHeader(host),
+    })
+    await expectOk(createResponse, 'Create six-player room')
+    const room = await createResponse.json()
+
+    const guests = []
+    for (let index = 1; index <= 5; index += 1) {
+      guests.push(await joinRoomAs(page, room.roomCode, `Six Player Guest ${index}`))
+    }
+
+    await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/mode`, {
+      headers: authHeader(host),
+      data: { mode: 'aussie' },
+    }).then((response) => expectOk(response, 'Set mode'))
+
+    await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/difficulty`, {
+      headers: authHeader(host),
+      data: { difficulty: 'hard' },
+    }).then((response) => expectOk(response, 'Set difficulty'))
+
+    for (const guest of guests) {
+      await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/ready`, {
+        headers: authHeader(guest),
+        data: { isReady: true },
+      }).then((response) => expectOk(response, 'Set guest ready'))
+    }
+
+    const state = await getRoomState(page, room.roomCode, host)
+
+    expect(state).toMatchObject({
+      roomCode: room.roomCode,
+      participantCount: 6,
+      maxParticipantCount: 6,
+      mode: 'aussie',
+      difficulty: 'hard',
+      canStartGame: true,
+    })
+    expect(state.participants).toHaveLength(6)
+    expect(state.participants.filter((participant) => participant.isReady)).toHaveLength(5)
+  })
+
+  test('updates the roster and transfers host after the current host leaves', async ({ page }) => {
+    const host = await createGuestSession(page, 'Leaving Host')
+    const createResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
+      headers: authHeader(host),
+    })
+    await expectOk(createResponse, 'Create room before host leave')
+    const room = await createResponse.json()
+
+    const guestOne = await joinRoomAs(page, room.roomCode, 'Remaining Guest One')
+    const guestTwo = await joinRoomAs(page, room.roomCode, 'Remaining Guest Two')
+
+    const leaveResponse = await page.request.delete(`${API_ORIGIN}/rooms/${room.roomCode}`, {
+      headers: authHeader(host),
+    })
+    await expectOk(leaveResponse, 'Host leaves room')
+
+    const state = await getRoomState(page, room.roomCode, guestOne)
+
+    expect(state.participantCount).toBe(2)
+    expect(state.hostId).toBe(guestOne.user.id)
+    expect(state.participants.map((participant) => participant.userId)).toEqual([
+      guestOne.user.id,
+      guestTwo.user.id,
+    ])
+  })
+
+  test('deletes the room after the last participant leaves', async ({ page }) => {
+    const host = await createGuestSession(page, 'Last Leaver Host')
+    const createResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
+      headers: authHeader(host),
+    })
+    await expectOk(createResponse, 'Create room before final leave')
+    const room = await createResponse.json()
+
+    const leaveResponse = await page.request.delete(`${API_ORIGIN}/rooms/${room.roomCode}`, {
+      headers: authHeader(host),
+    })
+    await expectOk(leaveResponse, 'Last participant leaves room')
+
+    const stateResponse = await page.request.get(`${API_ORIGIN}/rooms/${room.roomCode}/ready`, {
+      headers: authHeader(host),
+    })
+
+    expect(stateResponse.status()).toBe(404)
+    await expect(stateResponse.json()).resolves.toEqual(expect.objectContaining({ message: 'Room not found' }))
+  })
+
   test('rejects the seventh participant and preserves the six-player room limit', async ({ browser }) => {
     const hostContext = await browser.newContext()
     const hostPage = await hostContext.newPage()
@@ -97,13 +206,7 @@ test.describe('API-backed E2E contracts', () => {
       for (let index = 1; index <= 5; index += 1) {
         const context = await browser.newContext()
         const page = await context.newPage()
-        const session = await createGuestSession(page, `Capacity Guest ${index}`)
-
-        const joinResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
-          headers: authHeader(session),
-          data: { joinRoomCode: room.roomCode },
-        })
-        await expectOk(joinResponse, `Join room as guest ${index}`)
+        await joinRoomAs(page, room.roomCode, `Capacity Guest ${index}`)
         await context.close()
       }
 
