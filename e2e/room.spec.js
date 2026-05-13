@@ -47,6 +47,57 @@ test.describe('Room and game flow E2E', () => {
     await expect(page.getByRole('button', { name: /join with code/i })).toBeVisible()
   })
 
+  test('shows realtime roster updates across three browser sessions', async ({ browser }) => {
+    const hostContext = await browser.newContext()
+    const guestOneContext = await browser.newContext()
+    const guestTwoContext = await browser.newContext()
+    const hostPage = await hostContext.newPage()
+    const guestOnePage = await guestOneContext.newPage()
+    const guestTwoPage = await guestTwoContext.newPage()
+
+    try {
+      const roomCode = await createRoomThroughUi(hostPage)
+      await joinRoomThroughUi(guestOnePage, roomCode)
+      await joinRoomThroughUi(guestTwoPage, roomCode)
+
+      await expect(hostPage.getByText(/3 \/ 6 players/i)).toBeVisible()
+      await expect(guestOnePage.getByText(/3 \/ 6 players/i)).toBeVisible()
+      await expect(guestTwoPage.getByText(/3 \/ 6 players/i)).toBeVisible()
+      await expect(hostPage.getByRole('button', { name: /start game/i })).toBeDisabled()
+    } finally {
+      await hostContext.close()
+      await guestOneContext.close()
+      await guestTwoContext.close()
+    }
+  })
+
+  test('requires all non-host players to be ready in a three-player room before starting', async ({ browser }) => {
+    const hostContext = await browser.newContext()
+    const guestOneContext = await browser.newContext()
+    const guestTwoContext = await browser.newContext()
+    const hostPage = await hostContext.newPage()
+    const guestOnePage = await guestOneContext.newPage()
+    const guestTwoPage = await guestTwoContext.newPage()
+
+    try {
+      const roomCode = await createRoomThroughUi(hostPage)
+      await joinRoomThroughUi(guestOnePage, roomCode)
+      await joinRoomThroughUi(guestTwoPage, roomCode)
+
+      await guestOnePage.getByRole('button', { name: /click to ready/i }).click()
+      await expect(guestOnePage.getByRole('button', { name: /ready!/i })).toBeVisible()
+      await expect(hostPage.getByRole('button', { name: /start game/i })).toBeDisabled()
+
+      await guestTwoPage.getByRole('button', { name: /click to ready/i }).click()
+      await expect(guestTwoPage.getByRole('button', { name: /ready!/i })).toBeVisible()
+      await expect(hostPage.getByRole('button', { name: /start game/i })).toBeEnabled()
+    } finally {
+      await hostContext.close()
+      await guestOneContext.close()
+      await guestTwoContext.close()
+    }
+  })
+
   test('allows a guest to toggle ready state before the host starts', async ({ browser }) => {
     const hostContext = await browser.newContext()
     const guestContext = await browser.newContext()
