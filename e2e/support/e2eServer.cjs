@@ -59,7 +59,9 @@ async function startBackend() {
   socketServer = initSocket(httpServer, FRONTEND_ORIGIN)
   app.set('io', socketServer)
 
-  await new Promise((resolve) => httpServer.listen(BACKEND_PORT, '127.0.0.1', resolve))
+  // Bind to the default host instead of only 127.0.0.1 so browser requests to
+  // both localhost and 127.0.0.1 can reach the managed backend.
+  await new Promise((resolve) => httpServer.listen(BACKEND_PORT, resolve))
   await waitForServer(`${BACKEND_ORIGIN}/health`)
 }
 
