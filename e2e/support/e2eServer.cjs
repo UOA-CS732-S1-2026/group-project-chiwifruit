@@ -3,9 +3,6 @@ const { spawn } = require('child_process')
 const { MongoMemoryServer } = require('mongodb-memory-server')
 const mongoose = require('mongoose')
 
-const app = require('../../server/src/app')
-const { initSocket } = require('../../server/src/socket')
-
 const FRONTEND_PORT = 5173
 const BACKEND_PORT = 3000
 const FRONTEND_ORIGIN = `http://127.0.0.1:${FRONTEND_PORT}`
@@ -13,8 +10,18 @@ const BACKEND_ORIGIN = `http://127.0.0.1:${BACKEND_PORT}`
 
 let mongoServer
 let httpServer
+let socketServer
 let viteProcess
 let isShuttingDown = false
+
+function applyE2eEnvironment(mongodbUri) {
+  process.env.NODE_ENV = 'test'
+  process.env.PORT = String(BACKEND_PORT)
+  process.env.FRONTEND_ORIGIN = FRONTEND_ORIGIN
+  process.env.MONGODB_URI = mongodbUri
+  process.env.JWT_SECRET = process.env.JWT_SECRET || 'e2e-test-secret'
+  process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d'
+}
 
 function waitForServer(url, timeoutMs = 60_000) {
   const startedAt = Date.now()
@@ -41,19 +48,16 @@ function waitForServer(url, timeoutMs = 60_000) {
 
 async function startBackend() {
   mongoServer = await MongoMemoryServer.create()
+  applyE2eEnvironment(mongoServer.getUri('kichain-e2e'))
 
-  process.env.NODE_ENV = 'test'
-  process.env.PORT = String(BACKEND_PORT)
-  process.env.FRONTEND_ORIGIN = FRONTEND_ORIGIN
-  process.env.MONGODB_URI = mongoServer.getUri('kichain-e2e')
-  process.env.JWT_SECRET = process.env.JWT_SECRET || 'e2e-test-secret'
-  process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d'
+  const app = require('../../server/src/app')
+  const { initSocket } = require('../../server/src/socket')
 
   await mongoose.connect(process.env.MONGODB_URI)
 
   httpServer = http.createServer(app)
-  const io = initSocket(httpServer, FRONTEND_ORIGIN)
-  app.set('io', io)
+  socketServer = initSocket(httpServer, FRONTEND_ORIGIN)
+  app.set('io', socketServer)
 
   await new Promise((resolve) => httpServer.listen(BACKEND_PORT, '127.0.0.1', resolve))
   await waitForServer(`${BACKEND_ORIGIN}/health`)
@@ -64,6 +68,7 @@ async function startFrontend() {
     cwd: process.cwd(),
     env: {
       ...process.env,
+      FRONTEND_PORT: String(FRONTEND_PORT),
       VITE_API_URL: `${BACKEND_ORIGIN}/api`,
       VITE_SOCKET_URL: BACKEND_ORIGIN,
       VITE_BUILD_VERSION: 'e2e',
@@ -90,6 +95,10 @@ async function shutdown() {
 
   if (viteProcess) {
     viteProcess.kill('SIGTERM')
+  }
+
+  if (socketServer) {
+    await new Promise((resolve) => socketServer.close(resolve))
   }
 
   if (httpServer) {
