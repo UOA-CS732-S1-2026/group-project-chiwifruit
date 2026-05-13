@@ -1,7 +1,7 @@
 // Unit scope: socket familiarizing timer orchestration is verified with mocked game and room services.
 
 jest.mock('../../../src/services/gameService', () => ({
-  TURN_MS: 20000,
+  TURN_MS: 30000,
   getGame: jest.fn(),
   startGame: jest.fn(),
   markFamiliarReady: jest.fn(),
@@ -164,13 +164,13 @@ describe('socket familiarizing timer orchestration', () => {
     });
 
     it('should schedule a turn timer when force start transitions to playing', () => {
-      gameService.forceStartPlaying.mockReturnValue({ ok: true, game: { status: 'playing', turnEndsAt: Date.now() + 20000 } });
+      gameService.forceStartPlaying.mockReturnValue({ ok: true, game: { status: 'playing', turnEndsAt: Date.now() + 30000 } });
 
       const socket = connectSocket(io, 'user2', 'ROOM1');
       const timeoutCallback = armFamiliarTimer(socket);
 
       jest.clearAllMocks();
-      gameService.getGame.mockReturnValue({ status: 'playing', turnEndsAt: Date.now() + 20000 });
+      gameService.getGame.mockReturnValue({ status: 'playing', turnEndsAt: Date.now() + 30000 });
       timeoutCallback();
 
       expect(gameService.scheduleRoomTimeout).toHaveBeenCalledWith('ROOM1', expect.any(Function), expect.any(Number));
