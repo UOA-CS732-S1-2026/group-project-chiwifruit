@@ -1,3 +1,9 @@
+/**
+ * Top-level client routing and app-wide browser lifecycle handling.
+ * Room and game pages own their own feature logic; this file only wires global
+ * concerns such as route definitions, click sound, and best-effort room cleanup
+ * when navigating away from a room-scoped route.
+ */
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import LandingPage from './pages/LandingPage'
@@ -8,8 +14,8 @@ import { leaveRoomKeepalive } from './api/rooms'
 
 const GamePage = lazy(() => import('./pages/GamePage'))
 
-// NOTE (2026-04-29): App 级别只做“全局能力”挂载（如按钮点击音效）与路由定义。
-// 具体的房间/游戏同步逻辑在各自页面内处理，避免跨页面副作用。
+// NOTE (2026-04-29): App-level code should only mount global capabilities and define routes.
+// Room/game synchronization belongs inside their page-level modules to avoid cross-page side effects.
 
 function getRoomCodeFromPath(pathname) {
   const match = /^\/(?:room|game)\/([^/]+)$/i.exec(String(pathname ?? ''));

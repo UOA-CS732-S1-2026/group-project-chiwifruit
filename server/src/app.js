@@ -1,3 +1,9 @@
+/**
+ * Express application wiring.
+ * Defines shared middleware, health/API-doc routes, feature route modules, and
+ * the final error handler. The HTTP server and Socket.IO attachment are handled
+ * separately in server.js.
+ */
 const express = require('express');
 const cors = require('cors');
 const swaggerJSDoc = require('swagger-jsdoc');
