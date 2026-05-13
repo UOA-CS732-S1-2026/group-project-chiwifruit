@@ -24,7 +24,7 @@ module.exports = defineConfig({
   webServer: {
     command: 'node e2e/support/e2eServer.cjs',
     url: 'http://127.0.0.1:5173',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   outputDir: 'test-results/playwright',
