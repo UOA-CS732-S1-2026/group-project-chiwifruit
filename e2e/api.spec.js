@@ -105,6 +105,87 @@ test.describe('API-backed E2E contracts', () => {
     await expect(response.json()).resolves.toEqual(expect.objectContaining({ message: expect.any(String) }))
   })
 
+  test('rejects invalid host-selected room settings', async ({ page }) => {
+    const host = await createGuestSession(page, 'Invalid Setting Host')
+    const createResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
+      headers: authHeader(host),
+    })
+    await expectOk(createResponse, 'Create room for invalid settings')
+    const room = await createResponse.json()
+
+    const invalidModeResponse = await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/mode`, {
+      headers: authHeader(host),
+      data: { mode: 'kazoo' },
+    })
+    expect(invalidModeResponse.status()).toBe(400)
+    await expect(invalidModeResponse.json()).resolves.toEqual(expect.objectContaining({ message: expect.any(String) }))
+
+    const invalidDifficultyResponse = await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/difficulty`, {
+      headers: authHeader(host),
+      data: { difficulty: 'extreme' },
+    })
+    expect(invalidDifficultyResponse.status()).toBe(400)
+    await expect(invalidDifficultyResponse.json()).resolves.toEqual(expect.objectContaining({ message: expect.any(String) }))
+  })
+
+  test('supports ready on-off-on transitions for multiple players', async ({ page }) => {
+    const host = await createGuestSession(page, 'Ready Transition Host')
+    const createResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
+      headers: authHeader(host),
+    })
+    await expectOk(createResponse, 'Create room for ready transitions')
+    const room = await createResponse.json()
+    const guestOne = await joinRoomAs(page, room.roomCode, 'Ready Transition Guest One')
+    const guestTwo = await joinRoomAs(page, room.roomCode, 'Ready Transition Guest Two')
+
+    await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/ready`, {
+      headers: authHeader(guestOne),
+      data: { isReady: true },
+    }).then((response) => expectOk(response, 'Guest one ready'))
+    await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/ready`, {
+      headers: authHeader(guestTwo),
+      data: { isReady: true },
+    }).then((response) => expectOk(response, 'Guest two ready'))
+
+    let state = await getRoomState(page, room.roomCode, host)
+    expect(state.canStartGame).toBe(true)
+    expect(state.participants.filter((participant) => participant.isReady)).toHaveLength(2)
+
+    await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/ready`, {
+      headers: authHeader(guestOne),
+      data: { isReady: false },
+    }).then((response) => expectOk(response, 'Guest one unready'))
+
+    state = await getRoomState(page, room.roomCode, host)
+    expect(state.canStartGame).toBe(false)
+    expect(state.participants.filter((participant) => participant.isReady)).toHaveLength(1)
+
+    await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/ready`, {
+      headers: authHeader(guestOne),
+      data: { isReady: true },
+    }).then((response) => expectOk(response, 'Guest one ready again'))
+
+    state = await getRoomState(page, room.roomCode, host)
+    expect(state.canStartGame).toBe(true)
+    expect(state.participants.filter((participant) => participant.isReady)).toHaveLength(2)
+  })
+
+  test('rejects ready and leave actions from a user who is not in the room', async ({ page }) => {
+    const room = await createRoomByApi(page, 'Not Joined Host')
+    const outsider = await createGuestSession(page, 'Not Joined Outsider')
+
+    const readyResponse = await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/ready`, {
+      headers: authHeader(outsider),
+      data: { isReady: true },
+    })
+    expect(readyResponse.status()).toBe(403)
+
+    const leaveResponse = await page.request.delete(`${API_ORIGIN}/rooms/${room.roomCode}`, {
+      headers: authHeader(outsider),
+    })
+    expect(leaveResponse.status()).toBe(403)
+  })
+
   test('tracks six participants, readiness, and host-selected settings', async ({ page }) => {
     const host = await createGuestSession(page, 'Six Player Host')
     const createResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
