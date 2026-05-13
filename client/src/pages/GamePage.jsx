@@ -1119,6 +1119,7 @@ export default function GamePage() {
 		<Background stickers={BACKGROUND_STICKERS}>
 			<ErrorToast
 				message={socketError || gameLoadError}
+				duration={socketError ? 1000 : undefined}
 				onDismiss={() => {
 					setSocketError("")
 					setGameLoadError("")
