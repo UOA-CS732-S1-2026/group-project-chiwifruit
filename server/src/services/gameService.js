@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { buildAvatarUrl } = require('../controllers/authController');
+const { buildAvatarUrl } = require('../utils/avatar');
 
 // NOTE (2026-04-27): Multiplayer game state is kept in-memory.
 // Reason: the game is ephemeral and driven by socket events; persisting to Mongo

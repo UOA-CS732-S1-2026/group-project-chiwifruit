@@ -2,24 +2,19 @@ import { CircleAlert, Volume2 } from "lucide-react"
 
 import { cn } from "../../lib/utils"
 
-// Component: resolve the current game-phase/status message into the compact
-// broadcast banner shown above the wheel.
-export default function GameStatusBroadcast({
+// Helper: resolve the current broadcast message and variant while preserving the
+// existing status-first precedence.
+function resolveBroadcastContent({
 	phase,
-	players = [],
-	currentTurnIndex = 0,
-	inputCount = 0,
-	sequenceLength = 0,
-	isMyTurn = false,
+	inputCount,
+	sequenceLength,
+	isMyTurn,
 	status,
-	actorName,
+	displayName,
 	reason,
+	currentPlayerName,
 	currentUserName,
-	className,
 }) {
-	// Derived state: fall back to the current turn player when no explicit actor is supplied.
-	const currentPlayerName = players[currentTurnIndex]?.name ?? "Player"
-	const displayName = actorName ?? currentPlayerName
 	let message = ""
 	let variant = "default"
 
@@ -80,6 +75,39 @@ export default function GameStatusBroadcast({
 			message = `${currentPlayerName}'s turn. Watch and listen.`
 		}
 	}
+
+	return { message, variant }
+}
+
+// Component: resolve the current game-phase/status message into the compact
+// broadcast banner shown above the wheel.
+export default function GameStatusBroadcast({
+	phase,
+	players = [],
+	currentTurnIndex = 0,
+	inputCount = 0,
+	sequenceLength = 0,
+	isMyTurn = false,
+	status,
+	actorName,
+	reason,
+	currentUserName,
+	className,
+}) {
+	// Derived state: fall back to the current turn player when no explicit actor is supplied.
+	const currentPlayerName = players[currentTurnIndex]?.name ?? "Player"
+	const displayName = actorName ?? currentPlayerName
+	const { message, variant } = resolveBroadcastContent({
+		phase,
+		inputCount,
+		sequenceLength,
+		isMyTurn,
+		status,
+		displayName,
+		reason,
+		currentPlayerName,
+		currentUserName,
+	})
 
 	if (!message) return null
 

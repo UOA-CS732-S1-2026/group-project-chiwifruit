@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const { createToken } = require('../services/tokenService');
+const { buildAvatarUrl } = require('../utils/avatar');
 
 const GUEST_PREFIXES = ['Swift', 'Sunny', 'Echo', 'Brave', 'Lucky', 'Bright'];
 const GUEST_NOUNS = ['Falcon', 'Otter', 'Fox', 'Koala', 'Dolphin', 'Robin'];
@@ -12,11 +13,6 @@ function generateGuestName() {
   const noun = GUEST_NOUNS[Math.floor(Math.random() * GUEST_NOUNS.length)];
   const suffix = Math.floor(1000 + Math.random() * 9000);
   return `${prefix}${noun}${suffix}`;
-}
-
-// Helper: build the deterministic DiceBear avatar URL used by both users and guests.
-function buildAvatarUrl(seed, style = 'bottts') {
-  return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}`;
 }
 
 // Controller: register a new persistent user account and issue its JWT session.
@@ -113,4 +109,4 @@ async function continueAsGuest(_req, res) {
   });
 }
 
-module.exports = { login, register, continueAsGuest, buildAvatarUrl };
+module.exports = { login, register, continueAsGuest };

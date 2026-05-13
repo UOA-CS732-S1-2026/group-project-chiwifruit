@@ -1,5 +1,5 @@
 const Room = require('../models/Room');
-const { buildAvatarUrl } = require('../controllers/authController');
+const { buildAvatarUrl } = require('../utils/avatar');
 
 const MAX_ROOM_PARTICIPANTS = 6;
 const MIN_PARTICIPANTS_TO_START = 2;

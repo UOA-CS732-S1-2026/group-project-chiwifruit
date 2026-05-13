@@ -1,8 +1,8 @@
 const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
+const { buildAvatarUrl } = require('../utils/avatar');
 const { emitRoomUpdate, cancelPendingRoomRosterCleanup } = require('../socket');
 const { getGame, removeGame } = require('../services/gameService');
-const { buildAvatarUrl } = require('./authController');
 const {
   removeParticipantFromRoom,
   getRoomState,
