@@ -1,63 +1,7 @@
 const express = require('express');
-const { login, register, continueAsGuest } = require('../controllers/authController');
+const { continueAsGuest } = require('../controllers/authController');
 
 const router = express.Router();
-
-/**
- * @swagger
- * /api/auth/register:
- *   post:
- *     summary: Register a new user
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *               - password
- *             properties:
- *               username:
- *                 type: string
- *               password:
- *                 type: string
- *     responses:
- *       201:
- *         description: User registered
- *       400:
- *         description: Bad request
- */
-router.post('/register', register);
-
-/**
- * @swagger
- * /api/auth/login:
- *   post:
- *     summary: Login user
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *               - password
- *             properties:
- *               username:
- *                 type: string
- *               password:
- *                 type: string
- *     responses:
- *       200:
- *         description: Login successful
- *       401:
- *         description: Invalid credentials
- */
-router.post('/login', login);
 
 /**
  * @swagger
@@ -68,7 +12,7 @@ router.post('/login', login);
  *     requestBody:
  *       required: false
  *     responses:
- *       200:
+ *       201:
  *         description: Guest session created
  */
 router.post('/guest', continueAsGuest);
