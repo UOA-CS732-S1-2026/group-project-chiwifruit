@@ -39,7 +39,7 @@ KiChain is a full-stack multiplayer memory game built for COMPSCI 732. Players j
 | Backend | Node.js, Express, MongoDB, Mongoose, Socket.IO |
 | Auth/session | JWT, guest sessions, local/session browser storage |
 | Audio/UI | Static frontend audio assets, Howler.js, Framer Motion |
-| Testing | Jest, Supertest, MongoDB Memory Server, Vitest, jsdom, Socket.IO client integration tests |
+| Testing | Jest, Supertest, MongoDB Memory Server, Vitest, jsdom, Playwright, Socket.IO client integration tests |
 | DevOps/deployment | Docker, GitHub Actions, AWS EC2/ECR, Nginx, CloudFront, MongoDB Atlas |
 
 > [!NOTE]
@@ -95,6 +95,7 @@ MongoDB / MongoDB Atlas
 group-project-chiwifruit/
 ├── client/                  # React + Vite frontend
 ├── server/                  # Node / Express backend
+├── e2e/                     # Playwright browser E2E tests
 ├── .env.example             # Single shared environment template
 ├── Dockerfile               # Local / deployment container image definition
 └── README.md                # Main project setup and delivery guide
@@ -191,6 +192,9 @@ Run these commands from the repository root.
 | `npm run build` | Build the frontend |
 | `npm run start` | Start the backend in non-dev mode |
 | `npm run ci` | Run client and server validation checks |
+| `npm run test:e2e` | Run Playwright browser E2E tests |
+| `npm run test:e2e:headed` | Run Playwright E2E tests in headed browser mode |
+| `npm run test:e2e:report` | Open the Playwright HTML report |
 
 ## 8. Local Setup Option 1: CLI Development
 
@@ -500,6 +504,7 @@ KiChain uses a layered automated testing strategy. The goal is to keep domain lo
 | Backend REST/API integration | Jest, Supertest, MongoDB Memory Server | Express routes, auth middleware, Mongoose models, and Mongo persistence |
 | Backend socket integration | Jest, real Socket.IO server, `socket.io-client`, MongoDB Memory Server | Realtime auth, room joining, game start, familiarisation, pad press, wrong-note elimination, forfeit, and score persistence |
 | Frontend unit tests | Vitest, jsdom | Axios auth/session storage, room API wrappers, and socket client helpers |
+| Browser E2E tests | Playwright, managed MongoDB Memory Server, managed Express/Socket.IO, managed Vite | User-facing flows across the real frontend, backend API, Socket.IO, and database |
 
 ### 11.1 Run all project checks
 
@@ -567,8 +572,56 @@ client/coverage/lcov-report/index.html
 
 For more frontend testing details, see [Frontend technical notes](client/README.md#10-frontend-testing-and-validation).
 
+### 11.4 Run Playwright E2E tests
+
+Playwright E2E tests are under:
+
+```text
+e2e/
+```
+
+The E2E test server starts its own MongoDB Memory Server, Express + Socket.IO backend, and Vite frontend. It uses dedicated local test ports so it does not conflict with the normal development servers:
+
+```text
+E2E frontend: http://127.0.0.1:6173
+E2E backend:  http://127.0.0.1:3100
+```
+
+You do not need to manually start MongoDB, the backend, or the frontend before running E2E tests. The E2E server also injects test-specific frontend environment values so the browser client connects to the managed E2E backend rather than any existing local development backend.
+
+Install Playwright browsers once:
+
+```bash
+npx playwright install chromium
+```
+
+Run E2E tests:
+
+```bash
+npm run test:e2e
+```
+
+Run E2E tests in headed browser mode:
+
+```bash
+npm run test:e2e:headed
+```
+
+Open the Playwright HTML report:
+
+```bash
+npm run test:e2e:report
+```
+
+Playwright artifacts are generated locally under:
+
+```text
+playwright-report/
+test-results/
+```
+
 > [!NOTE]
-> Generated coverage folders are local artifacts and should not be committed.
+> Generated coverage folders and Playwright artifacts are local outputs and should not be committed.
 
 ## 12. Deployment Overview
 
@@ -634,12 +687,14 @@ MONGODB_URI=mongodb://kichain-db:27017/kichain-db
 
 ### 15.3 Port already in use
 
-If ports `3000`, `5173`, or `27017` are already in use, stop the old containers or local processes:
+If normal development ports `3000`, `5173`, or `27017` are already in use, stop the old containers or local processes:
 
 ```bash
 docker ps
 docker rm -f kichain-db kichain-dev-local 2>/dev/null || true
 ```
+
+Playwright E2E uses dedicated ports `3100` and `6173`. If an E2E run fails because one of those ports is already in use, stop the process using that port and rerun `npm run test:e2e`.
 
 ### 15.4 Environment variables appear outdated
 
