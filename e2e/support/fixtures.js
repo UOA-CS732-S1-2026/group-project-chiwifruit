@@ -1,10 +1,26 @@
 const { expect } = require('@playwright/test')
 
+const BACKEND_ORIGIN = 'http://127.0.0.1:3000'
+const API_ORIGIN = `${BACKEND_ORIGIN}/api`
+
+async function expectOk(response, label) {
+  if (response.ok()) return
+
+  let body = ''
+  try {
+    body = await response.text()
+  } catch {
+    body = '<unable to read response body>'
+  }
+
+  throw new Error(`${label} failed with ${response.status()} ${response.statusText()}: ${body}`)
+}
+
 async function createGuestSession(page, username) {
-  const response = await page.request.post('/api/auth/guest', {
+  const response = await page.request.post(`${API_ORIGIN}/auth/guest`, {
     data: { username },
   })
-  expect(response.ok()).toBeTruthy()
+  await expectOk(response, 'Create guest session')
 
   const session = await response.json()
   await page.addInitScript(({ token, user }) => {
@@ -15,16 +31,20 @@ async function createGuestSession(page, username) {
   return session
 }
 
+async function getStoredToken(page) {
+  return page.evaluate(() => window.localStorage.getItem('authToken'))
+}
+
 async function createRoomByApi(page, username = 'Host') {
   await createGuestSession(page, username)
-  const token = await page.evaluate(() => window.localStorage.getItem('authToken'))
+  const token = await getStoredToken(page)
 
-  const response = await page.request.post('/api/rooms', {
+  const response = await page.request.post(`${API_ORIGIN}/rooms`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
   })
-  expect(response.ok()).toBeTruthy()
+  await expectOk(response, 'Create room')
 
   return response.json()
 }
@@ -49,6 +69,8 @@ async function joinRoomThroughUi(page, roomCode) {
 }
 
 module.exports = {
+  API_ORIGIN,
+  expectOk,
   createGuestSession,
   createRoomByApi,
   createRoomThroughUi,
