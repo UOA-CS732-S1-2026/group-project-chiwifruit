@@ -36,5 +36,12 @@ export default defineConfig(({ mode }) => {
       allowedHosts: allowedDeploymentHosts,
       port: Number(env.FRONTEND_PORT) || 5173,
     },
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: './src/test/setup.js',
+      clearMocks: true,
+      restoreMocks: true,
+    },
   }
 })

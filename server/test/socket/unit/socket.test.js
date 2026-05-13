@@ -1,5 +1,5 @@
 const { Server } = require('socket.io');
-const { initSocket, emitRoomUpdate, getScheduledFamiliarizeEndsAt } = require('../src/socket');
+const { initSocket, emitRoomUpdate, getScheduledFamiliarizeEndsAt } = require('../../../src/socket');
 
 function mockSocketServer() {
   const io = {
@@ -12,6 +12,7 @@ function mockSocketServer() {
   return io;
 }
 
+// Unit scope: socket helper behaviour is verified with a mocked Socket.IO server.
 describe('socket helpers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -31,13 +32,10 @@ describe('socket helpers', () => {
       expect(emit).toHaveBeenCalledWith('room_update', roomState);
     });
 
-    it('should do nothing when io is missing', () => {
-      expect(() => emitRoomUpdate(null, 'abc123', {})).not.toThrow();
-    });
-
-    it('should do nothing when roomCode is missing', () => {
+    it('should do nothing when io or roomCode is missing', () => {
       const io = { to: jest.fn() };
 
+      expect(() => emitRoomUpdate(null, 'abc123', {})).not.toThrow();
       expect(() => emitRoomUpdate(io, '', {})).not.toThrow();
       expect(io.to).not.toHaveBeenCalled();
     });
@@ -74,15 +72,7 @@ describe('socket helpers', () => {
 
   describe('getScheduledFamiliarizeEndsAt', () => {
     it('should use the real familiar finish anchor when familiarAutoFinishedAt exists', () => {
-      const game = {
-        startedAt: 10_000,
-        familiarAutoStartedAt: 10_250,
-        familiarAutoFinishedAt: 14_750,
-        familiarAutoDurationMs: 4_500,
-        padCount: 6,
-      };
-
-      expect(getScheduledFamiliarizeEndsAt(game)).toBe(14_750 + 20_000);
+      expect(getScheduledFamiliarizeEndsAt({ familiarAutoFinishedAt: 14_750 })).toBe(14_750 + 20_000);
     });
 
     it('should fall back to a widened familiar timeout when no real finish anchor was reported', () => {
@@ -96,7 +86,7 @@ describe('socket helpers', () => {
       expect(getScheduledFamiliarizeEndsAt(game)).toBe(10_000 + 500 + (6 * 1_000) + 15_000 + 20_000);
     });
 
-    it('should use the autoplay start time as the base for the failsafe once autoplay has started', () => {
+    it('should use the autoplay start time as the base once autoplay has started', () => {
       const game = {
         startedAt: 10_000,
         familiarAutoStartedAt: 12_500,

@@ -39,7 +39,7 @@ KiChain is a full-stack multiplayer memory game built for COMPSCI 732. Players j
 | Backend | Node.js, Express, MongoDB, Mongoose, Socket.IO |
 | Auth/session | JWT, guest sessions, local/session browser storage |
 | Audio/UI | Static frontend audio assets, Howler.js, Framer Motion |
-| Testing | Jest, Supertest, backend smoke checks, frontend lint/build validation |
+| Testing | Jest, Supertest, MongoDB Memory Server, Vitest, jsdom, Socket.IO client integration tests |
 | DevOps/deployment | Docker, GitHub Actions, AWS EC2/ECR, Nginx, CloudFront, MongoDB Atlas |
 
 > [!NOTE]
@@ -492,17 +492,24 @@ docker system prune -a
 
 ## 11. Testing and Coverage
 
-Backend tests are written with Jest and Supertest. They cover:
+KiChain uses a layered automated testing strategy. The goal is to keep domain logic highly covered at lower levels, then use integration tests for the cross-layer behaviour that matters most in a realtime multiplayer game.
 
-1. Auth API contract tests.
-2. Room API contract tests, including happy paths and key error paths.
-3. Core game-state unit tests for turn progression, elimination, timeout, and forfeit edge cases.
-4. Token service unit tests.
-5. Focused socket helper tests.
+| Area | Tooling | Scope |
+| --- | --- | --- |
+| Backend unit tests | Jest | Auth, room, token, game service, and mocked socket logic |
+| Backend REST/API integration | Jest, Supertest, MongoDB Memory Server | Express routes, auth middleware, Mongoose models, and Mongo persistence |
+| Backend socket integration | Jest, real Socket.IO server, `socket.io-client`, MongoDB Memory Server | Realtime auth, room joining, game start, familiarisation, pad press, wrong-note elimination, forfeit, and score persistence |
+| Frontend unit tests | Vitest, jsdom | Axios auth/session storage, room API wrappers, and socket client helpers |
 
-### 11.1 Backend tests
+### 11.1 Run all project checks
 
-Run backend tests:
+```bash
+npm run ci
+```
+
+This runs the configured client and server validation scripts.
+
+### 11.2 Run backend tests
 
 ```bash
 npm test --workspace=server
@@ -514,33 +521,54 @@ Run backend tests with coverage:
 npm run test:coverage --workspace=server
 ```
 
+Run only socket-related backend tests:
+
+```bash
+npm test --workspace=server -- socket
+```
+
 Run backend syntax check, tests, and health smoke test:
 
 ```bash
 npm run ci --workspace=server
 ```
 
-The coverage report is generated locally under:
+Backend coverage is generated locally under:
 
 ```text
 server/coverage/lcov-report/index.html
 ```
 
-### 11.2 Frontend validation
+For more backend testing details, including the folder structure and test-layer boundaries, see [Backend technical notes](server/README.md#7-testing).
 
-Run frontend validation:
+### 11.3 Run frontend tests
+
+```bash
+npm test --workspace=client
+```
+
+Run frontend tests with coverage:
+
+```bash
+npm run test:coverage --workspace=client
+```
+
+Run frontend lint, tests, and build:
 
 ```bash
 npm run ci --workspace=client
 ```
 
-### 11.3 Full workspace checks
+Frontend coverage is generated locally under:
 
-Run all configured workspace checks:
-
-```bash
-npm run ci
+```text
+client/coverage/lcov-report/index.html
 ```
+
+For more frontend testing details, see [Frontend technical notes](client/README.md#10-frontend-testing-and-validation).
+
+> [!NOTE]
+> Generated coverage folders are local artifacts and should not be committed.
 
 ## 12. Deployment Overview
 
@@ -562,7 +590,6 @@ The root README is the main setup and delivery guide. Subdirectory READMEs provi
 
 1. [Frontend technical notes](client/README.md)
 2. [Backend technical notes](server/README.md)
-3. [Backend test notes](server/test/README.md)
 
 ## 14. GitHub Actions CI/CD
 
