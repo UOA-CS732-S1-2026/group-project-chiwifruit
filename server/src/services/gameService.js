@@ -14,6 +14,15 @@ const GAME_TTL_MS = 10 * 60_000;
 const gamesByRoom = new Map();
 const timeoutsByRoom = new Map();
 
+function getTurnDurationMs(game) {
+  const sequenceLength = Array.isArray(game?.sequence) ? game.sequence.length : 0;
+  if (sequenceLength < 10) {
+    return TURN_MS;
+  }
+
+  return TURN_MS + ((sequenceLength - 9) * 1000);
+}
+
 function normalizeRoomMode(mode) {
   const normalized = String(mode || '').trim().toLowerCase();
   if (['bird', 'piano', 'maori', 'animal', 'aussie'].includes(normalized)) {
@@ -284,7 +293,7 @@ function startPlaying(game) {
   game.roundNumber = 1;
   game.firstRoundStarterUserId = game.participantsOrder[firstAliveIndex] ?? null;
   startNewRound(game);
-  game.turnEndsAt = Date.now() + TURN_MS;
+  game.turnEndsAt = Date.now() + getTurnDurationMs(game);
   game.lastEvent = { type: 'game_started', at: Date.now() };
 }
 
@@ -487,7 +496,7 @@ function endTurnAdvance(game) {
     if (!game.eliminatedUserIds.has(id)) {
       game.currentTurnIndex = nextIndex;
       game.inputIndex = 0;
-      game.turnEndsAt = Date.now() + TURN_MS;
+      game.turnEndsAt = Date.now() + getTurnDurationMs(game);
       return;
     }
   }
@@ -614,6 +623,7 @@ module.exports = {
   FAMILIARIZE_AUTOPLAY_MS,
   FAMILIARIZE_FREE_PLAY_MS,
   FAMILIARIZE_AUTOPLAY_START_BUFFER_MS,
+  getTurnDurationMs,
   getGame,
   startGame,
   markFamiliarAudioReady,

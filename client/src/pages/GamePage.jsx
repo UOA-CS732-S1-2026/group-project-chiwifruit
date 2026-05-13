@@ -682,13 +682,22 @@ export default function GamePage() {
 	React.useEffect(() => {
 		if (!socketGame?.turnEndsAt) return
 		if (socketGame.status !== "playing") return
-		const intervalId = window.setInterval(() => {
+
+		const syncTurnSeconds = () => {
 			const now = Date.now() + serverOffsetMs
 			const secondsLeft = Math.max(0, Math.ceil((Number(socketGame.turnEndsAt) - now) / 1000))
 			setTurnSeconds(secondsLeft)
-		}, 250)
+		}
+
+		syncTurnSeconds()
+
+		const intervalId = window.setInterval(syncTurnSeconds, 250)
 		return () => window.clearInterval(intervalId)
 	}, [serverOffsetMs, socketGame?.status, socketGame?.turnEndsAt])
+
+	React.useEffect(() => {
+		lastCountdownSfxSecondRef.current = null
+	}, [socketGame?.currentTurnUserId, socketGame?.turnEndsAt])
 
 	React.useEffect(() => {
 		if (!isSocketDriven) return

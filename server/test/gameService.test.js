@@ -38,6 +38,7 @@ function startPlayingGame(roomCode = 'PLAYING_ROOM', participants = [participant
 
 describe('gameService state machine', () => {
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllTimers();
   });
 
@@ -183,6 +184,32 @@ describe('gameService state machine', () => {
       expect(secondReady.ok).toBe(true);
       expect(secondReady.game.familiarAudioReadyUserIds).toEqual(['user1', 'user2']);
       expect(secondReady.game.familiarAutoStartedAt).toEqual(expect.any(Number));
+    });
+
+    it('should keep turn duration at 20 seconds when sequence length is below 10', () => {
+      expect(gameService.getTurnDurationMs({ sequence: Array.from({ length: 9 }, () => 0) })).toBe(20_000);
+    });
+
+    it('should add one second when sequence length reaches 10', () => {
+      expect(gameService.getTurnDurationMs({ sequence: Array.from({ length: 10 }, () => 0) })).toBe(21_000);
+    });
+
+    it('should add one second for each sequence length above 9', () => {
+      expect(gameService.getTurnDurationMs({ sequence: Array.from({ length: 12 }, () => 0) })).toBe(23_000);
+    });
+
+    it('should use the adjusted turn duration when playing starts', () => {
+      jest.spyOn(Date, 'now').mockReturnValue(10_000);
+
+      const start = gameService.startGame({ room: room({ roomCode: 'TURN_DURATION_START' }), requestedByUserId: 'user1' });
+      expect(start.ok).toBe(true);
+
+      const ready1 = gameService.markFamiliarReady({ roomCode: 'TURN_DURATION_START', userId: 'user1' });
+      expect(ready1.ok).toBe(true);
+      const ready2 = gameService.markFamiliarReady({ roomCode: 'TURN_DURATION_START', userId: 'user2' });
+      expect(ready2.ok).toBe(true);
+
+      expect(ready2.game.turnEndsAt).toBe(30_000);
     });
   });
 
