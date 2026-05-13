@@ -192,7 +192,8 @@ Run these commands from the repository root.
 | `npm run build` | Build the frontend |
 | `npm run start` | Start the backend in non-dev mode |
 | `npm run ci` | Run client and server validation checks |
-| `npm run test:e2e` | Run Playwright browser E2E tests |
+| `npm run install:e2e` | Install the Playwright Chromium browser binary; equivalent to `npx playwright install chromium` |
+| `npm run test:e2e` | Install Chromium through `npm run install:e2e`, then run Playwright browser E2E tests |
 | `npm run test:e2e:headed` | Run Playwright E2E tests in headed browser mode |
 | `npm run test:e2e:report` | Open the Playwright HTML report |
 
@@ -589,9 +590,13 @@ E2E backend:  http://127.0.0.1:3100
 
 You do not need to manually start MongoDB, the backend, or the frontend before running E2E tests. The E2E server also injects test-specific frontend environment values so the browser client connects to the managed E2E backend rather than any existing local development backend.
 
-Install Playwright browsers once:
+On a fresh machine, Playwright needs both the npm package and a browser binary. The project command `npm run install:e2e` is a wrapper around `npx playwright install chromium`; both commands install the Chromium browser used by the E2E suite.
+
+Install the browser manually with either command:
 
 ```bash
+npm run install:e2e
+# or
 npx playwright install chromium
 ```
 
@@ -600,6 +605,8 @@ Run E2E tests:
 ```bash
 npm run test:e2e
 ```
+
+The `test:e2e` script runs `npm run install:e2e` first, then starts the Playwright suite.
 
 Run E2E tests in headed browser mode:
 
