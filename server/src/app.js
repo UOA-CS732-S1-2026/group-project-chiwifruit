@@ -3,7 +3,6 @@ const cors = require('cors');
 const swaggerJSDoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 const authRoutes = require('./routes/authRoutes');
-const audioRoutes = require('./routes/audioRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const env = require('./config/env');
 
@@ -52,7 +51,6 @@ app.get('/health', (_req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRoutes);
-app.use('/api/audios', audioRoutes);
 app.use('/api/rooms', roomRoutes);
 
 app.use((error, _req, res, _next) => {

@@ -208,14 +208,16 @@ body,
 		height: 3.75rem;
 		border-radius: 9999px;
 		transform: translate(-50%, -50%);
-		overflow: hidden;
+		overflow: visible;
 		position: relative;
 		border: 3px solid rgba(255, 255, 255, 0.5);
 		background: linear-gradient(135deg, var(--pad-highlight) 0%, var(--pad-base) 100%);
 		box-shadow:
 			0 6px 0 0 var(--pad-shadow),
 			0 15px 20px 0 var(--pad-glow);
-		transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+		transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), 
+		            filter 180ms ease, 
+		            box-shadow 180ms ease;
 	}
 
 	.game-pad::before {
@@ -246,19 +248,58 @@ body,
 		pointer-events: none;
 	}
 
-	.game-pad:hover {
-		filter: brightness(1.02);
+	.game-pad:hover:not(:disabled) {
+		filter: brightness(1.08);
+		transform: translate(-50%, -50%) scale(1.12);
 	}
 
-	.game-pad:active {
-		transform: translate(-50%, -50%) scale(0.98);
+	.game-pad:active:not(:disabled) {
+		transform: translate(-50%, -50%) scale(0.95);
+		animation: pad-bounce 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
 	}
 
 	.game-pad.is-active {
-		filter: brightness(1.08);
+		filter: brightness(1.12);
 		box-shadow:
 			0 6px 0 0 var(--pad-shadow),
-			0 18px 24px 0 var(--pad-glow);
+			0 18px 28px 0 var(--pad-glow);
+	}
+
+	.loading-dots {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.loading-dots span {
+		width: 0.35rem;
+		height: 0.35rem;
+		border-radius: 9999px;
+		background: #00bba7;
+		opacity: 0.35;
+		animation: waiting-dot-bounce 1s ease-in-out infinite;
+	}
+
+	.loading-dots span:nth-child(2) {
+		animation-delay: 0.15s;
+	}
+
+	.loading-dots span:nth-child(3) {
+		animation-delay: 0.3s;
+	}
+
+	.familiar-waiting-glow {
+		position: relative;
+	}
+
+	.familiar-waiting-glow::after {
+		content: "";
+		position: absolute;
+		inset: -8px;
+		border-radius: 9999px;
+		border: 2px solid rgba(0, 187, 167, 0.22);
+		animation: familiar-waiting-pulse 1.8s ease-in-out infinite;
+		pointer-events: none;
 	}
 }
 
@@ -269,6 +310,61 @@ body,
 	to {
 		transform: scale(1.028);
 	}
+}
+
+@keyframes pad-ripple {
+	0% {
+		transform: scale(1);
+		opacity: 0.8;
+	}
+	100% {
+		transform: scale(2.8);
+		opacity: 0;
+	}
+}
+
+@keyframes pad-bounce {
+	0% {
+		transform: translate(-50%, -50%) scale(0.95);
+	}
+	50% {
+		transform: translate(-50%, -50%) scale(1.05);
+	}
+	100% {
+		transform: translate(-50%, -50%) scale(1);
+	}
+}
+
+@keyframes waiting-dot-bounce {
+	0%,
+	80%,
+	100% {
+		transform: translateY(0);
+		opacity: 0.35;
+	}
+	40% {
+		transform: translateY(-3px);
+		opacity: 1;
+	}
+}
+
+@keyframes familiar-waiting-pulse {
+	0%,
+	100% {
+		transform: scale(0.98);
+		opacity: 0.45;
+	}
+	50% {
+		transform: scale(1.03);
+		opacity: 0.9;
+	}
+}
+
+.pad-ripple {
+	position: absolute;
+	border-radius: 50%;
+	animation: pad-ripple 650ms ease-out forwards;
+	pointer-events: none;
 }
 
 

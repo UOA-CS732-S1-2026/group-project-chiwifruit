@@ -1,145 +1,192 @@
-# Frontend - React + Vite
+# Client Technical Notes
 
-A modern React frontend application built with Vite, featuring real-time communication via Socket.io, state management with Zustand, and a polished UI using TailwindCSS and shadcn components.
+This document explains the frontend structure and key implementation choices for KiChain.
 
-## Table of Contents
+> [!IMPORTANT]
+> For full project setup, root `.env` configuration, CLI startup, Docker startup, cleanup/reset steps, and project-wide testing commands, use the root [README](../README.md). This file focuses only on frontend implementation details.
 
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Available Scripts](#available-scripts)
-- [Tech Stack & Packages](#tech-stack--packages)
-- [Key Features](#key-features)
+## 1. Frontend Responsibilities
 
-## Quick Start
+The client is responsible for:
 
-### Prerequisites
+1. Rendering the landing page, waiting room, game page, and result flow.
+2. Managing guest/user authentication state in the browser.
+3. Calling backend REST APIs through the shared Axios client.
+4. Connecting to Socket.IO for realtime room and game updates.
+5. Playing sound effects, background music, and game audio assets.
+6. Presenting reusable UI components, modals, status messages, and error states.
 
-- **Node.js** v16+ and **npm** (or yarn/pnpm)
+## 2. Tech Stack
 
-### Installation & Setup
+| Area | Technologies |
+| --- | --- |
+| App framework | React, Vite |
+| Routing | React Router |
+| Server state | TanStack Query / React Query |
+| HTTP client | Axios |
+| Realtime | Socket.IO client |
+| Styling | Tailwind CSS, Radix UI / shadcn-style components |
+| Animation | Framer Motion |
+| Audio | Howler.js, static frontend audio assets |
+| Testing | Vitest, jsdom, React Testing Library-style browser API mocks |
 
-1. **Navigate to the client directory:**
-   ```bash
-   cd client
-   ```
+> [!NOTE]
+> Audio files are served as frontend static assets for the MVP. The frontend does not rely on a backend S3/audio endpoint for local gameplay.
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+## 3. Workspace Commands
 
-3. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
-   The application will be available at `http://localhost:5173` (or the port shown in your terminal)
+Run frontend commands from the repository root using the npm workspace flag.
 
-4. **Build for production:**
-   ```bash
-   npm run build
-   ```
-
-5. **Preview the production build:**
-   ```bash
-   npm run preview
-   ```
-
-## Project Structure
-
-```
-client/
-├── src/
-│   ├── api/
-│   │   └── axios.js              # Axios HTTP client configuration
-│   ├── assets/
-│   │   ├── icons/                # SVG icons and icon assets
-│   │   └── images/               # Image assets
-│   ├── components/
-│   │   └── ui/                   # Reusable UI components (shadcn/radix-ui)
-│   │       └── button.jsx
-│   ├── hooks/
-│   │   ├── mutations/            # TanStack Query mutations
-│   │   │   ├── useCreateRoomMutation.js
-│   │   │   └── useJoinRoomMutation.js
-│   │   ├── queries/              # TanStack Query queries
-│   │   │   └── useRoomQuery.js
-│   │   └── useSocketListeners.js # Socket.io event listeners
-│   ├── lib/
-│   │   └── utils.js              # Utility functions and helpers
-│   ├── pages/
-│   │   ├── LandingPage.jsx
-│   │   └── StartupPage.jsx
-│   ├── socket/
-│   │   ├── socket.js             # Socket.io client initialization
-│   │   └── socketEvents.js       # Socket event definitions
-│   ├── store/
-│   │   ├── useGameStore.js       # Game state management (Zustand)
-│   │   └── useRoomStore.js       # Room state management (Zustand)
-│   ├── App.jsx                   # Main app component
-│   ├── main.jsx                  # Application entry point
-│   └── index.css                 # Global styles
-├── public/                        # Static assets
-├── vite.config.js                # Vite configuration with React & Tailwind plugins
-├── jsconfig.json                 # JavaScript path aliases configuration
-├── eslint.config.js              # ESLint rules
-├── components.json               # Component configuration file
-└── package.json                  # Project dependencies and scripts
+```bash
+npm run dev:client
+npm run build --workspace=client
+npm run lint --workspace=client
+npm test --workspace=client
+npm run test:coverage --workspace=client
+npm run ci --workspace=client
 ```
 
-## Available Scripts
+> [!TIP]
+> Most team members should use `npm run dev` from the repository root during normal development. That starts the frontend and backend together.
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start the development server with HMR (hot reload) |
-| `npm run build` | Build the app for production to the `dist` folder |
-| `npm run preview` | Preview the production build locally |
-| `npm run lint` | Run ESLint to check code quality |
+## 4. Environment Usage
 
-## Tech Stack & Packages
+The client reads environment variables from the root `.env` file through Vite's `envDir` configuration.
 
-### Core Framework
-- **React** (v19.1.1) - UI library for building components
-- **Vite** (v7.1.7) - Ultra-fast build tool and dev server
-- **React Router DOM** (v7.13.1) - Client-side routing
+Important frontend variables:
 
-### State Management
-- **Zustand** (v5.0.12) - Lightweight state management library for game and room state
+```bash
+FRONTEND_PORT=5173
+VITE_API_URL=http://localhost:3000/api
+VITE_SOCKET_URL=http://localhost:3000
+VITE_APP_NAME=KiChain
+VITE_APP_ENV=development
+```
 
-### API & Data Fetching
-- **Axios** (v1.13.6) - HTTP client for API requests
-- **TanStack Query/React Query** (v5.95.0) - Server state management with caching
+Do not create `client/.env`. Keep environment configuration in the repository root.
 
-### Real-Time Communication
-- **Socket.io Client** (v4.8.3) - WebSocket communication for real-time features
+## 5. Source Structure
 
-### UI & Styling
-- **TailwindCSS** (v4.2.1) - Utility-first CSS framework
-- **Radix UI** (v1.4.3) - Unstyled, accessible component primitives
-- **shadcn** (v4.0.8) - Pre-built Radix UI components with Tailwind styling
-- **Lucide React** (v0.577.0) - Icon library with React components
-- **Framer Motion** (v12.38.0) - Animation library for React
-- **class-variance-authority** (v0.7.1) - CSS class composition utility
-- **clsx** (v2.1.1) - Utility for constructing className strings
-- **tailwind-merge** (v3.5.0) - Merge Tailwind CSS classes intelligently
+```text
+client/src/
+├── api/                     # Axios client and API wrappers
+├── assets/                  # Audio, icons, and image assets
+├── components/              # Reusable UI and feature components
+├── hooks/                   # Query/mutation hooks and UI/game hooks
+├── lib/                     # Shared frontend helpers and audio utilities
+├── pages/                   # Route-level pages
+├── socket/                  # Socket.IO client and event constants
+├── store/                   # Client-side state stores, where used
+├── test/                    # Frontend unit tests and browser API setup
+├── App.jsx                  # Route setup and top-level app structure
+├── main.jsx                 # React entry point
+└── index.css                # Global styles
+```
 
-### Typography & Fonts
-- **@fontsource-variable/geist** (v5.2.8) - Geist variable font
+## 6. API and Auth Flow
 
-### Audio
-- **Howler** (v2.2.4) - Audio playback library
+### 6.1 Axios client
 
-### Development
-- **ESLint** (v9.36.0) - Code linting
-- **@vitejs/plugin-react** (v5.0.3) - Vite React plugin with fast refresh
-- **TypeScript types** - Type definitions for React and React DOM
+The shared Axios client is configured in:
 
-## Key Features
+```text
+client/src/api/axios.js
+```
 
-- ⚡ **Fast Development** - Vite provides instant HMR for rapid development
-- 🎮 **Real-Time Communication** - Socket.io integration for live game interactions
-- 🎨 **Modern UI** - shadcn components with TailwindCSS for a polished interface
-- 📦 **State Management** - Zustand for lightweight state + TanStack Query for server state
-- 🔄 **Data Fetching** - Axios with TanStack Query for efficient API calls
-- ✨ **Animations** - Framer Motion for smooth, professional animations
-- 🎵 **Audio Integration** - Howler.js for sound effects and background music
-- 📍 **Routing** - React Router for seamless navigation between pages
+It uses `VITE_API_URL` as the backend REST API base URL and attaches the current JWT token to protected requests.
+
+### 6.2 Browser session storage strategy
+
+The frontend keeps auth state deliberately lightweight:
+
+1. Guest users use `sessionStorage`, so the guest session naturally disappears when the tab/browser session ends.
+2. Registered users use `localStorage`, so their session can persist across browser restarts.
+3. Auth token, user object, and expiry timestamp are written together to avoid partial session states.
+4. Expired sessions are cleared before API/socket usage.
+
+> [!NOTE]
+> This storage strategy is frontend-only session handling. Backend authorization still depends on the JWT sent with requests and socket connections.
+
+## 7. Socket.IO Flow
+
+Socket setup is handled in:
+
+```text
+client/src/socket/socket.js
+```
+
+The socket URL comes from `VITE_SOCKET_URL`. If it is not provided, the client falls back to deriving the socket base URL from `VITE_API_URL`.
+
+Main frontend socket responsibilities:
+
+1. Reconnect with the latest stored auth token.
+2. Join the room socket channel from the room/game lifecycle.
+3. Listen for room and game state updates.
+4. Emit gameplay events such as game start, familiarisation readiness, and pad presses.
+
+> [!WARNING]
+> Do not treat browser route navigation as the source of truth for game state. The frontend should use server room/game snapshots and socket updates where possible.
+
+## 8. Page-Level Responsibilities
+
+### 8.1 Landing page
+
+The landing page handles guest/login entry points, room creation, and room joining.
+
+### 8.2 Room page
+
+The room page handles waiting-room state, readiness, mode/difficulty display, and transition into the game flow.
+
+### 8.3 Game page
+
+The game page handles familiarisation, active turn state, pad input, elimination/out-of-game states, and game result display.
+
+## 9. UI and Component Notes
+
+The frontend favours reusable presentational components for common UI patterns, including:
+
+1. Base modal layout.
+2. Error toast / status messaging.
+3. Waiting-room action bar.
+4. Game status broadcast.
+5. Game pad ripple feedback.
+6. Player cards and result display.
+7. Shared background and decorative elements.
+
+This keeps page files focused on lifecycle/state coordination rather than low-level UI markup.
+
+## 10. Frontend Testing and Validation
+
+Frontend tests are under:
+
+```text
+client/src/test/
+```
+
+Current frontend unit coverage includes:
+
+1. Auth/session storage helpers in the shared Axios client.
+2. Room API wrapper behaviour.
+3. Socket client helper behaviour and event constants.
+4. Deterministic browser API setup for `localStorage`, `sessionStorage`, and `matchMedia`.
+
+Run frontend unit tests:
+
+```bash
+npm test --workspace=client
+```
+
+Run frontend tests with coverage:
+
+```bash
+npm run test:coverage --workspace=client
+```
+
+Run frontend lint, tests, and build:
+
+```bash
+npm run ci --workspace=client
+```
+
+> [!NOTE]
+> The full client CI command includes linting. If lint fails because of unrelated unused variables in existing UI files, run the unit test command separately while cleaning up UI lint debt.

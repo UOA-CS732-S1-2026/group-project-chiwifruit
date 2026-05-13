@@ -14,9 +14,12 @@ RUN npm ci
 # Copy the rest of the repository, including client/server source and assets.
 COPY . .
 
+ARG VITE_BUILD_VERSION=local
+
 ENV NODE_ENV=development \
     PORT=3000 \
-    FRONTEND_ORIGIN=http://localhost:5173
+    FRONTEND_ORIGIN=http://localhost:5173 \
+    VITE_BUILD_VERSION=$VITE_BUILD_VERSION
 
 EXPOSE 3000 5173
 

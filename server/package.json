@@ -9,7 +9,9 @@
     "start": "NODE_OPTIONS='--no-deprecation' node src/server.js",
     "check": "node --check src/server.js",
     "smoke": "node scripts/smoke-health.js",
-    "ci": "npm run check && npm run smoke"
+    "ci": "npm run check && npm test && npm run smoke",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage"
   },
   "dependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",
@@ -24,9 +26,13 @@
     "socket.io": "^4.8.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
-    "uuid": "^10.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "jest": "^30.3.0",
+    "mongodb-memory-server": "^10.4.1",
+    "nodemon": "^3.1.4",
+    "socket.io-client": "^4.8.3",
+    "supertest": "^7.2.2"
   }
 }

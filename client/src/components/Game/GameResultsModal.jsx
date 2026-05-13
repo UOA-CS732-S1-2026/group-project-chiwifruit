@@ -12,6 +12,9 @@ import medal4Icon from "../../assets/icons/Medal4.svg"
 import medal5Icon from "../../assets/icons/Medal5.svg"
 import medal6Icon from "../../assets/icons/Medal6.svg"
 
+// NOTE (2026-04-29): Results Modal 仅做“展示排名 + 返回操作”。
+// 真实的离房/判负语义由 GamePage 负责（Back to Home 会先 REST leaveRoom 再导航）。
+
 const MEDAL_BY_RANK = [medal1Icon, medal2Icon, medal3Icon, medal4Icon, medal5Icon, medal6Icon]
 
 function getInitials(name) {
@@ -40,7 +43,7 @@ function ResultsRow({
 
 	const containerClassName =
 		variant === "winner"
-			? "bg-[#fefce8] border-2 border-[#fdc700] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
+			? "bg-[#fefce8] border-2 border-[#fdc700]"
 			: variant === "podium"
 				? "bg-[#f8fafc] border-2 border-[#e2e8f0]"
 				: "bg-white border border-[#f1f5f9]"
@@ -57,6 +60,9 @@ function ResultsRow({
 
 	const nameClassName =
 		variant === "winner" ? "text-[#a65f00]" : "text-[#314158]"
+	const presenceLabel = isOnline ? "ONLINE" : "OFFLINE"
+	const presenceDotClassName = isOnline ? "bg-[#00c950]" : "bg-[#ff5a5f]"
+	const presenceTextClassName = isOnline ? "text-[#00c950]" : "text-[#ff5a5f]"
 
 	return (
 		<div className={`flex items-center justify-between rounded-[16px] ${rowSizeClassName} ${containerClassName}`}>
@@ -75,15 +81,15 @@ function ResultsRow({
 							{getInitials(name)}
 						</div>
 					)}
-					{isOnline ? (
-						<span className="absolute bottom-0 right-0 size-[10px] rounded-full border-2 border-white bg-[#00c950]" />
-					) : null}
+					<span
+						className={`absolute bottom-0 right-0 size-[10px] rounded-full border-2 border-white ${presenceDotClassName}`}
+					/>
 				</div>
 
 				<div className="flex flex-col">
 					<div className={`text-[14px] font-bold leading-5 ${nameClassName}`}>{name}</div>
-					<div className="text-[10px] font-bold leading-[15px] tracking-[0.5px] text-[#90a1b9] uppercase">
-						ONLINE
+					<div className={`text-[10px] font-bold leading-[15px] tracking-[0.5px] uppercase ${presenceTextClassName}`}>
+						{presenceLabel}
 					</div>
 				</div>
 			</div>
@@ -98,11 +104,11 @@ function ResultsRow({
 	)
 }
 
-export default function GameResultsModal({ open, players, onBackToRoom, onBackToHome, onClose }) {
+export default function GameResultsModal({ open, ranking, onBackToRoom, onBackToHome, onClose }) {
 	const sortedPlayers = React.useMemo(() => {
-		const safePlayers = Array.isArray(players) ? players : []
-		return [...safePlayers].sort((a, b) => (b?.score ?? 0) - (a?.score ?? 0))
-	}, [players])
+		const safePlayers = Array.isArray(ranking) ? ranking : []
+		return [...safePlayers].sort((a, b) => (b?.correctCount ?? 0) - (a?.correctCount ?? 0))
+	}, [ranking])
 
 	return (
 		<BaseModal
@@ -111,7 +117,7 @@ export default function GameResultsModal({ open, players, onBackToRoom, onBackTo
 				if (!nextOpen) onClose?.()
 			}}
 		>
-			<div className="relative w-[448px] max-w-[calc(100vw-2rem)] rounded-[32px] bg-white px-8 pb-8 pt-12 shadow-[0px_25px_50px_0px_rgba(0,0,0,0.25)]">
+			<div className="relative w-[448px] max-w-[calc(100vw-2rem)] rounded-[32px] bg-white px-8 pb-8 pt-12">
 				<div className="absolute -top-8 left-1/2 -translate-x-1/2">
 					<div className="flex size-16 items-center justify-center rounded-full bg-[#fdc700] shadow-[0px_0px_25px_0px_rgba(250,204,21,0.5)]">
 						<img alt="" aria-hidden="true" src={trophyIcon} className="size-10" />
@@ -126,12 +132,12 @@ export default function GameResultsModal({ open, players, onBackToRoom, onBackTo
 						const variant = index === 0 ? "winner" : index <= 2 ? "podium" : "normal"
 						return (
 							<ResultsRow
-								key={player.id ?? `${player.name}-${index}`}
+								key={player.userId ?? `${player.username}-${index}`}
 								index={index}
-								name={player.name}
-								points={player.score ?? 0}
+								name={player.username}
+								points={player.correctCount ?? 0}
 								avatarUrl={player.avatarUrl}
-								isOnline
+								isOnline={Boolean(player.isOnline)}
 								variant={variant}
 							/>
 						)
