@@ -5,6 +5,16 @@ KiChain is a full-stack multiplayer memory game built for COMPSCI 732. Players j
 > [!TIP]
 > Start here if you are a marker, reviewer, or new team member. This root README explains the overall product, local setup, Docker setup, testing, deployment, and troubleshooting. More detailed frontend and backend notes are linked near the end.
 
+## Live Demo / Marker Access
+
+The shared deployed demo is available at:
+
+```text
+https://d2prxcc5cbjmj6.cloudfront.net/
+```
+
+This environment is hosted as a Dockerized full-stack app on AWS EC2. Nginx runs on the EC2 instance and routes frontend traffic, backend API requests, health checks, and Socket.IO traffic to the app container. CloudFront provides the HTTPS user-facing entry point, and MongoDB Atlas is used as the shared remote database.
+
 ## 1. Product Overview
 
 ### 1.1 Core user flow
@@ -632,13 +642,19 @@ test-results/
 
 ## 12. Deployment Overview
 
-The shared development/demo environment is deployed as a Dockerized full-stack app.
+The shared development/demo environment is deployed as a Dockerized full-stack app and is available at:
+
+```text
+https://d2prxcc5cbjmj6.cloudfront.net/
+```
+
+Deployment stack:
 
 1. GitHub Actions builds the Docker image manually through `workflow_dispatch`.
 2. The image is pushed to AWS ECR.
-3. AWS EC2 runs the app container.
-4. Nginx routes frontend, backend API, health check, and Socket.IO traffic.
-5. CloudFront provides the HTTPS user-facing entry point.
+3. AWS EC2 runs the deployed app container.
+4. Nginx on EC2 routes frontend traffic, backend API traffic, `/health`, and Socket.IO traffic to the app container.
+5. CloudFront provides the HTTPS public entry point for markers and users.
 6. MongoDB Atlas is used for the shared remote database instead of a local MongoDB container on EC2.
 
 > [!NOTE]

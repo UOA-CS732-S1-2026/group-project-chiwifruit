@@ -5,8 +5,8 @@ import { getApiErrorMessage, getStoredAuthToken } from "../api/axios"
 import { useGuestMutation } from "./mutations/useAuthMutations"
 import { useCreateRoomMutation, useJoinRoomMutation } from "./mutations/useRoomMutations"
 
-// NOTE (2026-04-29): 统一封装 Landing 的“先确保 guest token，再 create/join room”流程。
-// 这样 LandingPage 不需要关心 auth 细节，避免忘了先拿 token 导致 401。
+// NOTE (2026-04-29): Centralise the Landing flow for ensuring a guest token before create/join room.
+// This keeps LandingPage away from auth details and prevents accidental 401s caused by missing tokens.
 
 export default function useGuardedRoomNavigation() {
 	const navigate = useNavigate()

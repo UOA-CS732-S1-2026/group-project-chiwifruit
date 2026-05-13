@@ -294,9 +294,9 @@ async function selectDifficulty(req, res) {
 }
 
 async function leaveRoom(req, res) {
-  // NOTE (2026-04-29): 房间离开必须走 REST（DELETE /api/rooms/:roomCode）。
-  // 目的：从 Mongo 的 participants 列表里移除该玩家，并广播 room_update；
-  // socket 的 leave_room 在本项目中被定义为“离开比赛=判负”，语义不同。
+  // NOTE (2026-04-29): Room leave must use REST DELETE /api/rooms/:roomCode.
+  // Purpose: remove this player from the Mongo participants list and broadcast room_update.
+  // socket leave_room is defined as leaving the active match and forfeiting, so it has different semantics.
   const { roomCode } = req.params;
   const identity = req.user;
   const result = await removeParticipantFromRoom({ roomCode, identity });
