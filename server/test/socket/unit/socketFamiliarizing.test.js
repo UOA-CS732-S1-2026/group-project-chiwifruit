@@ -1,16 +1,6 @@
-// socketFamiliarizing.test.js
-//
-// Socket-level regression tests for familiarizing-phase forfeit and
-// familiarization auto-start timer orchestration.
-//
-// Why jest.resetModules() is required here:
-//   jest.setup.js loads `roomController`, which transitively loads
-//   `socket/index.js`, caching it with the REAL gameService before
-//   the jest.mock call takes effect.  jest.resetModules() clears that
-//   cache so the subsequent require('./socket') gets a fresh load that
-//   picks up the mocked gameService.
+// Unit scope: socket familiarizing timer orchestration is verified with mocked game and room services.
 
-jest.mock('../src/services/gameService', () => ({
+jest.mock('../../../src/services/gameService', () => ({
   TURN_MS: 20000,
   getGame: jest.fn(),
   startGame: jest.fn(),
@@ -21,29 +11,24 @@ jest.mock('../src/services/gameService', () => ({
   registerPadPress: jest.fn(),
   registerTurnTimeout: jest.fn(),
   getFamiliarizeEndsAt: jest.fn(() => Date.now() + 5000),
-  serializeGame: jest.fn((g) => g),
+  serializeGame: jest.fn((game) => game),
   clearRoomTimeout: jest.fn(),
   scheduleRoomTimeout: jest.fn(),
   removeGame: jest.fn(),
   cleanupGameLater: jest.fn(),
 }));
 
-jest.mock('../src/services/roomStateService', () => ({
+jest.mock('../../../src/services/roomStateService', () => ({
   normalizeRoomParticipants: jest.fn(() => false),
   removeParticipantFromRoom: jest.fn(),
 }));
 
-// Clear the module cache so the socket module is reloaded with the mock above.
 jest.resetModules();
 
 const { Server } = require('socket.io');
-const { initSocket } = require('../src/socket');
-const gameService = require('../src/services/gameService');
-const roomStateService = require('../src/services/roomStateService');
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+const { initSocket } = require('../../../src/socket');
+const gameService = require('../../../src/services/gameService');
+const roomStateService = require('../../../src/services/roomStateService');
 
 function makeIo() {
   const io = {
@@ -55,11 +40,9 @@ function makeIo() {
   return io;
 }
 
-// Call initSocket, extract the connection handler, create a synthetic socket,
-// and invoke the handler so that socket event listeners are registered.
 function connectSocket(io, userId = 'user2', roomCode = 'ROOM1') {
   initSocket({}, 'http://localhost:5173');
-  const [, onConnection] = io.on.mock.calls.find(([e]) => e === 'connection');
+  const [, onConnection] = io.on.mock.calls.find(([eventName]) => eventName === 'connection');
   const socket = {
     id: 'socket-id',
     user: { sub: userId },
@@ -72,54 +55,47 @@ function connectSocket(io, userId = 'user2', roomCode = 'ROOM1') {
 }
 
 function getHandler(socket, eventName) {
-  const call = socket.on.mock.calls.find(([e]) => e === eventName);
-  return call ? call[1] : null;
+  return socket.on.mock.calls.find(([registeredEventName]) => registeredEventName === eventName)?.[1] ?? null;
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('socket: familiarizing-phase forfeit timer orchestration', () => {
+describe('socket familiarizing timer orchestration', () => {
   let io;
 
   beforeEach(() => {
     jest.clearAllMocks();
     io = makeIo();
-    // Default: getGame returns a familiarizing game so scheduleFamiliarAutoStart proceeds.
     gameService.getGame.mockReturnValue({ status: 'familiarizing', roomCode: 'ROOM1' });
     gameService.getFamiliarizeEndsAt.mockReturnValue(Date.now() + 5000);
-    roomStateService.removeParticipantFromRoom.mockResolvedValue({ ok: true, deleted: false, roomState: { roomCode: 'ROOM1' } });
+    roomStateService.removeParticipantFromRoom.mockResolvedValue({
+      ok: true,
+      deleted: false,
+      roomState: { roomCode: 'ROOM1' },
+    });
   });
 
-  describe('leave_room forfeit during familiarizing', () => {
-    it('re-arms the familiarization timer when multiple alive players remain', () => {
+  describe('leave_room during familiarizing', () => {
+    it('should re-arm the familiarization timer when multiple players remain', () => {
       gameService.forfeitPlayer.mockReturnValue({ ok: true, game: { status: 'familiarizing', scores: {} } });
 
       const socket = connectSocket(io, 'user2', 'ROOM1');
       getHandler(socket, 'leave_room')({ roomCode: 'ROOM1' });
 
-      // clearRoomTimeout fires first, then scheduleRoomTimeout via scheduleFamiliarAutoStart.
       expect(gameService.clearRoomTimeout).toHaveBeenCalledWith('ROOM1');
       expect(gameService.scheduleRoomTimeout).toHaveBeenCalledWith('ROOM1', expect.any(Function), expect.any(Number));
       expect(gameService.cleanupGameLater).not.toHaveBeenCalled();
     });
 
-    it('schedules cleanup when the forfeit finishes the game (only one alive player)', () => {
-      gameService.forfeitPlayer.mockReturnValue({
-        ok: true,
-        game: { status: 'finished', scores: { user1: 2, user2: 0 } },
-      });
+    it('should schedule cleanup when the forfeit finishes the game', () => {
+      gameService.forfeitPlayer.mockReturnValue({ ok: true, game: { status: 'finished', scores: { user1: 2 } } });
 
       const socket = connectSocket(io, 'user2', 'ROOM1');
       getHandler(socket, 'leave_room')({ roomCode: 'ROOM1' });
 
       expect(gameService.cleanupGameLater).toHaveBeenCalledWith('ROOM1');
-      // The familiarization timer must NOT be re-armed for a finished game.
       expect(gameService.scheduleRoomTimeout).not.toHaveBeenCalled();
     });
 
-    it('does nothing when forfeitPlayer returns not-ok', () => {
+    it('should not mutate timers when forfeitPlayer rejects the event', () => {
       gameService.forfeitPlayer.mockReturnValue({ ok: false, error: 'Not a participant.' });
 
       const socket = connectSocket(io, 'user2', 'ROOM1');
@@ -130,8 +106,8 @@ describe('socket: familiarizing-phase forfeit timer orchestration', () => {
       expect(gameService.cleanupGameLater).not.toHaveBeenCalled();
     });
 
-    it('removes the in-memory game immediately when room deletion succeeds', async () => {
-      gameService.forfeitPlayer.mockReturnValue({ ok: true, game: { status: 'finished', scores: { user1: 2, user2: 0 } } });
+    it('should remove the in-memory game when room deletion succeeds', async () => {
+      gameService.forfeitPlayer.mockReturnValue({ ok: true, game: { status: 'finished', scores: { user1: 2 } } });
       roomStateService.removeParticipantFromRoom.mockResolvedValue({ ok: true, deleted: true, roomState: null });
 
       const socket = connectSocket(io, 'user2', 'ROOM1');
@@ -141,8 +117,8 @@ describe('socket: familiarizing-phase forfeit timer orchestration', () => {
     });
   });
 
-  describe('disconnecting forfeit during familiarizing', () => {
-    it('re-arms the familiarization timer when multiple alive players remain', () => {
+  describe('disconnecting during familiarizing', () => {
+    it('should re-arm the familiarization timer when multiple players remain', () => {
       gameService.forfeitPlayer.mockReturnValue({ ok: true, game: { status: 'familiarizing', scores: {} } });
 
       const socket = connectSocket(io, 'user3', 'ROOM1');
@@ -153,11 +129,8 @@ describe('socket: familiarizing-phase forfeit timer orchestration', () => {
       expect(gameService.cleanupGameLater).not.toHaveBeenCalled();
     });
 
-    it('schedules cleanup when the forfeit finishes the game (only one alive player)', () => {
-      gameService.forfeitPlayer.mockReturnValue({
-        ok: true,
-        game: { status: 'finished', scores: { user1: 0, user3: 0 } },
-      });
+    it('should schedule cleanup when the forfeit finishes the game', () => {
+      gameService.forfeitPlayer.mockReturnValue({ ok: true, game: { status: 'finished', scores: { user1: 0 } } });
 
       const socket = connectSocket(io, 'user3', 'ROOM1');
       getHandler(socket, 'disconnecting')();
@@ -168,64 +141,50 @@ describe('socket: familiarizing-phase forfeit timer orchestration', () => {
   });
 
   describe('familiarization auto-start timeout callback', () => {
-    // Trigger a leave_room forfeit that keeps the game familiarizing so that
-    // scheduleFamiliarAutoStart is called.  Capture and return the timeout
-    // callback registered with scheduleRoomTimeout so tests can fire it manually.
     function armFamiliarTimer(socket) {
       gameService.forfeitPlayer.mockReturnValueOnce({ ok: true, game: { status: 'familiarizing', scores: {} } });
       getHandler(socket, 'leave_room')({ roomCode: 'ROOM1' });
-      const scheduleCall = gameService.scheduleRoomTimeout.mock.calls.find(([code]) => code === 'ROOM1');
+      const scheduleCall = gameService.scheduleRoomTimeout.mock.calls.find(([roomCode]) => roomCode === 'ROOM1');
       expect(scheduleCall).toBeDefined();
       return scheduleCall[1];
     }
 
-    it('calls cleanupGameLater and does NOT schedule a turn timer when forceStartPlaying returns finished', () => {
-      gameService.forceStartPlaying.mockReturnValue({
-        ok: true,
-        game: { status: 'finished', scores: { user1: 3, user2: 0 } },
-      });
+    it('should cleanup and not schedule a turn timer when force start finishes the game', () => {
+      gameService.forceStartPlaying.mockReturnValue({ ok: true, game: { status: 'finished', scores: { user1: 3 } } });
 
       const socket = connectSocket(io, 'user2', 'ROOM1');
-      const timeoutCb = armFamiliarTimer(socket);
+      const timeoutCallback = armFamiliarTimer(socket);
 
       jest.clearAllMocks();
-
-      timeoutCb();
+      timeoutCallback();
 
       expect(gameService.clearRoomTimeout).toHaveBeenCalledWith('ROOM1');
       expect(gameService.cleanupGameLater).toHaveBeenCalledWith('ROOM1');
-      // Turn timer must NOT be re-scheduled for a finished game.
       expect(gameService.scheduleRoomTimeout).not.toHaveBeenCalled();
     });
 
-    it('schedules the turn timer when forceStartPlaying transitions to playing', () => {
-      gameService.forceStartPlaying.mockReturnValue({
-        ok: true,
-        game: { status: 'playing', turnEndsAt: Date.now() + 20000 },
-      });
+    it('should schedule a turn timer when force start transitions to playing', () => {
+      gameService.forceStartPlaying.mockReturnValue({ ok: true, game: { status: 'playing', turnEndsAt: Date.now() + 20000 } });
 
       const socket = connectSocket(io, 'user2', 'ROOM1');
-      const timeoutCb = armFamiliarTimer(socket);
+      const timeoutCallback = armFamiliarTimer(socket);
 
       jest.clearAllMocks();
-      // getGame must return a playing game so scheduleTurnTimer does not bail early.
       gameService.getGame.mockReturnValue({ status: 'playing', turnEndsAt: Date.now() + 20000 });
-
-      timeoutCb();
+      timeoutCallback();
 
       expect(gameService.scheduleRoomTimeout).toHaveBeenCalledWith('ROOM1', expect.any(Function), expect.any(Number));
       expect(gameService.cleanupGameLater).not.toHaveBeenCalled();
     });
 
-    it('does nothing when forceStartPlaying returns not-ok', () => {
+    it('should do nothing when force start fails', () => {
       gameService.forceStartPlaying.mockReturnValue({ ok: false, error: 'No active game.' });
 
       const socket = connectSocket(io, 'user2', 'ROOM1');
-      const timeoutCb = armFamiliarTimer(socket);
+      const timeoutCallback = armFamiliarTimer(socket);
 
       jest.clearAllMocks();
-
-      timeoutCb();
+      timeoutCallback();
 
       expect(gameService.cleanupGameLater).not.toHaveBeenCalled();
       expect(gameService.scheduleRoomTimeout).not.toHaveBeenCalled();

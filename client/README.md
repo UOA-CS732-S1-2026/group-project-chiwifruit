@@ -3,7 +3,7 @@
 This document explains the frontend structure and key implementation choices for KiChain.
 
 > [!IMPORTANT]
-> For full project setup, root `.env` configuration, CLI startup, Docker startup, cleanup/reset steps, and testing commands, use the root [README](../README.md). This file focuses only on frontend implementation details.
+> For full project setup, root `.env` configuration, CLI startup, Docker startup, cleanup/reset steps, and project-wide testing commands, use the root [README](../README.md). This file focuses only on frontend implementation details.
 
 ## 1. Frontend Responsibilities
 
@@ -28,6 +28,7 @@ The client is responsible for:
 | Styling | Tailwind CSS, Radix UI / shadcn-style components |
 | Animation | Framer Motion |
 | Audio | Howler.js, static frontend audio assets |
+| Testing | Vitest, jsdom, React Testing Library-style browser API mocks |
 
 > [!NOTE]
 > Audio files are served as frontend static assets for the MVP. The frontend does not rely on a backend S3/audio endpoint for local gameplay.
@@ -39,6 +40,9 @@ Run frontend commands from the repository root using the npm workspace flag.
 ```bash
 npm run dev:client
 npm run build --workspace=client
+npm run lint --workspace=client
+npm test --workspace=client
+npm run test:coverage --workspace=client
 npm run ci --workspace=client
 ```
 
@@ -73,6 +77,7 @@ client/src/
 ├── pages/                   # Route-level pages
 ├── socket/                  # Socket.IO client and event constants
 ├── store/                   # Client-side state stores, where used
+├── test/                    # Frontend unit tests and browser API setup
 ├── App.jsx                  # Route setup and top-level app structure
 ├── main.jsx                 # React entry point
 └── index.css                # Global styles
@@ -150,12 +155,38 @@ The frontend favours reusable presentational components for common UI patterns, 
 
 This keeps page files focused on lifecycle/state coordination rather than low-level UI markup.
 
-## 10. Validation
+## 10. Frontend Testing and Validation
 
-Run frontend validation from the repository root:
+Frontend tests are under:
+
+```text
+client/src/test/
+```
+
+Current frontend unit coverage includes:
+
+1. Auth/session storage helpers in the shared Axios client.
+2. Room API wrapper behaviour.
+3. Socket client helper behaviour and event constants.
+4. Deterministic browser API setup for `localStorage`, `sessionStorage`, and `matchMedia`.
+
+Run frontend unit tests:
+
+```bash
+npm test --workspace=client
+```
+
+Run frontend tests with coverage:
+
+```bash
+npm run test:coverage --workspace=client
+```
+
+Run frontend lint, tests, and build:
 
 ```bash
 npm run ci --workspace=client
 ```
 
-This runs linting and the frontend build check.
+> [!NOTE]
+> The full client CI command includes linting. If lint fails because of unrelated unused variables in existing UI files, run the unit test command separately while cleaning up UI lint debt.
