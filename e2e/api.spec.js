@@ -20,7 +20,14 @@ test.describe('API-backed E2E contracts', () => {
     const session = await createGuestSession(page, 'API Guest')
     const room = await createRoomByApi(page, 'API Host')
 
-    expect(session).toMatchObject({ token: expect.any(String), user: expect.objectContaining({ username: 'API Guest' }) })
+    expect(session).toMatchObject({
+      token: expect.any(String),
+      user: expect.objectContaining({
+        id: expect.stringMatching(/^guest_/),
+        username: expect.any(String),
+        isGuest: true,
+      }),
+    })
     expect(room).toMatchObject({ message: 'Room created', roomCode: expect.stringMatching(/^[A-Z0-9]+$/) })
   })
 
