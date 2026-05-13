@@ -36,7 +36,8 @@ import {
 } from "../socket/socket"
 import SOCKET_EVENTS from "../socket/socketEvents"
 import { getGameNoteDurationMs, pickGameNoteUrls, playGameNote, playGameNoteAsync, preloadGameNote, stopGameNote } from "../lib/gameAudio"
-import { playLosingSfx, playWinningSfx } from "../lib/sound"
+import { COUNTDOWN_URGENT_THRESHOLD_SECONDS } from "../lib/gameConstants"
+import { playCountdownTickSfx, playLosingSfx, playWinningSfx } from "../lib/sound"
 
 import logo from "../assets/branding/logo.png"
 import { buildPadThemeSetByPadCount } from "../lib/gamePadPalette"
@@ -367,6 +368,7 @@ export default function GamePage() {
 	const [isSpectating, setIsSpectating] = React.useState(false)
 	const [broadcastEvent, setBroadcastEvent] = React.useState(null)
 	const lastBroadcastEventKeyRef = React.useRef(null)
+	const lastCountdownSfxSecondRef = React.useRef(null)
 	const playedOutcomeEventKeyRef = React.useRef(null)
 	const broadcastClearTimeoutRef = React.useRef(null)
 	const resultsRejoinAttemptRef = React.useRef(null)
@@ -678,13 +680,22 @@ export default function GamePage() {
 	React.useEffect(() => {
 		if (!socketGame?.turnEndsAt) return
 		if (socketGame.status !== "playing") return
-		const intervalId = window.setInterval(() => {
+
+		const syncTurnSeconds = () => {
 			const now = Date.now() + serverOffsetMs
 			const secondsLeft = Math.max(0, Math.ceil((Number(socketGame.turnEndsAt) - now) / 1000))
 			setTurnSeconds(secondsLeft)
-		}, 250)
+		}
+
+		syncTurnSeconds()
+
+		const intervalId = window.setInterval(syncTurnSeconds, 250)
 		return () => window.clearInterval(intervalId)
 	}, [serverOffsetMs, socketGame?.status, socketGame?.turnEndsAt])
+
+	React.useEffect(() => {
+		lastCountdownSfxSecondRef.current = null
+	}, [socketGame?.currentTurnUserId, socketGame?.turnEndsAt])
 
 	React.useEffect(() => {
 		if (!isSocketDriven) return
@@ -992,6 +1003,27 @@ export default function GamePage() {
 		phase === PHASE.PLAYING &&
 		Boolean(currentUserId) &&
 		String(players[currentTurnIndex]?.id ?? "") === String(currentUserId)
+
+	React.useEffect(() => {
+		// Local-only countdown warning: only the current turn player hears it.
+		if (!isMyTurn || isSpectating || socketGame?.status !== "playing") {
+			lastCountdownSfxSecondRef.current = null
+			return
+		}
+
+		if (
+			!Number.isInteger(turnSeconds) ||
+			turnSeconds <= 0 ||
+			turnSeconds > COUNTDOWN_URGENT_THRESHOLD_SECONDS
+		) {
+			lastCountdownSfxSecondRef.current = null
+			return
+		}
+
+		if (lastCountdownSfxSecondRef.current === turnSeconds) return
+		lastCountdownSfxSecondRef.current = turnSeconds
+		playCountdownTickSfx()
+	}, [isMyTurn, isSpectating, socketGame?.status, turnSeconds])
 
 	const showAddNote = inputCount >= sequence.length
 
