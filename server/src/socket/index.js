@@ -274,10 +274,10 @@ function initSocket(httpServer, frontendOrigin) {
         return;
       }
 
-      // NOTE (2026-04-29): 本项目里 socket leave_room 的语义是“离开比赛=直接判负”。
-      // 所以客户端只有在玩家明确退出比赛/关闭页面时才应该 emit 这个事件。
-      // 仅仅想从房间 participants 列表里移除自己（回首页/离开等待房间）应调用 REST
-      // DELETE /api/rooms/:roomCode，由后端更新 DB 并广播 room_update。
+      // NOTE (2026-04-29): In this project, socket leave_room means leaving the active match and forfeiting.
+      // Clients should only emit this event when the player explicitly exits the match or closes the page.
+      // If the user only wants to leave the room participants list, for example returning home from the waiting room,
+      // call REST DELETE /api/rooms/:roomCode instead so the backend updates DB and broadcasts room_update.
       await handleForfeitInRoom(roomCode, 'leave_room');
 
       socket.leave(String(roomCode).toUpperCase());
@@ -336,16 +336,16 @@ function initSocket(httpServer, frontendOrigin) {
       try {
         const code = String(roomCode).toUpperCase();
 
-    // If there is already an active game, do NOT start a new one.
-    // This commonly happens when the host refreshes the page and the client
-    // re-emits `game_start`.
-    const existing = getGame(code);
-    if (existing && existing.status !== 'finished') {
-      const snapshot = serializeGame(existing);
-      io.to(code).emit('game_state', snapshot);
-      if (typeof ack === 'function') ack({ ok: false, error: 'Game already in progress.', game: snapshot });
-      return;
-    }
+        // If there is already an active game, do NOT start a new one.
+        // This commonly happens when the host refreshes the page and the client
+        // re-emits `game_start`.
+        const existing = getGame(code);
+        if (existing && existing.status !== 'finished') {
+          const snapshot = serializeGame(existing);
+          io.to(code).emit('game_state', snapshot);
+          if (typeof ack === 'function') ack({ ok: false, error: 'Game already in progress.', game: snapshot });
+          return;
+        }
 
         const room = await Room.findOne({ roomCode: code }).populate('participants.user', 'username');
         if (!room) {

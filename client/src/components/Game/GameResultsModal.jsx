@@ -12,8 +12,9 @@ import medal4Icon from "../../assets/icons/Medal4.svg"
 import medal5Icon from "../../assets/icons/Medal5.svg"
 import medal6Icon from "../../assets/icons/Medal6.svg"
 
-// NOTE (2026-04-29): Results Modal 仅做“展示排名 + 返回操作”。
-// 真实的离房/判负语义由 GamePage 负责（Back to Home 会先 REST leaveRoom 再导航）。
+// NOTE (2026-04-29): Results Modal only displays ranking and return actions.
+// The actual room-leave and forfeit semantics are handled by GamePage.
+// Back to Home calls REST leaveRoom before navigation.
 
 const MEDAL_BY_RANK = [medal1Icon, medal2Icon, medal3Icon, medal4Icon, medal5Icon, medal6Icon]
 
