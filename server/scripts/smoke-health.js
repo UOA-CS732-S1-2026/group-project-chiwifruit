@@ -33,8 +33,12 @@ async function runSmokeTest() {
   }
 }
 
-runSmokeTest().catch((error) => {
-  // eslint-disable-next-line no-console
-  console.error('[smoke] Backend smoke test failed', error);
-  process.exit(1);
-});
+runSmokeTest()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((error) => {
+    // eslint-disable-next-line no-console
+    console.error('[smoke] Backend smoke test failed', error);
+    process.exit(1);
+  });
