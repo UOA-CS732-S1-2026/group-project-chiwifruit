@@ -21,55 +21,72 @@ function emitWithAck(socket, event, payload) {
   })
 }
 
-async function createStartedTwoPlayerGame(browser) {
-  const hostContext = await browser.newContext()
-  const guestContext = await browser.newContext()
-  const hostPage = await hostContext.newPage()
-  const guestPage = await guestContext.newPage()
+async function createStartedGame(browser, playerCount = 2) {
+  const contexts = []
+  const pages = []
+  const sessions = []
   const sockets = []
 
+  for (let index = 0; index < playerCount; index += 1) {
+    const context = await browser.newContext()
+    const page = await context.newPage()
+    contexts.push(context)
+    pages.push(page)
+  }
+
+  const hostPage = pages[0]
   const hostSession = await seedGuestAuth(hostPage, 'Gameplay Host')
+  sessions.push(hostSession)
+
   await hostPage.getByRole('button', { name: /create a room/i }).click()
   await expect(hostPage).toHaveURL(/\/room\/[A-Z0-9]+$/)
   const roomCode = hostPage.url().slice(hostPage.url().lastIndexOf('/') + 1).toUpperCase()
 
-  const guestSession = await seedGuestAuth(guestPage, 'Gameplay Guest')
-  await guestPage.getByRole('button', { name: /join with code/i }).click()
-  await guestPage.getByLabel(/room code/i).fill(roomCode)
-  await guestPage.getByRole('button', { name: /join game/i }).click()
-  await expect(guestPage).toHaveURL(new RegExp(`/room/${roomCode}$`, 'i'))
+  for (let index = 1; index < playerCount; index += 1) {
+    const page = pages[index]
+    const session = await seedGuestAuth(page, `Gameplay Guest ${index}`)
+    sessions.push(session)
 
-  await guestPage.getByRole('button', { name: /click to ready/i }).click()
+    await page.getByRole('button', { name: /join with code/i }).click()
+    await page.getByLabel(/room code/i).fill(roomCode)
+    await page.getByRole('button', { name: /join game/i }).click()
+    await expect(page).toHaveURL(new RegExp(`/room/${roomCode}$`, 'i'))
+    await page.getByRole('button', { name: /click to ready/i }).click()
+  }
+
   await expect(hostPage.getByRole('button', { name: /start game/i })).toBeEnabled()
   await hostPage.getByRole('button', { name: /start game/i }).click()
 
-  await expect(hostPage).toHaveURL(new RegExp(`/game/${roomCode}$`, 'i'))
-  await expect(guestPage).toHaveURL(new RegExp(`/game/${roomCode}$`, 'i'))
+  for (const page of pages) {
+    await expect(page).toHaveURL(new RegExp(`/game/${roomCode}$`, 'i'))
+  }
 
-  const hostSocket = await connectSocket(hostSession)
-  const guestSocket = await connectSocket(guestSession)
-  sockets.push(hostSocket, guestSocket)
+  for (const session of sessions) {
+    const socket = await connectSocket(session)
+    socket.emit('join_room', { roomCode })
+    sockets.push(socket)
+  }
 
-  hostSocket.emit('join_room', { roomCode })
-  guestSocket.emit('join_room', { roomCode })
-
-  await emitWithAck(hostSocket, 'game_familiar_ready', { roomCode })
-  const guestReadyAck = await emitWithAck(guestSocket, 'game_familiar_ready', { roomCode })
-  expect(guestReadyAck).toMatchObject({ ok: true, game: expect.objectContaining({ status: 'playing' }) })
+  for (const socket of sockets) {
+    const ack = await emitWithAck(socket, 'game_familiar_ready', { roomCode })
+    expect(ack).toMatchObject({ ok: true })
+  }
 
   await expect(hostPage.getByRole('button', { name: /sound pad 3/i })).toBeEnabled({ timeout: 10_000 })
 
   return {
     roomCode,
-    hostPage,
-    guestPage,
-    hostContext,
-    guestContext,
+    contexts,
+    pages,
+    sessions,
     sockets,
+    hostPage: pages[0],
+    guestPage: pages[1],
+    guestTwoPage: pages[2],
   }
 }
 
-async function finishGameByWrongNote(game) {
+async function finishTwoPlayerGameByWrongNote(game) {
   const { hostPage, guestPage } = game
 
   await hostPage.getByRole('button', { name: /sound pad 3/i }).click()
@@ -80,18 +97,38 @@ async function finishGameByWrongNote(game) {
   await expect(guestPage.getByRole('heading', { name: /game over/i })).toBeVisible({ timeout: 10_000 })
 }
 
+async function eliminateFirstGuestInThreePlayerGame(game) {
+  const { hostPage, guestPage } = game
+
+  await hostPage.getByRole('button', { name: /sound pad 3/i }).click()
+  await expect(guestPage.getByRole('button', { name: /sound pad 4/i })).toBeEnabled({ timeout: 10_000 })
+  await guestPage.getByRole('button', { name: /sound pad 4/i }).click()
+
+  await expect(guestPage.getByRole('heading', { name: /you're out/i })).toBeVisible({ timeout: 10_000 })
+  await expect(hostPage.getByRole('heading', { name: /game over/i })).toHaveCount(0)
+}
+
+async function finishThreePlayerGameAfterFirstGuestIsOut(game) {
+  const { hostPage, guestTwoPage } = game
+
+  await expect(guestTwoPage.getByRole('button', { name: /sound pad 4/i })).toBeEnabled({ timeout: 10_000 })
+  await guestTwoPage.getByRole('button', { name: /sound pad 4/i }).click()
+
+  await expect(hostPage.getByRole('heading', { name: /game over/i })).toBeVisible({ timeout: 10_000 })
+  await expect(guestTwoPage.getByRole('heading', { name: /game over/i })).toBeVisible({ timeout: 10_000 })
+}
+
 async function closeGame(game) {
   game.sockets.forEach((socket) => socket.disconnect())
-  await game.hostContext.close()
-  await game.guestContext.close()
+  await Promise.all(game.contexts.map((context) => context.close()))
 }
 
 test.describe('Gameplay and results E2E', () => {
   test('plays a real two-player round, finishes on a wrong note, and returns home from results', async ({ browser }) => {
-    const game = await createStartedTwoPlayerGame(browser)
+    const game = await createStartedGame(browser, 2)
 
     try {
-      await finishGameByWrongNote(game)
+      await finishTwoPlayerGameByWrongNote(game)
 
       await expect(game.hostPage.getByText(/points/i).first()).toBeVisible()
       await game.hostPage.getByRole('button', { name: /back to home/i }).click()
@@ -104,16 +141,64 @@ test.describe('Gameplay and results E2E', () => {
   })
 
   test('returns from game results back to the waiting room', async ({ browser }) => {
-    const game = await createStartedTwoPlayerGame(browser)
+    const game = await createStartedGame(browser, 2)
 
     try {
-      await finishGameByWrongNote(game)
+      await finishTwoPlayerGameByWrongNote(game)
 
       await game.guestPage.getByRole('button', { name: /back to room/i }).click()
 
       await expect(game.guestPage).toHaveURL(new RegExp(`/room/${game.roomCode}$`, 'i'))
       await expect(game.guestPage.getByRole('heading', { name: /waiting room/i })).toBeVisible()
       await expect(game.guestPage.getByText(game.roomCode)).toBeVisible()
+    } finally {
+      await closeGame(game)
+    }
+  })
+
+  test('keeps a three-player game running after the first wrong note and lets the eliminated player spectate', async ({ browser }) => {
+    const game = await createStartedGame(browser, 3)
+
+    try {
+      await eliminateFirstGuestInThreePlayerGame(game)
+
+      await game.guestPage.getByRole('button', { name: /keep spectating/i }).click()
+      await expect(game.guestPage.getByRole('heading', { name: /you're out/i })).toHaveCount(0)
+      await expect(game.guestPage.getByRole('heading', { name: /game over/i })).toHaveCount(0)
+      await expect(game.guestTwoPage.getByRole('button', { name: /sound pad 4/i })).toBeEnabled({ timeout: 10_000 })
+    } finally {
+      await closeGame(game)
+    }
+  })
+
+  test('lets an eliminated player return to the waiting room while the game continues', async ({ browser }) => {
+    const game = await createStartedGame(browser, 3)
+
+    try {
+      await eliminateFirstGuestInThreePlayerGame(game)
+
+      await game.guestPage.getByRole('button', { name: /back to waiting room/i }).click()
+
+      await expect(game.guestPage).toHaveURL(new RegExp(`/room/${game.roomCode}$`, 'i'))
+      await expect(game.guestPage.getByRole('heading', { name: /waiting room/i })).toBeVisible()
+      await expect(game.hostPage.getByRole('heading', { name: /game over/i })).toHaveCount(0)
+    } finally {
+      await closeGame(game)
+    }
+  })
+
+  test('finishes a three-player game after two wrong notes and returns home from results', async ({ browser }) => {
+    const game = await createStartedGame(browser, 3)
+
+    try {
+      await eliminateFirstGuestInThreePlayerGame(game)
+      await finishThreePlayerGameAfterFirstGuestIsOut(game)
+
+      await expect(game.hostPage.getByText(/points/i).first()).toBeVisible()
+      await game.guestTwoPage.getByRole('button', { name: /back to home/i }).click()
+
+      await expect(game.guestTwoPage).toHaveURL(/\/$/)
+      await expect(game.guestTwoPage.getByRole('heading', { name: /build the sequence/i })).toBeVisible()
     } finally {
       await closeGame(game)
     }
