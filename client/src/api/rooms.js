@@ -1,9 +1,9 @@
 import api from "./axios"
 import { getStoredAuthToken } from "./axios"
 
-// NOTE (2026-04-29): 房间 REST API。
-// 其中 leaveRoom() 的语义是“从房间 participants 列表移除自己并广播 room_update”。
-// 不等同于 socket leave_room（离开比赛=判负）。
+// NOTE (2026-04-29): Room REST API.
+// leaveRoom() means removing the current user from the room participants list and broadcasting room_update.
+// This is not the same as socket leave_room, which means leaving the active match and forfeiting.
 
 export async function createRoom() {
 	const { data } = await api.post("/rooms")

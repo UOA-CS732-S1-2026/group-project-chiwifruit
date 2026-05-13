@@ -34,8 +34,8 @@ export function getSocket() {
 
 export function reconnectSocket() {
 	const existing = getSocket()
-	// NOTE (2026-04-29): socket 连接时从 storage 重新读取 token，避免刷新/重登后仍用旧 token。
-	// 前端会话 TTL 当前统一为 1 小时（见 api/axios.js）。
+	// NOTE (2026-04-29): Re-read the token from storage before reconnecting the socket.
+	// This avoids using a stale token after refresh or re-login. The frontend session TTL is currently 1 hour; see api/axios.js.
 	existing.auth = {
 		token: getStoredAuthToken() ?? undefined,
 	}
@@ -54,8 +54,8 @@ export function joinSocketRoom(roomCode) {
 export function leaveSocketRoom(roomCode) {
 	if (!roomCode) return
 	const s = getSocket()
-	// NOTE (2026-04-29): 该事件在后端语义是“离开比赛=判负”。
-	// 如果只是离开等待房间/回首页，请走 REST DELETE /api/rooms/:roomCode。
+	// NOTE (2026-04-29): On the server, this event means leaving the active match and forfeiting.
+	// Use REST DELETE /api/rooms/:roomCode for leaving the waiting room or returning home.
 	s.emit(SOCKET_EVENTS.LEAVE_ROOM, { roomCode })
 }
 
