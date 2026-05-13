@@ -5,8 +5,8 @@ const { spawn } = require('child_process')
 const { MongoMemoryServer } = require('mongodb-memory-server')
 const mongoose = require('mongoose')
 
-const FRONTEND_PORT = 5173
-const BACKEND_PORT = 3000
+const FRONTEND_PORT = 6173
+const BACKEND_PORT = 3100
 const FRONTEND_ORIGIN = `http://127.0.0.1:${FRONTEND_PORT}`
 const BACKEND_ORIGIN = `http://127.0.0.1:${BACKEND_PORT}`
 const rootDir = path.resolve(__dirname, '../..')
