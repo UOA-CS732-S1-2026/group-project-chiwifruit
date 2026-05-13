@@ -1,12 +1,34 @@
 const { test, expect } = require('@playwright/test')
-const { API_ORIGIN, authHeader, createGuestSession, createRoomByApi, expectOk } = require('./support/fixtures')
+const {
+  BACKEND_ORIGIN,
+  API_ORIGIN,
+  authHeader,
+  createGuestSession,
+  createRoomByApi,
+  expectOk,
+} = require('./support/fixtures')
 
 test.describe('API-backed E2E contracts', () => {
   test('health endpoint is available in the managed E2E backend', async ({ page }) => {
-    const response = await page.request.get('http://127.0.0.1:3000/health')
+    const response = await page.request.get(`${BACKEND_ORIGIN}/health`)
 
     await expectOk(response, 'Health check')
     await expect(response.json()).resolves.toEqual({ status: 'ok' })
+  })
+
+  test('creates a guest session through the managed backend', async ({ page }) => {
+    const session = await createGuestSession(page, 'API Guest')
+
+    expect(session).toMatchObject({
+      message: 'Guest session created',
+      token: expect.any(String),
+      user: expect.objectContaining({
+        id: expect.stringMatching(/^guest_/),
+        username: expect.any(String),
+        isGuest: true,
+        avatarUrl: expect.stringContaining('dicebear'),
+      }),
+    })
   })
 
   test('rejects room creation without an auth token', async ({ page }) => {
@@ -16,19 +38,13 @@ test.describe('API-backed E2E contracts', () => {
     await expect(response.json()).resolves.toEqual(expect.objectContaining({ message: expect.any(String) }))
   })
 
-  test('creates a guest session and room through real API calls', async ({ page }) => {
-    const session = await createGuestSession(page, 'API Guest')
+  test('creates a room through real API calls', async ({ page }) => {
     const room = await createRoomByApi(page, 'API Host')
 
-    expect(session).toMatchObject({
-      token: expect.any(String),
-      user: expect.objectContaining({
-        id: expect.stringMatching(/^guest_/),
-        username: expect.any(String),
-        isGuest: true,
-      }),
+    expect(room).toMatchObject({
+      message: 'Room created',
+      roomCode: expect.stringMatching(/^[A-Z0-9]+$/),
     })
-    expect(room).toMatchObject({ message: 'Room created', roomCode: expect.stringMatching(/^[A-Z0-9]+$/) })
   })
 
   test('returns 404 for joining a missing room', async ({ page }) => {
@@ -41,6 +57,34 @@ test.describe('API-backed E2E contracts', () => {
 
     expect(response.status()).toBe(404)
     await expect(response.json()).resolves.toEqual(expect.objectContaining({ message: 'Room not found' }))
+  })
+
+  test('rejects room state reads without an auth token', async ({ page }) => {
+    const room = await createRoomByApi(page, 'Protected Room Host')
+
+    const response = await page.request.get(`${API_ORIGIN}/rooms/${room.roomCode}/ready`)
+
+    expect(response.status()).toBe(401)
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ message: expect.any(String) }))
+  })
+
+  test('rejects non-host room setting changes', async ({ page }) => {
+    const room = await createRoomByApi(page, 'Mode Host')
+    const guest = await createGuestSession(page, 'Mode Guest')
+
+    const joinResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
+      headers: authHeader(guest),
+      data: { joinRoomCode: room.roomCode },
+    })
+    await expectOk(joinResponse, 'Join room as non-host')
+
+    const response = await page.request.patch(`${API_ORIGIN}/rooms/${room.roomCode}/mode`, {
+      headers: authHeader(guest),
+      data: { mode: 'piano' },
+    })
+
+    expect(response.status()).toBe(403)
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ message: expect.any(String) }))
   })
 
   test('rejects the seventh participant and preserves the six-player room limit', async ({ browser }) => {
