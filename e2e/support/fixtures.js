@@ -96,6 +96,7 @@ async function joinRoomThroughUi(page, roomCode) {
 }
 
 module.exports = {
+  BACKEND_ORIGIN,
   API_ORIGIN,
   authHeader,
   expectOk,
