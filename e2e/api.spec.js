@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test')
-const { API_ORIGIN, createGuestSession, createRoomByApi, expectOk } = require('./support/fixtures')
+const { API_ORIGIN, authHeader, createGuestSession, createRoomByApi, expectOk } = require('./support/fixtures')
 
 test.describe('API-backed E2E contracts', () => {
   test('health endpoint is available in the managed E2E backend', async ({ page }) => {
@@ -25,11 +25,10 @@ test.describe('API-backed E2E contracts', () => {
   })
 
   test('returns 404 for joining a missing room', async ({ page }) => {
-    await createGuestSession(page, 'Missing Room Guest')
-    const token = await page.evaluate(() => window.localStorage.getItem('authToken'))
+    const session = await createGuestSession(page, 'Missing Room Guest')
 
     const response = await page.request.post(`${API_ORIGIN}/rooms`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: authHeader(session),
       data: { joinRoomCode: 'NOPE99' },
     })
 
@@ -47,11 +46,10 @@ test.describe('API-backed E2E contracts', () => {
       for (let index = 1; index <= 5; index += 1) {
         const context = await browser.newContext()
         const page = await context.newPage()
-        await createGuestSession(page, `Capacity Guest ${index}`)
-        const token = await page.evaluate(() => window.localStorage.getItem('authToken'))
+        const session = await createGuestSession(page, `Capacity Guest ${index}`)
 
         const joinResponse = await page.request.post(`${API_ORIGIN}/rooms`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: authHeader(session),
           data: { joinRoomCode: room.roomCode },
         })
         await expectOk(joinResponse, `Join room as guest ${index}`)
@@ -60,11 +58,10 @@ test.describe('API-backed E2E contracts', () => {
 
       const overflowContext = await browser.newContext()
       const overflowPage = await overflowContext.newPage()
-      await createGuestSession(overflowPage, 'Overflow Guest')
-      const overflowToken = await overflowPage.evaluate(() => window.localStorage.getItem('authToken'))
+      const overflowSession = await createGuestSession(overflowPage, 'Overflow Guest')
 
       const overflowResponse = await overflowPage.request.post(`${API_ORIGIN}/rooms`, {
-        headers: { Authorization: `Bearer ${overflowToken}` },
+        headers: authHeader(overflowSession),
         data: { joinRoomCode: room.roomCode },
       })
 
