@@ -274,10 +274,12 @@ function initSocket(httpServer, frontendOrigin) {
         return;
       }
 
-      // NOTE (2026-04-29): 本项目里 socket leave_room 的语义是“离开比赛=直接判负”。
-      // 所以客户端只有在玩家明确退出比赛/关闭页面时才应该 emit 这个事件。
-      // 仅仅想从房间 participants 列表里移除自己（回首页/离开等待房间）应调用 REST
-      // DELETE /api/rooms/:roomCode，由后端更新 DB 并广播 room_update。
+      // NOTE (2026-04-29): In this project, socket `leave_room` means leaving the
+      // active match and forfeiting immediately.
+      // Emit it only when the player explicitly quits the match or closes the page.
+      // To leave only the room roster (for example from the waiting room or home
+      // navigation), use REST `DELETE /api/rooms/:roomCode` so the backend updates
+      // Mongo and broadcasts `room_update`.
       await handleForfeitInRoom(roomCode, 'leave_room');
 
       socket.leave(String(roomCode).toUpperCase());

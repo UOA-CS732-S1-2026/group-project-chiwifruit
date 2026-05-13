@@ -1,5 +1,7 @@
 import FloatingStickers from "./FloatingStickers"
 
+// Component: provide the shared page background shell, glow layers, and optional
+// decorative floating stickers behind the main page content.
 export default function Background({ children, stickers = [] }) {
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-background">

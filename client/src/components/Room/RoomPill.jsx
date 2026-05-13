@@ -1,5 +1,6 @@
 import { cn } from "../../lib/utils"
 
+// Component: shared rounded pill container for room metadata and status snippets.
 export default function RoomPill({ children, className }) {
 	return (
 		<div

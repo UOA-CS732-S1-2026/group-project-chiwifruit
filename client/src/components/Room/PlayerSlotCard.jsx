@@ -2,6 +2,7 @@ import { Crown, UserRound } from "lucide-react"
 import { cn } from "../../lib/utils"
 import PlayerReadyChip from "./PlayerReadyChip"
 
+// Helper: render a player avatar with either the uploaded image or a fallback icon/text.
 function AvatarCircle({ avatarUrl, avatarAlt = "Player avatar", fallback }) {
 	return (
 		<div className="mx-auto grid size-16 place-items-center overflow-hidden rounded-full bg-muted">
@@ -16,6 +17,8 @@ function AvatarCircle({ avatarUrl, avatarAlt = "Player avatar", fallback }) {
 	)
 }
 
+// Component: render either an occupied player slot or an empty waiting-slot card
+// inside the room participant grid.
 export default function PlayerSlotCard({
 	player,
 	isCurrentUser = false,

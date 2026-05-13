@@ -3,9 +3,9 @@ import { Users, X } from "lucide-react"
 
 import BaseModal from "../ui/BaseModal"
 
-// NOTE (2026-04-29): Join Room 的输入规范化在前端做：
-// - 统一大写并剔除空白
-// - 仅允许 [A-Z0-9-]，避免把奇怪字符传到后端
+// NOTE (2026-04-29): Room code normalization happens in the client.
+// - Uppercase all characters and strip whitespace.
+// - Allow only [A-Z0-9-] so unexpected characters never reach the backend.
 
 // Normalizes room code input so users can paste with spaces/lowercase.
 // We keep `-` because codes may include it (e.g. ABCD-1234).
@@ -21,6 +21,7 @@ function normalizeRoomCode(raw) {
 // - Auto-focuses the input when opened.
 // - Calls `onJoin(normalizedRoomCode)` on submit.
 export default function JoinRoomModal({ open, onOpenChange, onJoin, isSubmitting = false }) {
+	// State: track the raw text as the user types into the room-code field.
 	const [roomCode, setRoomCode] = useState("")
 	const inputRef = useRef(null)
 
@@ -36,7 +37,9 @@ export default function JoinRoomModal({ open, onOpenChange, onJoin, isSubmitting
 		return () => window.clearTimeout(id)
 	}, [open])
 
+	// Derived state: normalize once so submit logic and button state stay consistent.
 	const normalizedRoomCode = useMemo(() => normalizeRoomCode(roomCode), [roomCode])
+	// Derived state: enable submission only when the normalized code is usable.
 	const canJoin = normalizedRoomCode.length > 0 && !isSubmitting
 
 	return (

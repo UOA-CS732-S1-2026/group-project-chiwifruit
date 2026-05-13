@@ -2,6 +2,8 @@ import { Check, Play } from "lucide-react"
 
 import { Button } from "../ui/button"
 
+// Component: render the bottom action bar for the waiting room, switching between
+// host start controls and participant ready controls.
 export default function WaitingRoomActionBar({
 	isHost,
 	canStartGame,

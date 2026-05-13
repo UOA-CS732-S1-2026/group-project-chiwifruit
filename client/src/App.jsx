@@ -8,20 +8,23 @@ import { leaveRoomKeepalive } from './api/rooms'
 
 const GamePage = lazy(() => import('./pages/GamePage'))
 
-// NOTE (2026-04-29): App 级别只做“全局能力”挂载（如按钮点击音效）与路由定义。
-// 具体的房间/游戏同步逻辑在各自页面内处理，避免跨页面副作用。
+// NOTE (2026-04-29): The app shell only mounts global capabilities and route definitions.
+// Room and game synchronization stay inside their own pages to avoid cross-route side effects.
 
+// Helper: extract a normalized room code from `/room/:code` or `/game/:code` paths.
 function getRoomCodeFromPath(pathname) {
   const match = /^\/(?:room|game)\/([^/]+)$/i.exec(String(pathname ?? ''));
   return match?.[1] ? String(match[1]).trim().toUpperCase() : '';
 }
 
+// Helper: check whether the next route still belongs to the same room scope.
 function isRoomScopedPathForRoom(pathname, roomCode) {
   if (!roomCode) return false;
   const normalizedPath = String(pathname ?? '').toUpperCase();
   return normalizedPath === `/GAME/${roomCode}` || normalizedPath === `/ROOM/${roomCode}`;
 }
 
+// Helper: send a best-effort REST leave request when the user exits a room-scoped route.
 function maybeLeaveScopedRoom(pathname, { inFlightRef } = {}) {
   const roomCode = getRoomCodeFromPath(pathname);
   if (!roomCode || inFlightRef?.current) return;
@@ -44,6 +47,7 @@ function App() {
   // Global click sound for all buttons across the app.
 	useGlobalButtonClickSound()
   const location = useLocation()
+  // State refs: keep the previous route and avoid duplicate leave requests during fast navigation.
   const previousPathRef = useRef(location.pathname)
   const routeLeaveInFlightRef = useRef(false)
 

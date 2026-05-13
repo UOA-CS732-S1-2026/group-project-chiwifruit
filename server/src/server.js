@@ -4,6 +4,8 @@ const connectDatabase = require('./config/db');
 const env = require('./config/env');
 const { initSocket } = require('./socket');
 
+// NOTE (2026-05-14): Bootstrap the HTTP server, database connection, and
+// Socket.IO layer.
 async function startServer() {
   try {
     await connectDatabase();

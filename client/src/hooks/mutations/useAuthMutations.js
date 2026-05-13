@@ -2,9 +2,11 @@ import { useMutation } from "@tanstack/react-query"
 import { continueAsGuest, login, register } from "../../api/auth"
 import { setStoredAuthSession } from "../../api/axios"
 
-// NOTE (2026-04-29): 所有 auth mutation 成功后都统一落盘 authSession。
-// 落盘逻辑（guest vs user 存储、TTL、校验/回填）集中在 api/axios.js。
+// NOTE (2026-04-29): All auth mutations persist the returned session here.
+// Storage selection, TTL handling, and backward-compatible validation live in
+// `api/axios.js` so callers stay thin.
 
+// Helper: Persist the server-authored auth payload in one place.
 function persistAuthSession(responseData) {
 	if (!responseData || typeof responseData !== "object") return
 	setStoredAuthSession({ token: responseData.token, user: responseData.user })

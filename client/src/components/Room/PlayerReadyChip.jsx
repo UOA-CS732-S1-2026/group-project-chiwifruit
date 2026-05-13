@@ -1,6 +1,7 @@
 import { Check } from "lucide-react"
 import { cn } from "../../lib/utils"
 
+// Component: compact readiness badge used in room player cards.
 export default function PlayerReadyChip({ isReady, className }) {
 	return (
 		<span

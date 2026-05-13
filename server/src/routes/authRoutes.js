@@ -1,6 +1,7 @@
 const express = require('express');
 const { login, register, continueAsGuest } = require('../controllers/authController');
 
+// NOTE (2026-05-14): Auth router exposing register, login, and guest-session endpoints.
 const router = express.Router();
 
 /**

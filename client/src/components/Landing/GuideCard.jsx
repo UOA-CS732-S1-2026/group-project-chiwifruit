@@ -1,5 +1,7 @@
 import { cn } from "../../lib/utils"
 
+// Component: present one landing-page how-to card with an optional icon and
+// themed wrapper styling.
 export default function GuideCard({
 	Icon,
 	title,

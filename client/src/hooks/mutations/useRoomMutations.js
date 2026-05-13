@@ -9,8 +9,22 @@ import {
 	submitRoundResult,
 } from "../../api/rooms"
 
-// NOTE (2026-04-29): 把 room 的写操作统一封装成 React Query mutations。
-// 对会影响 roomState 的操作，在 onSuccess 里 invalidate 对应 room query，保证 UI 及时同步。
+// NOTE (2026-04-29): Room write operations are centralized as React Query mutations.
+// Mutations that affect room state provide a default success handler that
+// invalidates the matching room query so the waiting-room UI stays in sync.
+
+// Helper: build the shared mutation config for room writes that refresh room
+// state by default after a successful response.
+function buildRoomStateMutationOptions({ mutationFn, queryClient, options = {} }) {
+	return {
+		mutationFn,
+		onSuccess: (data, variables) => {
+			queryClient.invalidateQueries({ queryKey: ["room", variables.roomCode] })
+			options.onSuccess?.(data, variables)
+		},
+		...options,
+	}
+}
 
 export function useCreateRoomMutation(options = {}) {
 	return useMutation({
@@ -35,48 +49,44 @@ export function useLeaveRoomMutation(options = {}) {
 
 export function useSetReadyMutation(options = {}) {
 	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: ({ roomCode, isReady }) => setReadyStatus(roomCode, isReady),
-		onSuccess: (data, variables) => {
-			queryClient.invalidateQueries({ queryKey: ["room", variables.roomCode] })
-			options.onSuccess?.(data, variables)
-		},
-		...options,
-	})
+	return useMutation(
+		buildRoomStateMutationOptions({
+			mutationFn: ({ roomCode, isReady }) => setReadyStatus(roomCode, isReady),
+			queryClient,
+			options,
+		}),
+	)
 }
 
 export function useSelectModeMutation(options = {}) {
 	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: ({ roomCode, mode }) => selectMode(roomCode, mode),
-		onSuccess: (data, variables) => {
-			queryClient.invalidateQueries({ queryKey: ["room", variables.roomCode] })
-			options.onSuccess?.(data, variables)
-		},
-		...options,
-	})
+	return useMutation(
+		buildRoomStateMutationOptions({
+			mutationFn: ({ roomCode, mode }) => selectMode(roomCode, mode),
+			queryClient,
+			options,
+		}),
+	)
 }
 
 export function useSelectDifficultyMutation(options = {}) {
 	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: ({ roomCode, difficulty }) => selectDifficulty(roomCode, difficulty),
-		onSuccess: (data, variables) => {
-			queryClient.invalidateQueries({ queryKey: ["room", variables.roomCode] })
-			options.onSuccess?.(data, variables)
-		},
-		...options,
-	})
+	return useMutation(
+		buildRoomStateMutationOptions({
+			mutationFn: ({ roomCode, difficulty }) => selectDifficulty(roomCode, difficulty),
+			queryClient,
+			options,
+		}),
+	)
 }
 
 export function useSubmitRoundResultMutation(options = {}) {
 	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: ({ roomCode, roundCorrectCount }) => submitRoundResult(roomCode, roundCorrectCount),
-		onSuccess: (data, variables) => {
-			queryClient.invalidateQueries({ queryKey: ["room", variables.roomCode] })
-			options.onSuccess?.(data, variables)
-		},
-		...options,
-	})
+	return useMutation(
+		buildRoomStateMutationOptions({
+			mutationFn: ({ roomCode, roundCorrectCount }) => submitRoundResult(roomCode, roundCorrectCount),
+			queryClient,
+			options,
+		}),
+	)
 }

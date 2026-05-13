@@ -1,10 +1,12 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const { createToken } = require('../services/tokenService');
+const { buildAvatarUrl } = require('../utils/avatar');
 
 const GUEST_PREFIXES = ['Swift', 'Sunny', 'Echo', 'Brave', 'Lucky', 'Bright'];
 const GUEST_NOUNS = ['Falcon', 'Otter', 'Fox', 'Koala', 'Dolphin', 'Robin'];
 
+// Helper: generate a friendly random guest display name.
 function generateGuestName() {
   const prefix =
     GUEST_PREFIXES[Math.floor(Math.random() * GUEST_PREFIXES.length)];
@@ -13,10 +15,7 @@ function generateGuestName() {
   return `${prefix}${noun}${suffix}`;
 }
 
-function buildAvatarUrl(seed, style = 'bottts') {
-  return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}`;
-}
-
+// Controller: register a new persistent user account and issue its JWT session.
 async function register(req, res) {
   let { username, password } = req.body;
 
@@ -50,6 +49,7 @@ async function register(req, res) {
   });
 }
 
+// Controller: authenticate an existing user and issue a fresh JWT session.
 async function login(req, res) {
   let { username, password } = req.body;
 
@@ -86,6 +86,7 @@ async function login(req, res) {
   });
 }
 
+// Controller: create a guest identity and issue a guest JWT without touching Mongo.
 async function continueAsGuest(_req, res) {
   const guestName = generateGuestName();
   const guestId = `guest_${crypto.randomUUID()}`;
@@ -108,4 +109,4 @@ async function continueAsGuest(_req, res) {
   });
 }
 
-module.exports = { login, register, continueAsGuest, buildAvatarUrl };
+module.exports = { login, register, continueAsGuest };

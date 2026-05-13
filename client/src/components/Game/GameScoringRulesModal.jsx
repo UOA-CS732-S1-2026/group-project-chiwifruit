@@ -1,12 +1,14 @@
 import { X } from "lucide-react"
 import BaseModal from "../ui/BaseModal"
 
+// Component: explain the scoring model used by the multiplayer game.
 export default function GameScoringRulesModal({ open, onOpenChange }) {
 	return (
 		<BaseModal open={open} onOpenChange={onOpenChange}>
 			<div className="relative w-[560px] max-w-[calc(100vw-32px)] rounded-[24px] bg-white shadow-[0px_25px_50px_0px_rgba(0,0,0,0.25)]">
 				<button
 					type="button"
+					// Handler: close the modal from the explicit header close control.
 					onClick={() => onOpenChange?.(false)}
 					className="absolute right-4 top-4 flex size-9 cursor-pointer items-center justify-center rounded-full text-[#62748e] transition-colors hover:bg-[#f1f5f9] hover:text-[#091149] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
 					aria-label="Close"

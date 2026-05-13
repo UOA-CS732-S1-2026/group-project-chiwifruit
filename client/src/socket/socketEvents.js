@@ -1,9 +1,10 @@
 // Socket event names shared across the client.
 // Keep these in sync with server/src/socket/index.js.
 
-// NOTE (2026-04-29): 约定：
-// - JOIN_ROOM 只是订阅房间广播（room_update / game_state）。
-// - LEAVE_ROOM 在本项目中被定义为“离开比赛=判负”（用于断线/退出比赛），不要滥用。
+// NOTE (2026-04-29): Event contract:
+// - JOIN_ROOM only subscribes the socket to room broadcasts (`room_update`, `game_state`).
+// - LEAVE_ROOM means leaving an active match and forfeiting, so do not use it
+//   as a general-purpose waiting-room exit event.
 
 export const SOCKET_EVENTS = {
 	JOIN_ROOM: "join_room",

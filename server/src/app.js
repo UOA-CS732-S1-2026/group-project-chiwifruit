@@ -6,8 +6,11 @@ const authRoutes = require('./routes/authRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const env = require('./config/env');
 
+// NOTE (2026-05-14): Express application shell wiring middleware, documentation,
+// routes, and the shared error boundary for the backend.
 const app = express();
 
+// Helper: Swagger definition used by the local API docs page.
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -34,6 +37,7 @@ const swaggerOptions = {
   apis: ['./src/routes/*.js'], // Path to the API routes
 };
 
+// Helper: Build the Swagger spec once during startup.
 const swaggerSpec = swaggerJSDoc(swaggerOptions);
 
 app.use(
@@ -43,16 +47,18 @@ app.use(
 );
 app.use(express.json());
 
+// Helper: Lightweight health endpoint used by smoke checks and container probes.
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Swagger UI
+// Helper: Serve interactive API documentation for local development.
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 
+// Helper: Shared fallback error handler for uncaught request pipeline errors.
 app.use((error, _req, res, _next) => {
   // eslint-disable-next-line no-console
   console.error(error);

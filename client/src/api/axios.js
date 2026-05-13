@@ -6,13 +6,14 @@ const AUTH_USER_STORAGE_KEY = "kichain:authUser"
 const AUTH_EXPIRES_AT_STORAGE_KEY = "kichain:authExpiresAt"
 const AUTH_TTL_MS = 60 * 60 * 1000
 
-// NOTE (2026-04-29): 统一前端会话持久化策略。
-// - guest：存 sessionStorage（关 tab 立刻失效；刷新不失效）。
-// - user：存 localStorage。
-// - 必须“原子写入 token+user+expiresAt”，否则容易出现只写了 token 导致 API 401/状态错乱。
-// - expiresAt 优先使用 JWT 自带 exp，与后端签发时长保持一致；仅在无法解析 token 时退回前端兜底 TTL。
-// - 读取时会校验过期时间并做向后兼容（老版本没有 expiresAt 时会补写）。
+// NOTE (2026-04-29): Frontend auth session persistence is centralized here.
+// - Guests use sessionStorage so closing the tab ends the session.
+// - Registered users use localStorage so refreshes and revisits keep the session.
+// - Token, user, and expiresAt must be written atomically to avoid partial auth state.
+// - `expiresAt` should prefer the JWT `exp` claim and only fall back to the client TTL.
+// - Reads also backfill missing expiry data for older stored sessions.
 
+// Helper: Decode a JWT segment from base64url into a plain string.
 function decodeBase64Url(value) {
 	if (!value || typeof value !== "string") return null
 	try {
@@ -25,6 +26,7 @@ function decodeBase64Url(value) {
 	}
 }
 
+// Helper: Read the JWT `exp` claim and convert it to a millisecond timestamp.
 function getTokenExpiryMs(token) {
 	if (typeof token !== "string") return null
 	const [, payload] = token.split(".")
@@ -43,10 +45,12 @@ function getTokenExpiryMs(token) {
 	}
 }
 
+// Helper: Prefer the server-issued token expiry and fall back to the local TTL.
 function resolveStoredAuthExpiry(token) {
 	return getTokenExpiryMs(token) ?? Date.now() + AUTH_TTL_MS
 }
 
+// Helper: Access browser storage defensively because tests/private mode may block it.
 function getSafeStorage(type) {
 	if (typeof window === "undefined") return null
 	try {
@@ -57,6 +61,7 @@ function getSafeStorage(type) {
 	}
 }
 
+// Helper: Parse the stored auth user payload safely.
 function parseStoredUser(raw) {
 	if (!raw) return null
 	try {
@@ -68,6 +73,7 @@ function parseStoredUser(raw) {
 	}
 }
 
+// Helper: Clear auth state from every supported storage backend.
 function clearStoredAuthSession() {
 	if (typeof window === "undefined") return
 	for (const storage of [getSafeStorage("local"), getSafeStorage("session")]) {
@@ -82,6 +88,7 @@ function clearStoredAuthSession() {
 	}
 }
 
+// Helper: Persist the session expiry separately so older storage stays compatible.
 function setStoredAuthExpiry(storage, expiresAtMs) {
 	if (!storage) return
 	try {
@@ -91,6 +98,7 @@ function setStoredAuthExpiry(storage, expiresAtMs) {
 	}
 }
 
+// Helper: Read a full auth snapshot from one storage backend.
 function readAuthFromStorage(storage) {
 	if (!storage) return { token: null, user: null, expiresAt: null }
 	if (typeof window === "undefined") return { token: null, user: null, expiresAt: null }
@@ -106,6 +114,7 @@ function readAuthFromStorage(storage) {
 	}
 }
 
+// Helper: Remove auth data from one storage backend.
 function clearStoredAuthInStorage(storage) {
 	if (!storage) return
 	try {
@@ -117,6 +126,7 @@ function clearStoredAuthInStorage(storage) {
 	}
 }
 
+// Helper: Drop expired or malformed sessions and backfill expiry when possible.
 function ensureStoredAuthSessionIsValid() {
 	const sessionStorage = getSafeStorage("session")
 	const localStorage = getSafeStorage("local")
@@ -151,6 +161,7 @@ function ensureStoredAuthSessionIsValid() {
 	return false
 }
 
+// Helper: Resolve which storage currently owns the active session.
 function getActiveAuthStorage() {
 	const sessionStorage = getSafeStorage("session")
 	const localStorage = getSafeStorage("local")
@@ -166,6 +177,7 @@ function getActiveAuthStorage() {
 	return null
 }
 
+// Persist a complete auth session in the correct storage backend.
 export function setStoredAuthSession(session) {
 	if (typeof window === "undefined") return
 	try {
@@ -177,12 +189,12 @@ export function setStoredAuthSession(session) {
 			return
 		}
 
-		// guest vs user 的区分来自后端 JWT payload / user 对象上的 isGuest 字段。
+		// Storage choice is driven by the server-authored `isGuest` flag.
 		const isGuest = Boolean(user?.isGuest)
 		const storage = isGuest ? getSafeStorage("session") : getSafeStorage("local")
 		const otherStorage = isGuest ? getSafeStorage("local") : getSafeStorage("session")
 
-		// 同一时间只允许一份有效会话，避免 local/session 同时存在导致读取顺序不确定。
+		// Keep exactly one live session to avoid local/session precedence conflicts.
 		clearStoredAuthInStorage(otherStorage)
 		if (!storage) return
 		storage.setItem(TOKEN_STORAGE_KEY, token)

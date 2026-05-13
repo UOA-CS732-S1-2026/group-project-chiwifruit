@@ -1,9 +1,10 @@
 import api from "./axios"
 import { getStoredAuthToken } from "./axios"
 
-// NOTE (2026-04-29): 房间 REST API。
-// 其中 leaveRoom() 的语义是“从房间 participants 列表移除自己并广播 room_update”。
-// 不等同于 socket leave_room（离开比赛=判负）。
+// NOTE (2026-04-29): Room membership changes should use this REST layer.
+// `leaveRoom()` removes the current player from the room participant list and
+// broadcasts `room_update`; it is not the same as socket `leave_room`, which
+// means leaving an active match and forfeiting in this project.
 
 export async function createRoom() {
 	const { data } = await api.post("/rooms")
@@ -21,6 +22,8 @@ export async function leaveRoom(roomCode) {
 	return data
 }
 
+// Helper: Use `fetch(..., { keepalive: true })` so the browser can still send
+// the leave request during pagehide or unload.
 export function leaveRoomKeepalive(roomCode, tokenOverride) {
 	const normalized = String(roomCode ?? "").trim().toUpperCase()
 	if (!normalized) {

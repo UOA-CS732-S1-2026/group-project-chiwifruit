@@ -19,12 +19,16 @@ import { HOME_STICKERS } from "../components/Common/floatingStickerConfigs"
 // NOTE (2026-04-29): Landing create/join actions follow a guarded flow:
 // If no token exists, create a guest session first (obtain token), then call the room API.
 
+// Page: presents the landing hero, guest/auth entrypoints, and guarded room
+// navigation actions for create and join flows.
 export default function LandingPage() {
 	const location = useLocation()
 	const navigate = useNavigate()
+	// State: require auth for brand-new visitors until they dismiss the modal once.
     const [showAuthModal, setShowAuthModal] = useState(
       () => !getStoredAuthUser(),
     )
+	// State: show route-level errors that were passed back from guarded navigation.
 	const [routeError, setRouteError] = useState("")
 	// For local development, the build version is set to "local". In dev/prod, 
 	// it should be set to the actual build version via the VITE_BUILD_VERSION environment variable.
@@ -43,6 +47,7 @@ export default function LandingPage() {
 		joinRoomGuarded,
 	} = useGuardedRoomNavigation()
 
+	// Effect: surface redirect errors once and clear them from navigation state.
 	useEffect(() => {
 		const nextRouteError =
 			typeof location.state?.errorMessage === "string" ? location.state.errorMessage : ""
@@ -52,6 +57,7 @@ export default function LandingPage() {
 		navigate(location.pathname, { replace: true, state: null })
 	}, [location.pathname, location.state, navigate])
 
+	// Derived state: static landing guide content rendered as cards in the explainer section.
 	const guideItems = [
 		{
 			Icon: Headphones,
@@ -73,17 +79,46 @@ export default function LandingPage() {
 		},
 	]
 
+	// Handler: dismiss the highest-priority visible error message.
+	const handleDismissError = () => {
+		if (routeError) {
+			setRouteError("")
+			return
+		}
+		clearActionError()
+	}
+
+	// Handler: keep the join modal state and its error state synchronized.
+	const handleJoinModalChange = (open) => {
+		setJoinModalOpen(open)
+		if (open) clearActionError()
+	}
+
+	// Handler: trigger guarded room creation from the primary CTA.
+	const handleCreateRoom = () => {
+		createRoomGuarded()
+	}
+
+	// Handler: open the join modal after clearing any stale action error.
+	const handleOpenJoinModal = () => {
+		clearActionError()
+		setJoinModalOpen(true)
+	}
+
+	// Handler: submit a normalized room code and close the modal only after success.
+	const handleJoinRoom = (roomCode) => {
+		joinRoomGuarded(roomCode, {
+			onSuccess: () => {
+				setJoinModalOpen(false)
+			},
+		})
+	}
+
 	return (
 	  <>
 		<ErrorToast
 			message={routeError || actionError}
-			onDismiss={() => {
-				if (routeError) {
-					setRouteError("")
-					return
-				}
-				clearActionError()
-			}}
+			onDismiss={handleDismissError}
 		/>
         <AuthModal open={showAuthModal} onClose={() => setShowAuthModal(false)} />
 		<Background stickers={HOME_STICKERS}>
@@ -97,18 +132,9 @@ export default function LandingPage() {
 
 			<JoinRoomModal
 				open={joinModalOpen}
-				onOpenChange={(open) => {
-					setJoinModalOpen(open)
-					if (open) clearActionError()
-				}}
+				onOpenChange={handleJoinModalChange}
 				isSubmitting={isPending}
-				onJoin={(roomCode) => {
-					joinRoomGuarded(roomCode, {
-						onSuccess: () => {
-							setJoinModalOpen(false)
-						},
-					})
-				}}
+				onJoin={handleJoinRoom}
 			/>
 
 			<section className="relative mx-auto w-full max-w-[90rem] px-4 pb-14 pt-24 md:px-6 md:pt-28 lg:px-8">
@@ -141,9 +167,7 @@ export default function LandingPage() {
 						<div className="flex flex-wrap items-center gap-3 pt-1">
 							<Button
 								className="h-12 rounded-xl px-6 text-sm font-semibold hover:bg-primary/90"
-								onClick={() => {
-									createRoomGuarded()
-								}}
+								onClick={handleCreateRoom}
 								disabled={isPending}
 							>
 								<Play className="size-4 fill-current" />
@@ -152,10 +176,7 @@ export default function LandingPage() {
 							<Button
 								variant="outline"
 								className="h-12 rounded-xl border-border bg-card px-6 text-sm font-semibold text-foreground hover:border-ring hover:bg-card"
-								onClick={() => {
-									clearActionError()
-									setJoinModalOpen(true)
-								}}
+								onClick={handleOpenJoinModal}
 								disabled={isPending}
 							>
 								<LogIn className="size-4" />

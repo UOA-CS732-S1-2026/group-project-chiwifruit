@@ -1,8 +1,8 @@
 const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
+const { buildAvatarUrl } = require('../utils/avatar');
 const { emitRoomUpdate, cancelPendingRoomRosterCleanup } = require('../socket');
 const { getGame, removeGame } = require('../services/gameService');
-const { buildAvatarUrl } = require('./authController');
 const {
   removeParticipantFromRoom,
   getRoomState,
@@ -294,9 +294,9 @@ async function selectDifficulty(req, res) {
 }
 
 async function leaveRoom(req, res) {
-  // NOTE (2026-04-29): 房间离开必须走 REST（DELETE /api/rooms/:roomCode）。
-  // 目的：从 Mongo 的 participants 列表里移除该玩家，并广播 room_update；
-  // socket 的 leave_room 在本项目中被定义为“离开比赛=判负”，语义不同。
+  // NOTE (2026-04-29): Room departure must use REST (`DELETE /api/rooms/:roomCode`).
+  // This removes the player from Mongo room participants and broadcasts
+  // `room_update`; socket `leave_room` has different semantics and means match forfeit.
   const { roomCode } = req.params;
   const identity = req.user;
   const result = await removeParticipantFromRoom({ roomCode, identity });

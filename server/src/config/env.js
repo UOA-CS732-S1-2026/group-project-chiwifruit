@@ -5,6 +5,10 @@ const dotenv = require('dotenv');
 // are started from the root workspace or from the server workspace.
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
+// NOTE (2026-05-14): Load and validate the backend runtime configuration from the
+// repository-level environment file.
+
+// Helper: Required environment variables that should exist for full local functionality.
 const requiredVars = [
   'MONGODB_URI',
   'JWT_SECRET',
@@ -18,6 +22,7 @@ requiredVars.forEach((key) => {
   }
 });
 
+// Helper: Centralized backend runtime configuration.
 module.exports = {
   port: process.env.PORT || 3000,
   frontendOrigin: process.env.FRONTEND_ORIGIN || '*',

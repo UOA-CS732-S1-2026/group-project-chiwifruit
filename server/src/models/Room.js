@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 
+// NOTE (2026-05-14): Room model storing waiting-room membership and configuration.
+
+// Helper: Embedded participant shape stored inside a room document.
 const participantSchema = new mongoose.Schema(
   {
     user: {
@@ -29,6 +32,7 @@ const participantSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Helper: Room document storing waiting-room configuration and participant membership.
 const roomSchema = new mongoose.Schema(
   {
     roomCode: {

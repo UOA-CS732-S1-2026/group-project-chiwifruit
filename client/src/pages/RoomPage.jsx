@@ -35,6 +35,7 @@ import { emitGameRequestState, emitGameStart, joinSocketRoom, reconnectSocket } 
 // - Socket: subscribe to room_update / game_state real-time broadcasts and auto-navigate when the game starts
 // Important: use REST leaveRoom to exit the waiting room; socket leave_room means "leave the match = forfeit" in this app.
 
+// Helper: render the bird-mode icon with active-state color inversion.
 function BirdIcon({ className, ...props }) {
 	const isActive = Boolean(props["data-active"])
 
@@ -51,6 +52,7 @@ function BirdIcon({ className, ...props }) {
 	)
 }
 
+// Helper: render the aussie-mode icon with active-state color inversion.
 function AussieIcon({ className, ...props }) {
 	const isActive = Boolean(props["data-active"])
 
@@ -68,24 +70,30 @@ function AussieIcon({ className, ...props }) {
 	)
 }
 
+// Page: coordinates waiting-room membership, host controls, readiness state, and
+// automatic navigation into the socket-authoritative game.
 export default function RoomPage() {
 	const navigate = useNavigate()
 	const { roomCode: roomCodeParam = "" } = useParams()
 	// Background music is enabled on Landing + Room pages.
 	useBackgroundMusic()
 
+	// Derived state: normalize the route parameter once so every request uses the same room code shape.
 	const normalizedParamCode = String(roomCodeParam).trim().toUpperCase()
 	const requestedJoinCode = normalizedParamCode === "NEW" ? "" : normalizedParamCode
+	// State: keep the resolved room code and the latest local UI states for setup/start/copy flows.
 	const [roomCode, setRoomCode] = useState("")
 	const [setupError, setSetupError] = useState("")
 	const [isStartingGame, setIsStartingGame] = useState(false)
 	const [copyState, setCopyState] = useState("idle")
 
+	// State refs: avoid duplicate setup, duplicate navigation, and repeated leave/copy side effects.
 	const startedSetupRef = useRef(false)
 	const hasNavigatedToGameRef = useRef(false)
 	const copyResetTimerRef = useRef(null)
 	const pageLeaveSentRef = useRef(false)
 
+	// Handler: return to Landing with a route-level error message when setup fails.
 	const navigateHomeWithError = useCallback(
 		(message) => {
 			navigate("/", {
@@ -100,6 +108,7 @@ export default function RoomPage() {
 		[navigate],
 	)
 
+	// Helper: classify 404-style room errors so the page can recover consistently.
 	const isRoomNotFoundError = useCallback((error) => {
 		const status = Number(error?.response?.status)
 		const message = getApiErrorMessage(error)
@@ -173,6 +182,7 @@ export default function RoomPage() {
 	const mode = roomState?.mode ?? "bird"
 	const difficulty = roomState?.difficulty ?? "easy"
 
+	// Derived state: expose the current authenticated user in the room-service identity shape.
 	const identity = useMemo(() => {
 		const user = getStoredAuthUser()
 		if (!user?.id) return null
@@ -182,6 +192,7 @@ export default function RoomPage() {
 	const hostUserId = roomState?.hostId ? String(roomState.hostId) : null
 	const isHost = Boolean(identity?.sub) && Boolean(hostUserId) && identity.sub === hostUserId
 
+	// Derived state: map room participants into player cards and pad the list with empty slots.
 	const players = useMemo(() => {
 		const participants = roomState?.participants ?? []
 		const mapped = participants.map((participant) => {
@@ -214,6 +225,7 @@ export default function RoomPage() {
 	const currentUserReady = Boolean(currentUserPlayer?.isReady)
 	const activeRoomCode = String(roomCode || requestedJoinCode || "").trim().toUpperCase()
 
+	// Handler: leave the waiting room roster through REST and return to Landing.
 	const leaveRoomAndReturnHome = useCallback(() => {
 		if (!activeRoomCode) {
 			navigate("/", { replace: true })
@@ -228,6 +240,7 @@ export default function RoomPage() {
 		})
 	}, [activeRoomCode, leaveRoomMutation, navigate])
 
+	// Handler: ask the server to start the game once host-side preconditions are met.
 	const handleStartGame = () => {
 		if (!isHost) return
 		if (!canStartGame) return
@@ -249,6 +262,7 @@ export default function RoomPage() {
 
 	const canStartGame = Boolean(isHost && roomState?.canStartGame)
 
+	// Handler: copy the room code and expose temporary UI feedback for success/failure.
 	const handleCopyCode = async () => {
 		if (!roomCode) return
 
@@ -274,6 +288,7 @@ export default function RoomPage() {
 		}
 	}
 
+	// Handler: toggle the current player's ready state through the room mutation.
 	const handleReady = () => {
 		if (!roomCode) return
 		setReadyMutation.mutate({ roomCode, isReady: !currentUserReady })
@@ -311,6 +326,7 @@ export default function RoomPage() {
 		if (!roomCode) return
 		const socket = reconnectSocket()
 
+		// Helper: route into the game only for players that belong to the active server game.
 		const maybeNavigateToGame = (gameState) => {
 			const stateRoomCode = String(gameState?.roomCode ?? "").trim().toUpperCase()
 			if (!stateRoomCode || stateRoomCode !== String(roomCode).toUpperCase()) return
@@ -335,15 +351,18 @@ export default function RoomPage() {
 			navigate(`/game/${roomCode}`, { replace: true })
 		}
 
+		// Helper: request one authoritative game snapshot after connect or room subscription.
 		const requestStateOnce = () => {
 			emitGameRequestState(roomCode, (response) => {
 				if (response?.ok && response.game) maybeNavigateToGame(response.game)
 			})
 		}
 
+		// Socket handler: react to live game-state broadcasts from the waiting room.
 		const onGameState = (gameState) => {
 			maybeNavigateToGame(gameState)
 		}
+		// Socket handler: refresh from the server after reconnect so late subscribers catch up.
 		const onConnect = () => {
 			requestStateOnce()
 		}

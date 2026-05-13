@@ -1,8 +1,9 @@
 import { cn } from "../../lib/utils"
 import GamePadRipple from "./GamePadRipple"
 
-// NOTE (2026-04-29): GameWheel 只负责渲染/布局与点击事件。
-// 视觉主题（颜色/阴影/高亮）通过 CSS variables 注入，避免在 JS 里写死样式逻辑。
+// NOTE (2026-04-29): GameWheel is responsible only for rendering, layout, and
+// click handling.
+// Visual styling is injected through CSS variables so theme logic stays out of JS.
 
 export default function GameWheel({
 	pads,
@@ -12,6 +13,7 @@ export default function GameWheel({
 	className,
 	centerContent,
 }) {
+	// Derived state: layout scales by pad count so each difficulty keeps a balanced wheel.
 	const count = pads.length
 	const padOrbitRadius = count === 10 ? 36 : count === 8 ? 34 : 32
 	const padSizePercent = count === 10 ? 16 : count === 8 ? 18 : 20

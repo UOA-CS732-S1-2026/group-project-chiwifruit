@@ -3,7 +3,8 @@ import SoundToggleButton from "../ui/SoundToggleButton"
 import { UserRound } from "lucide-react"
 import { getStoredAuthUser } from "../../api/axios"
 
-// NOTE (2026-04-29): 顶栏直接读 storage 里的 user（guest/login 都可能存在），用于展示头像与用户名。
+// NOTE (2026-04-29): The top bar reads the persisted user directly from storage
+// so it can render the avatar and username for both guests and registered users.
 
 export default function LandingTopBar() {
 	const user = getStoredAuthUser()

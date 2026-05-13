@@ -12,9 +12,12 @@ const GAME_PAD_PALETTE = [
 	{ highlight: "#F4A8FF", base: "#E12AFB", shadow: "#A21CAF", glow: "rgba(192, 38, 211, 0.40)" },
 ]
 
-// NOTE (2026-04-29): 轮盘 pad 的颜色主题。buildPadThemeSet* 会随机打散后取前 N 个。
-// 目前是客户端随机；若需要“所有客户端一致”，应改为后端给定 seed/order 再渲染。
+// NOTE (2026-04-29): These are the wheel pad color themes.
+// `buildPadThemeSet*` shuffles the palette and takes the first N entries.
+// Randomization is currently client-side; synchronized clients would need a
+// server-provided seed or explicit order.
 
+// Helper: return a shuffled copy of the provided palette or list.
 export function shuffle(items) {
 	const array = [...items]
 	for (let index = array.length - 1; index > 0; index -= 1) {
@@ -24,18 +27,21 @@ export function shuffle(items) {
 	return array
 }
 
+// Helper: map difficulty names to the number of active pads.
 export function getPadCountByDifficulty(difficulty) {
 	if (difficulty === "easy") return 6
 	if (difficulty === "hard") return 10
 	return 8
 }
 
+// Helper: build a randomized pad theme set from a named difficulty.
 export function buildPadThemeSet(difficulty) {
 	const padCount = getPadCountByDifficulty(difficulty)
 	const order = shuffle(GAME_PAD_PALETTE)
 	return order.slice(0, padCount)
 }
 
+// Helper: build a randomized pad theme set from an explicit pad count.
 export function buildPadThemeSetByPadCount(padCount) {
 	const safePadCount = Math.max(1, Math.min(GAME_PAD_PALETTE.length, Number(padCount) || 1))
 	const order = shuffle(GAME_PAD_PALETTE)
