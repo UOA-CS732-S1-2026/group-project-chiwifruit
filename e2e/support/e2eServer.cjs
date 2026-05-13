@@ -1,4 +1,6 @@
 const http = require('http')
+const fs = require('fs')
+const path = require('path')
 const { spawn } = require('child_process')
 const { MongoMemoryServer } = require('mongodb-memory-server')
 const mongoose = require('mongoose')
@@ -7,6 +9,8 @@ const FRONTEND_PORT = 5173
 const BACKEND_PORT = 3000
 const FRONTEND_ORIGIN = `http://127.0.0.1:${FRONTEND_PORT}`
 const BACKEND_ORIGIN = `http://127.0.0.1:${BACKEND_PORT}`
+const rootDir = path.resolve(__dirname, '../..')
+const e2eEnvPath = path.join(rootDir, '.env.e2e')
 
 let mongoServer
 let httpServer
@@ -21,6 +25,24 @@ function applyE2eEnvironment(mongodbUri) {
   process.env.MONGODB_URI = mongodbUri
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'e2e-test-secret'
   process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d'
+}
+
+function writeE2eViteEnvFile() {
+  const content = [
+    `FRONTEND_PORT=${FRONTEND_PORT}`,
+    `VITE_API_URL=${BACKEND_ORIGIN}/api`,
+    `VITE_SOCKET_URL=${BACKEND_ORIGIN}`,
+    'VITE_BUILD_VERSION=e2e',
+    '',
+  ].join('\n')
+
+  fs.writeFileSync(e2eEnvPath, content, 'utf8')
+}
+
+function removeE2eViteEnvFile() {
+  if (fs.existsSync(e2eEnvPath)) {
+    fs.rmSync(e2eEnvPath, { force: true })
+  }
 }
 
 function waitForServer(url, timeoutMs = 60_000) {
@@ -66,15 +88,11 @@ async function startBackend() {
 }
 
 async function startFrontend() {
-  viteProcess = spawn('npm', ['run', 'dev', '--workspace=client', '--', '--host', '127.0.0.1'], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      FRONTEND_PORT: String(FRONTEND_PORT),
-      VITE_API_URL: `${BACKEND_ORIGIN}/api`,
-      VITE_SOCKET_URL: BACKEND_ORIGIN,
-      VITE_BUILD_VERSION: 'e2e',
-    },
+  writeE2eViteEnvFile()
+
+  viteProcess = spawn('npm', ['run', 'dev', '--workspace=client', '--', '--host', '127.0.0.1', '--mode', 'e2e'], {
+    cwd: rootDir,
+    env: process.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -114,9 +132,12 @@ async function shutdown() {
   if (mongoServer) {
     await mongoServer.stop()
   }
+
+  removeE2eViteEnvFile()
 }
 
 async function main() {
+  removeE2eViteEnvFile()
   await startBackend()
   await startFrontend()
 
