@@ -8,7 +8,7 @@ export default function GameScoringRulesModal({ open, onOpenChange }) {
 				<button
 					type="button"
 					onClick={() => onOpenChange?.(false)}
-					className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full text-[#62748e] transition-colors hover:bg-[#f1f5f9] hover:text-[#091149] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
+					className="absolute right-4 top-4 flex size-9 cursor-pointer items-center justify-center rounded-full text-[#62748e] transition-colors hover:bg-[#f1f5f9] hover:text-[#091149] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
 					aria-label="Close"
 				>
 					<X className="size-5" />

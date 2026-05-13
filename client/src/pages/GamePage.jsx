@@ -1207,7 +1207,7 @@ export default function GamePage() {
 							<button
 								type="button"
 								onClick={() => setIsScoringRulesModalOpen(true)}
-								className="grid size-10 place-items-center rounded-2xl border border-border bg-card shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
+								className="grid size-10 cursor-pointer place-items-center rounded-2xl border border-border bg-card shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
 								aria-label="Open scoring rules"
 								title="Scoring rules"
 							>
