@@ -27,6 +27,16 @@ function applyE2eEnvironment(mongodbUri) {
   process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d'
 }
 
+function getFrontendEnv() {
+  return {
+    ...process.env,
+    FRONTEND_PORT: String(FRONTEND_PORT),
+    VITE_API_URL: `${BACKEND_ORIGIN}/api`,
+    VITE_SOCKET_URL: BACKEND_ORIGIN,
+    VITE_BUILD_VERSION: 'e2e',
+  }
+}
+
 function writeE2eViteEnvFile() {
   const content = [
     `FRONTEND_PORT=${FRONTEND_PORT}`,
@@ -105,7 +115,7 @@ async function startFrontend() {
     ],
     {
       cwd: rootDir,
-      env: process.env,
+      env: getFrontendEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   )
