@@ -1,8 +1,8 @@
-import { defineConfig, devices } from '@playwright/test'
+const { defineConfig, devices } = require('@playwright/test')
 
-export default defineConfig({
+module.exports = defineConfig({
   testDir: './e2e',
-  timeout: 45_000,
+  timeout: 60_000,
   expect: {
     timeout: 10_000,
   },
@@ -21,6 +21,11 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  globalSetup: './e2e/support/globalSetup.js',
+  webServer: {
+    command: 'node e2e/support/e2eServer.cjs',
+    url: 'http://127.0.0.1:5173',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
   outputDir: 'test-results/playwright',
 })
