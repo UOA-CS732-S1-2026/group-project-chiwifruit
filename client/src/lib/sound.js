@@ -1,6 +1,7 @@
 import { Howl } from "howler"
 
 import clickSfxUrl from "../assets/audio/common/click.mp3"
+import countdownSfxUrl from "../assets/audio/common/countdown.mp3"
 import backgroundMusicUrl from "../assets/audio/common/backgroundmusic.mp3"
 import losingSfxUrl from "../assets/audio/common/losing.mp3"
 import winningSfxUrl from "../assets/audio/common/winning.mp3"
@@ -11,6 +12,7 @@ import useSoundStore from "../store/useSoundStore"
 // - backgroundMusic: 处理 autoplay 被拒绝后的 unlock 重试 + 首次用户交互 retry
 
 let clickSound
+let countdownSound
 let backgroundSound
 let losingSound
 let winningSound
@@ -45,6 +47,17 @@ function getBackgroundSound() {
 		})
 	}
 	return backgroundSound
+}
+
+function getCountdownSound() {
+	if (!countdownSound) {
+		countdownSound = new Howl({
+			src: [countdownSfxUrl],
+			volume: 0.75,
+			preload: true,
+		})
+	}
+	return countdownSound
 }
 
 function getLosingSound() {
@@ -104,6 +117,17 @@ export function playClickSfx() {
 	// Restart from the beginning for consistent feedback on rapid clicks.
 	sound.stop()
 	sound.play()
+}
+
+export function playCountdownTickSfx() {
+	if (useSoundStore.getState().muted) return
+	try {
+		const sound = getCountdownSound()
+		if (sound.playing()) sound.stop()
+		sound.play()
+	} catch {
+		// Countdown SFX must never break gameplay rendering.
+	}
 }
 
 export function playLosingSfx() {
