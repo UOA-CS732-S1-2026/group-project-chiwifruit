@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
-import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import LandingPage from './pages/LandingPage'
 import RoomPage from './pages/RoomPage'
 import useGlobalButtonClickSound from './hooks/useGlobalButtonClickSound'
@@ -22,13 +22,30 @@ function isRoomScopedPathForRoom(pathname, roomCode) {
   return normalizedPath === `/GAME/${roomCode}` || normalizedPath === `/ROOM/${roomCode}`;
 }
 
+function maybeLeaveScopedRoom(pathname, { inFlightRef } = {}) {
+  const roomCode = getRoomCodeFromPath(pathname);
+  if (!roomCode || inFlightRef?.current) return;
+
+  const token = getStoredAuthToken();
+  if (!token) return;
+
+  if (inFlightRef) {
+    inFlightRef.current = true;
+  }
+
+  void leaveRoomKeepalive(roomCode, token).finally(() => {
+    if (inFlightRef) {
+      inFlightRef.current = false;
+    }
+  });
+}
+
 function App() {
   // Global click sound for all buttons across the app.
 	useGlobalButtonClickSound()
   const location = useLocation()
-  const navigationType = useNavigationType()
   const previousPathRef = useRef(location.pathname)
-  const backLeaveInFlightRef = useRef(false)
+  const routeLeaveInFlightRef = useRef(false)
 
   useEffect(() => {
     const previousPath = previousPathRef.current
@@ -36,23 +53,16 @@ function App() {
     const previousRoomCode = getRoomCodeFromPath(previousPath)
 
     if (
-      navigationType === 'POP' &&
       previousRoomCode &&
       previousPath !== nextPath &&
       !isRoomScopedPathForRoom(nextPath, previousRoomCode) &&
-      !backLeaveInFlightRef.current
+      !routeLeaveInFlightRef.current
     ) {
-      const token = getStoredAuthToken()
-      if (token) {
-        backLeaveInFlightRef.current = true
-        void leaveRoomKeepalive(previousRoomCode, token).finally(() => {
-          backLeaveInFlightRef.current = false
-        })
-      }
+      maybeLeaveScopedRoom(previousPath, { inFlightRef: routeLeaveInFlightRef })
     }
 
     previousPathRef.current = nextPath
-  }, [location.pathname, navigationType])
+  }, [location.pathname])
 
   return (
     <Suspense fallback={null}>
