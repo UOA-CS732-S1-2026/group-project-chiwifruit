@@ -1,3 +1,8 @@
+/**
+ * Room REST route definitions and Swagger documentation.
+ * These endpoints cover room creation/joining, lobby readiness, host-controlled
+ * mode/difficulty selection, leaving the room roster, and ranking lookups.
+ */
 const express = require('express');
 const authMiddleware = require('../middleware/auth');
 const {

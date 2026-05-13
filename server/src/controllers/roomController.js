@@ -1,3 +1,9 @@
+/**
+ * Room REST controller.
+ * Coordinates Mongo room documents, lobby membership, readiness, host settings,
+ * ranking responses, and room_update broadcasts. Active match state is delegated
+ * to gameService and Socket.IO instead of being rebuilt here.
+ */
 const Room = require('../models/Room');
 const { generateRoomCode } = require('../utils/roomCode');
 const { emitRoomUpdate, cancelPendingRoomRosterCleanup } = require('../socket');

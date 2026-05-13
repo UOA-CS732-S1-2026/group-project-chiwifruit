@@ -1,3 +1,8 @@
+/**
+ * Shared room-state helpers for the Mongo-backed waiting-room roster.
+ * This service keeps room participant normalization, host reassignment, room
+ * deletion, and serialised room_state responses consistent across REST and socket flows.
+ */
 const Room = require('../models/Room');
 const { buildAvatarUrl } = require('../controllers/authController');
 
