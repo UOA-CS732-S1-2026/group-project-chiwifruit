@@ -14,9 +14,14 @@
     "build": "npm run build --workspace=client",
     "start": "npm run start --workspace=server",
     "install:all": "npm install",
+    "install:e2e": "playwright install chromium",
+    "test:e2e": "npm run install:e2e && playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report",
     "ci": "npm run ci --workspace=client && npm run ci --workspace=server"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "concurrently": "^9.2.1"
   }
 }

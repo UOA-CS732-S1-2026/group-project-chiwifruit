@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { ArrowLeft, ChevronsRight } from "lucide-react"
+import { ArrowLeft, BookOpenText, ChevronsRight } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams } from "react-router-dom"
 
@@ -9,6 +9,7 @@ import { BACKGROUND_STICKERS } from "../components/Common/floatingStickerConfigs
 import ExitGameModal from "../components/Game/ExitGameModal"
 import GamePlayerCard from "../components/Game/GamePlayerCard"
 import GameResultsModal from "../components/Game/GameResultsModal"
+import GameScoringRulesModal from "../components/Game/GameScoringRulesModal"
 import GameStatusBroadcast from "../components/Game/GameStatusBroadcast"
 import GameWheel from "../components/Game/GameWheel"
 import YoureOutModal from "../components/Game/YoureOutModal"
@@ -365,6 +366,7 @@ export default function GamePage() {
 	const [isExitModalOpen, setIsExitModalOpen] = React.useState(false)
 	const [isOutModalOpen, setIsOutModalOpen] = React.useState(false)
 	const [isResultsModalOpen, setIsResultsModalOpen] = React.useState(false)
+	const [isScoringRulesModalOpen, setIsScoringRulesModalOpen] = React.useState(false)
 	const [isSpectating, setIsSpectating] = React.useState(false)
 	const [broadcastEvent, setBroadcastEvent] = React.useState(null)
 	const lastBroadcastEventKeyRef = React.useRef(null)
@@ -1161,6 +1163,10 @@ export default function GamePage() {
 					exitRoomAndGameToHome()
 				}}
 			/>
+			<GameScoringRulesModal
+				open={isScoringRulesModalOpen}
+				onOpenChange={setIsScoringRulesModalOpen}
+			/>
 			<div className="mx-auto w-full max-w-[90rem] px-4 pb-14 pt-6 md:px-6 lg:px-8">
 				<div className="grid items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
 					<div className="justify-self-start">
@@ -1182,6 +1188,15 @@ export default function GamePage() {
 
 					<div className="justify-self-end">
 						<div className="flex items-center gap-3">
+							<button
+								type="button"
+								onClick={() => setIsScoringRulesModalOpen(true)}
+								className="grid size-10 cursor-pointer place-items-center rounded-2xl border border-border bg-card shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4a5eed]/40"
+								aria-label="Open scoring rules"
+								title="Scoring rules"
+							>
+								<BookOpenText className="size-5 text-[#1f2a66]" />
+							</button>
 							<LoginButton avatarUrl={headerAvatarUrl} label={headerLoginLabel} />
 						</div>
 					</div>

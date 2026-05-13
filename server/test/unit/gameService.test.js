@@ -143,6 +143,27 @@ describe('gameService state machine', () => {
         expect.objectContaining({ userId: 'guest-1', username: 'Guest One', isGuest: true, score: 0, initialOrder: 2 }),
       ]);
     });
+
+    it('should keep turn duration at 30 seconds when sequence length is below 10', () => {
+      expect(gameService.getTurnDurationMs({ sequence: Array.from({ length: 9 }, () => 0) })).toBe(30_000);
+    });
+
+    it('should add one second when sequence length reaches 10', () => {
+      expect(gameService.getTurnDurationMs({ sequence: Array.from({ length: 10 }, () => 0) })).toBe(31_000);
+    });
+
+    it('should add one second for each sequence length above 9', () => {
+      expect(gameService.getTurnDurationMs({ sequence: Array.from({ length: 12 }, () => 0) })).toBe(33_000);
+    });
+
+    it('should use the adjusted turn duration when playing starts', () => {
+      jest.spyOn(Date, 'now').mockReturnValue(10_000);
+
+      const game = startGame({ roomCode: 'TURN_DURATION_START' });
+      const started = readyAll(game.roomCode, game.participantsOrder);
+
+      expect(started.turnEndsAt).toBe(40_000);
+    });
   });
 
   describe('familiarization phase', () => {
