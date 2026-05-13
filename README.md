@@ -580,7 +580,14 @@ Playwright E2E tests are under:
 e2e/
 ```
 
-The E2E test server starts its own MongoDB Memory Server, Express + Socket.IO backend, and Vite frontend. You do not need to manually start MongoDB, the backend, or the frontend before running E2E tests.
+The E2E test server starts its own MongoDB Memory Server, Express + Socket.IO backend, and Vite frontend. It uses dedicated local test ports so it does not conflict with the normal development servers:
+
+```text
+E2E frontend: http://127.0.0.1:6173
+E2E backend:  http://127.0.0.1:3100
+```
+
+You do not need to manually start MongoDB, the backend, or the frontend before running E2E tests. The E2E server also injects test-specific frontend environment values so the browser client connects to the managed E2E backend rather than any existing local development backend.
 
 Install Playwright browsers once:
 
@@ -680,12 +687,14 @@ MONGODB_URI=mongodb://kichain-db:27017/kichain-db
 
 ### 15.3 Port already in use
 
-If ports `3000`, `5173`, or `27017` are already in use, stop the old containers or local processes:
+If normal development ports `3000`, `5173`, or `27017` are already in use, stop the old containers or local processes:
 
 ```bash
 docker ps
 docker rm -f kichain-db kichain-dev-local 2>/dev/null || true
 ```
+
+Playwright E2E uses dedicated ports `3100` and `6173`. If an E2E run fails because one of those ports is already in use, stop the process using that port and rerun `npm run test:e2e`.
 
 ### 15.4 Environment variables appear outdated
 
