@@ -8,9 +8,44 @@ const AUTH_TTL_MS = 60 * 60 * 1000
 
 // NOTE (2026-04-29): 统一前端会话持久化策略。
 // - guest：存 sessionStorage（关 tab 立刻失效；刷新不失效）。
-// - user：存 localStorage（同样 1 小时 TTL）。
+// - user：存 localStorage。
 // - 必须“原子写入 token+user+expiresAt”，否则容易出现只写了 token 导致 API 401/状态错乱。
+// - expiresAt 优先使用 JWT 自带 exp，与后端签发时长保持一致；仅在无法解析 token 时退回前端兜底 TTL。
 // - 读取时会校验过期时间并做向后兼容（老版本没有 expiresAt 时会补写）。
+
+function decodeBase64Url(value) {
+	if (!value || typeof value !== "string") return null
+	try {
+		const normalized = value.replace(/-/g, "+").replace(/_/g, "/")
+		const padding = normalized.length % 4
+		const padded = padding === 0 ? normalized : normalized.padEnd(normalized.length + (4 - padding), "=")
+		return atob(padded)
+	} catch {
+		return null
+	}
+}
+
+function getTokenExpiryMs(token) {
+	if (typeof token !== "string") return null
+	const [, payload] = token.split(".")
+	if (!payload) return null
+
+	const decodedPayload = decodeBase64Url(payload)
+	if (!decodedPayload) return null
+
+	try {
+		const parsed = JSON.parse(decodedPayload)
+		const expSeconds = Number(parsed?.exp)
+		if (!Number.isFinite(expSeconds) || expSeconds <= 0) return null
+		return expSeconds * 1000
+	} catch {
+		return null
+	}
+}
+
+function resolveStoredAuthExpiry(token) {
+	return getTokenExpiryMs(token) ?? Date.now() + AUTH_TTL_MS
+}
 
 function getSafeStorage(type) {
 	if (typeof window === "undefined") return null
@@ -47,10 +82,10 @@ function clearStoredAuthSession() {
 	}
 }
 
-function setStoredAuthExpiry(storage, ttlMs) {
+function setStoredAuthExpiry(storage, expiresAtMs) {
 	if (!storage) return
 	try {
-		storage.setItem(AUTH_EXPIRES_AT_STORAGE_KEY, String(Date.now() + ttlMs))
+		storage.setItem(AUTH_EXPIRES_AT_STORAGE_KEY, String(expiresAtMs))
 	} catch {
 		// no-op
 	}
@@ -96,7 +131,12 @@ function ensureStoredAuthSessionIsValid() {
 
 		if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
 			// Backfill expiry for older sessions without a timestamp.
-			setStoredAuthExpiry(storage, AUTH_TTL_MS)
+			const nextExpiresAt = resolveStoredAuthExpiry(token)
+			if (Date.now() >= nextExpiresAt) {
+				clearStoredAuthInStorage(storage)
+				continue
+			}
+			setStoredAuthExpiry(storage, nextExpiresAt)
 			return true
 		}
 
@@ -147,7 +187,7 @@ export function setStoredAuthSession(session) {
 		if (!storage) return
 		storage.setItem(TOKEN_STORAGE_KEY, token)
 		storage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user))
-		setStoredAuthExpiry(storage, AUTH_TTL_MS)
+		setStoredAuthExpiry(storage, resolveStoredAuthExpiry(token))
 	} catch {
 		// no-op
 	}

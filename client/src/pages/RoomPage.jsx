@@ -86,6 +86,26 @@ export default function RoomPage() {
 	const copyResetTimerRef = useRef(null)
 	const pageLeaveSentRef = useRef(false)
 
+	const navigateHomeWithError = useCallback(
+		(message) => {
+			navigate("/", {
+				replace: true,
+				state: message
+					? {
+						errorMessage: message,
+					}
+					: undefined,
+			})
+		},
+		[navigate],
+	)
+
+	const isRoomNotFoundError = useCallback((error) => {
+		const status = Number(error?.response?.status)
+		const message = getApiErrorMessage(error)
+		return status === 404 || message === "Room not found"
+	}, [])
+
 	useEffect(() => {
 		startedSetupRef.current = false
 		setSetupError("")
@@ -98,7 +118,12 @@ export default function RoomPage() {
 			setRoomCode(String(data?.roomCode ?? requestedJoinCode))
 		},
 		onError: (error) => {
-			setSetupError(getApiErrorMessage(error))
+			const message = getApiErrorMessage(error)
+			if (isRoomNotFoundError(error)) {
+				navigateHomeWithError("Room not found")
+				return
+			}
+			setSetupError(message)
 		},
 	})
 
@@ -136,6 +161,13 @@ export default function RoomPage() {
 		roomCode,
 		Boolean(roomCode),
 	)
+
+	useEffect(() => {
+		if (!roomQueryError) return
+		if (!isRoomNotFoundError(roomQueryError)) return
+		navigateHomeWithError("Room not found")
+	}, [isRoomNotFoundError, navigateHomeWithError, roomQueryError])
+
 	useRoomSocketUpdates(roomCode)
 
 	const mode = roomState?.mode ?? "bird"

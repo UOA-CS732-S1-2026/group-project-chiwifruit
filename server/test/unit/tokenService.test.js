@@ -1,9 +1,10 @@
 const jwt = require('jsonwebtoken');
 
-jest.unmock('../src/services/tokenService');
+jest.unmock('../../src/services/tokenService');
 
-const { createToken } = require('../src/services/tokenService');
+const { createToken } = require('../../src/services/tokenService');
 
+// Unit scope: token payload construction is verified against mocked jwt.sign.
 describe('tokenService', () => {
   beforeEach(() => {
     jest.clearAllMocks();

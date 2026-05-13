@@ -29,7 +29,7 @@ The server is responsible for:
 | Database | MongoDB, Mongoose |
 | Realtime | Socket.IO |
 | Auth | JWT |
-| Testing | Jest, Supertest |
+| Testing | Jest, Supertest, MongoDB Memory Server, Socket.IO client integration tests |
 | API docs | Swagger-related tooling, where maintained |
 
 ## 3. Environment Usage
@@ -148,29 +148,146 @@ Backend tests are under:
 server/test/
 ```
 
-They cover:
+The suite is split by scope and by the project's core realtime subsystem. Unit tests keep domain logic fast and isolated. Integration tests verify real Express, Mongoose, MongoDB, and Socket.IO behaviour where cross-layer confidence matters.
 
-1. Auth API behaviour.
-2. Room API behaviour.
-3. Game service rules.
-4. Socket helper/lifecycle behaviour.
-5. Token service behaviour.
+### 7.1 Test directory structure
 
-### 7.1 Run backend tests
+```text
+server/test/
+├── jest.setup.js
+├── helpers/
+│   ├── auth.js
+│   ├── database.js
+│   └── socketServer.js
+├── unit/
+│   ├── auth.test.js
+│   ├── room.test.js
+│   ├── gameService.test.js
+│   └── tokenService.test.js
+├── integration/
+│   └── room.integration.test.js
+└── socket/
+    ├── unit/
+    │   ├── socket.test.js
+    │   └── socketFamiliarizing.test.js
+    └── integration/
+        └── socket.integration.test.js
+```
 
-From the repository root:
+### 7.2 Unit tests
+
+Locations:
+
+```text
+server/test/unit/
+server/test/socket/unit/
+```
+
+Purpose:
+
+1. Verify backend logic in isolation.
+2. Keep tests fast and deterministic.
+3. Mock database, JWT, Socket.IO, and service dependencies where appropriate.
+
+Current coverage includes:
+
+1. Auth API controller behaviour.
+2. Room API controller behaviour.
+3. Game service state machine, including turn progression, scoring, elimination, timeout, forfeit, and cleanup.
+4. Token service payload construction.
+5. Socket helper behaviour with mocked Socket.IO.
+6. Socket familiarisation timer orchestration with mocked game and room services.
+
+### 7.3 REST/API integration tests
+
+Location:
+
+```text
+server/test/integration/
+```
+
+Purpose:
+
+1. Verify Express routes, auth middleware, Mongoose models, and MongoDB persistence together.
+2. Use `mongodb-memory-server` instead of mocking Mongoose.
+3. Keep the scope focused on REST/API lifecycle behaviour rather than realtime gameplay.
+
+Current coverage includes:
+
+1. Room creation persistence.
+2. Guest joining persistence.
+3. Single-room membership enforcement.
+4. Readiness persistence and readiness reset after host setting changes.
+5. Room capacity overflow guard.
+6. Host transfer and room deletion when participants leave.
+
+### 7.4 Socket tests
+
+Locations:
+
+```text
+server/test/socket/unit/
+server/test/socket/integration/
+```
+
+Socket tests are kept as a separate test domain because realtime multiplayer is a core subsystem of KiChain.
+
+Socket unit tests verify helper and timer orchestration behaviour with mocked Socket.IO, game service, and room-state service dependencies.
+
+Socket integration tests use a real HTTP server, real Socket.IO server, real `socket.io-client`, real JWT auth, and MongoDB Memory Server. Current coverage includes:
+
+1. Socket auth rejection for invalid tokens.
+2. Game start from a real Mongo-backed room.
+3. Familiarisation to playing transition when all players are ready.
+4. Pad press broadcasts through Socket.IO.
+5. Wrong-note elimination, finished-game broadcast, and final score persistence.
+6. Active-game `leave_room` forfeit and waiting-room roster cleanup.
+
+### 7.5 Shared test helpers
+
+Location:
+
+```text
+server/test/helpers/
+```
+
+1. `auth.js` creates real JWT bearer tokens for integration tests.
+2. `database.js` starts, clears, and stops an in-memory MongoDB instance.
+3. `socketServer.js` starts a real HTTP + Socket.IO test server and provides socket event helpers such as `once`, `waitForEvent`, `waitUntil`, and `emitWithAck`.
+
+### 7.6 Running backend tests
+
+From the repository root, run all backend tests:
 
 ```bash
 npm test --workspace=server
 ```
 
-### 7.2 Run backend tests with coverage
+Run backend tests with coverage:
 
 ```bash
 npm run test:coverage --workspace=server
 ```
 
-### 7.3 Run backend syntax check, tests, and smoke test
+Run only unit tests:
+
+```bash
+npm test --workspace=server -- unit
+```
+
+Run only REST/API integration tests:
+
+```bash
+npm test --workspace=server -- integration
+```
+
+Run only socket-related tests:
+
+```bash
+npm test --workspace=server -- socket
+```
+
+Run backend syntax check, tests, and health smoke test:
 
 ```bash
 npm run ci --workspace=server
@@ -181,6 +298,17 @@ The coverage report is generated locally under:
 ```text
 server/coverage/lcov-report/index.html
 ```
+
+### 7.7 Adding new backend tests
+
+Choose the lowest stable layer that gives enough confidence.
+
+1. Add pure business-rule tests to `unit/`.
+2. Add REST + Mongo persistence tests to `integration/`.
+3. Add realtime Socket.IO behaviour tests to `socket/`.
+4. Add user-facing browser flows to Playwright E2E rather than duplicating them here.
+
+Avoid adding slow or timing-sensitive integration tests when a deterministic unit test already covers the rule. Socket integration should focus on important realtime contracts, not every internal timer branch.
 
 ## 8. Development Notes
 
